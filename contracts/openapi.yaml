@@ -1,0 +1,23 @@
+openapi: 3.1.0
+info:
+  title: Timetrack API
+  version: 0.0.1
+  description: Initial liveness contract. No authentication or domain API implemented yet.
+paths:
+  /health:
+    get:
+      operationId: health
+      description: Process liveness only; does not verify database readiness.
+      responses:
+        '200':
+          description: Process is responding
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: ok
