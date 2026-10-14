@@ -87,6 +87,6 @@ Gegenseitiges Review: C9 soll nach Rückkehr des Kontingents (ab 20.10.) von Cod
 | L13 | Berichtsheft-Oberfläche gegen Mock | Claude-Agent | 6 | integriert (PWA `0cab9aa`); 346 Unit, 39 Mock-E2E (Lead) | Vertrag v0.6.0 |
 | L14 | Berichtsheft Echt-Integration + E2E | Claude-Agent | 4 | integriert (PWA-`main`, Merge `bae5a91`); 347 Unit, 93 E2E vom Lead nachgelaufen | C15, L13 |
 | C16 | Etappe 4b: OAuth-Server, persönliche Tokens, Grants (ADR-0009, Vertrag v0.7.0) | Claude-Agent (Codex-Limit) | 8 | in Arbeit (Worktree `../timetrack-backend-wt/c16`) | Vertrag v0.7.0 |
-| C17 | Etappe 4b: MCP-Endpunkt `/mcp` + Tools (gegen abgestimmte Authenticator-Schnittstelle) | Claude-Agent (Codex-Limit) | 8 | in Arbeit (Worktree `../timetrack-backend-wt/c17`) | Vertrag v0.7.0 |
-| L15 | Etappe 4b: PWA Consent, API-Tokens, Verbindungen, MCP-Hilfe gegen Mock | Claude-Agent | 5 | in Arbeit (PWA-Branch `l15-mcp-ui`) | Vertrag v0.7.0 |
+| C17 | Etappe 4b: MCP-Endpunkt `/mcp` + Tools (gegen abgestimmte Authenticator-Schnittstelle) | Claude-Agent (Codex-Limit) | 8 | integriert (Merge); 166 Tests inkl. MariaDB (frische DB, 2 Läufe) vom Lead; `/mcp` liefert 401, bis C16 verdrahtet ist | Vertrag v0.7.0 |
+| L15 | Etappe 4b: PWA Consent, API-Tokens, Verbindungen, MCP-Hilfe gegen Mock | Claude-Agent | 5 | integriert (PWA `46019ba`); 384 Unit, 48 Mock-E2E vom Lead; nur gegen Mock | Vertrag v0.7.0 |
 | X1 | Verdrahtung C16↔C17 (Adapter), Gesamt-E2E MCP mit Skript-Client, OAuth-Flow im Browser | Lead + Agent | 4 | offen | C16, C17, L15 |
