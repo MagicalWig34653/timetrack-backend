@@ -39,6 +39,13 @@ Verbindliche Nutzervorgabe vom 14.10.2026, gilt für alle drei Repositories:
 - Die deutschsprachigen Konzept-, Einrichtungs- und Agent-Dokumente sowie die Kommunikation
   mit dem Nutzer bleiben auf Deutsch; die Codevorgabe erfordert keine Übersetzung dieser Dokumente.
 
+## Parallelarbeit: eigener Worktree je Schreiber
+
+Jeder gleichzeitig schreibende Agent bekommt einen **eigenen Git-Worktree** (Backend: `../timetrack-backend-wt/<paket>`, PWA: `../timetrack-pwa-wt/<paket>`), auch im PWA-Repo.
+Zwei Agents im selben Verzeichnis überschreiben sich beim `git checkout` gegenseitig (Vorfall 15.10.2026, L14/L15). Ausnahme: Codex darf (Sandbox) nur im Hauptordner des Backends schreiben,
+dort arbeitet höchstens ein Schreiber auf eigenem Branch. Nach dem Merge Worktrees mit `git worktree remove --force` entfernen (Reste in `.build`/`node_modules` ggf. mit `rm -rf`).
+Vor jeder Übernahme führt der Lead Build und Tests selbst aus (inkl. Linux-Compile des Backends mit `docker build --target build .` bei größeren Änderungen).
+
 ## Beginn jeder Sitzung
 
 1. Agent-Einstieg, Status, Arbeitsplan, relevante ADRs und Fach-/Technikdokumente lesen.
