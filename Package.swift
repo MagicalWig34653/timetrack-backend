@@ -3,6 +3,7 @@ import PackageDescription
 let package = Package(
     name: "TimetrackBackend",
     platforms: [.macOS(.v13)],
+    products: [.library(name: "TimetrackKit", targets: ["TimetrackKit"])],
     dependencies: [
         .package(url: "https://github.com/vapor/vapor.git", from: "4.121.4"),
         .package(url: "https://github.com/vapor/fluent.git", from: "4.13.0"),
@@ -10,11 +11,13 @@ let package = Package(
         .package(url: "https://github.com/vapor/fluent-sqlite-driver.git", from: "4.0.0")
     ],
     targets: [
-        .executableTarget(name: "App", dependencies: [
+        .target(name: "TimetrackKit", dependencies: [
             .product(name: "Vapor", package: "vapor"),
             .product(name: "Fluent", package: "fluent"),
             .product(name: "FluentMySQLDriver", package: "fluent-mysql-driver"),
             .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver")
-        ])
+        ]),
+        .executableTarget(name: "App", dependencies: ["TimetrackKit"]),
+        .testTarget(name: "TimetrackKitTests", dependencies: ["TimetrackKit", .product(name: "XCTVapor", package: "vapor")])
     ]
 )
