@@ -20,7 +20,7 @@ Status: akzeptiert (Lead-Entscheidung 14.10.2026; fachliche Details aus KONZEPT.
   Beispiel: 08:07–12:00 und 13:00–16:02 → raw 6:55, +7 min, +13 min → bewertet 7:15; Lücke 12:00–13:00 bleibt.
   Laufendes Segment: Ende = jetzt, `provisional=true`.
 - **Schulregel**: Summe der `school`-Segmente eines Tages ≥ `schoolFullDayThresholdSeconds` (Standard 4×45 min = 10800) ⇒ der Tag gilt als erfüllt mit
-  `schoolCreditSeconds` (Standard = Tages-Soll, 7:42 = 27720 s) *statt* der Segmentsumme. Darunter: nur die tatsächlichen Segmente zählen, nie automatische Auffüllung;
+  `schoolCreditSeconds` (Standard = Tages-Soll, 7:42 = 27720 s) *statt* der Summe **aller** Segmente dieses Tages (auch work/travel; Annahme, weil Schule den Tag ersetzt).  Darunter: die tatsächlichen `school`-Segmente zählen als Arbeitszeit (Dauer, ggf. gerundet), nie automatische Auffüllung;
   der Nutzer ergänzt manuell. Keine Rückkehrpflicht.
 - **Tages-Soll**: aus `dailyTargetSeconds[weekday]`, sonst `weeklyTargetSeconds` verteilt auf `workdays` (gleichmäßig; Annahme, 38:30 h/5 = 7:42). Änderungen gelten ab `validFrom`
   (neue Modellversion), Historie bleibt (Modelle sind versioniert und ohne Rückwirkung; Zeiträume überlappen nicht).

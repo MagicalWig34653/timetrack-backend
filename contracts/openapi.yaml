@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.2.0
+  version: 0.2.1
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -20,6 +20,9 @@ info:
     (4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form
     `<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.
     (6) No session listing endpoint in stage 1; only revoking other sessions.
+    Stage 2 decisions (v0.2.1): a work model `validFrom` may lie in the past but must be later than the previous version's `validFrom` (else 409 model_overlap);
+    days on or after it are then evaluated by the new version (explicit user act). Future days are never `provisional`; today and days with a running segment are.
+    A second accept of a suggestion returns 409 `suggestion_resolved`. Further codes: timer_already_running, no_running_timer, segment_overlap, stale_version, model_overlap.
 servers:
   - url: /
 paths:
@@ -396,6 +399,11 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SegmentInput' } } } }
       responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/Segment' } } } }, '409': { $ref: '#/components/responses/Conflict' } }
   /api/v1/time/segments/{id}:
+    get:
+      operationId: getSegment
+      security: [ { session: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Segment' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
     patch:
       operationId: correctSegment
       description: Korrektur mit Pflichtgrund; If-Match muss die aktuelle version enthalten (sonst 412 stale_version). Rohzeiten bleiben erhalten, es entsteht eine Revision.
@@ -706,6 +714,9 @@ components:
         evaluatedEnd: { type: [string, 'null'], format: date-time }
         provisional: { type: boolean }
         segmentIds: { type: array, items: { type: string, format: uuid } }
+        segments: { type: array, items: { $ref: '#/components/schemas/Segment' }, description: Segmente dieses Arbeitstags (Zuordnung nach ADR-0004; ohne stornierte) }
+        markCreditSeconds: { type: [integer, 'null'], description: gesetzte Gutschrift der Markierung }
+        note: { type: [string, 'null'] }
         breakHints: { type: array, items: { type: object, required: [code], properties: { code: { type: string, enum: [break_missing_30, break_missing_45, break_part_too_short, work_over_6h_without_break] } } } }
     TimeAccount:
       type: object
@@ -734,6 +745,7 @@ components:
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
+        scope: { type: string, const: automation }
         createdAt: { type: string, format: date-time }
         expiresAt: { type: [string, 'null'], format: date-time }
         lastUsedAt: { type: [string, 'null'], format: date-time }
