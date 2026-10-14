@@ -2,6 +2,7 @@ import Vapor
 import Fluent
 
 func registerRoutes(_ app: Application, service: AuthService) {
+    registerTimeRoutes(app, auth: service)
     app.get("health") { _ in StatusResponse(status: "ok") }
     app.get("ready") { request async -> Response in
         do {
