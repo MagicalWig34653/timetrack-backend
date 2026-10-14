@@ -28,6 +28,11 @@ Sicherheitsrelevant und noch ungeprüft: siehe „Offen“.
 - **Codex-Review fand 2 Fehler** (Besuchsgrenze bei fehlendem Departure; Segmentverlust bei Modellwechsel mit anderer Tagesgrenze) → behoben in C7 (64 Tests grün, ADR-0004-Ergänzung).
 - **Nicht belegt**: Shortcuts auf echtem iPhone/Mac, Zeitleisten-Darstellung der neuen Seiten mit Echtdaten auf Mobilbreite/Dark Mode, Rate-Limit 429 der Automation, MariaDB-E2E.
 
+## Nächster Schritt
+
+Etappe 3 (Planung und Urlaub) laut `docs/decisions/ADR-0005-etappe3-planung-urlaub-vorgaben.md`: zuerst Vertrag v0.3.0, dann C8/C9 (Codex) und L6/L7.
+Nutzerantworten vom 14.10.: Urlaub 30 Tage/5-Tage-Woche als Startwerte, Berichtsheft im Standardformat, Gerätetests über eigene HTTPS-Testadresse (nachzureichen).
+
 ## Offen / nicht belegt
 
 - **Linux amd64** (14.10., Lead): Image unter QEMU in Colima gebaut (≈55 min; SwiftPM braucht dort `taskset`-Workarounds), Container
