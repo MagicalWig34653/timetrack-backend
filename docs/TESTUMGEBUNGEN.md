@@ -1,0 +1,74 @@
+# Lokale Testumgebungen
+
+Stand: 14.10.2026 (Paket L10). Alle Dienste gehören zum Compose-Projekt `timetrack-dev`, laufen nur über
+`scripts/dev-env.sh` und sind **nur Testdoubles für die Entwicklung**, nicht für den Produktivbetrieb.
+Zugangsdaten stehen nie im Repository: `scripts/dev-env.sh init` erzeugt `.env` (gitignoriert) aus `.env.example`.
+
+## Übersicht
+
+| Profil | Dienst | Zweck | Host-Ports (alle `127.0.0.1`) | Befehl |
+|---|---|---|---|---|
+| (immer) | MariaDB 12.3 | Datenbank-Tests | 13306 | `up` |
+| `app` / `sqlite` | Backend-Container | Betrieb im Container | 18080 | `up-app` / `up-sqlite` |
+| `mail` | Mailpit v1.29 | E-Mail-Wiederherstellung, Postfach-UI | UI 18025, SMTP 11025 | `up-mail` |
+| `s3` | Adobe S3Mock 5.2.3 | S3-Speicherziel (Admin-Formular) | HTTP 19090, HTTPS 19191 | `up-s3` |
+| `oidc` | Dex v2.41.1 | spätere OIDC-Adapter-Tests | 15556 | `up-oidc` |
+
+`scripts/dev-env.sh down` stoppt alle Profile (ohne `-v`, Volumes bleiben). Es stoppt auch die DB; einzelne Dienste besser mit
+`docker compose --project-name timetrack-dev --profile <p> stop <dienst>` stoppen. `status` zeigt Container und Volumes.
+
+## Bind-Adressen und Veröffentlichung des Backends
+
+Jeder veröffentlichte Port hat eine eigene Bind-Adresse mit Standard `127.0.0.1`:
+`BACKEND_BIND_ADDR`, `DB_BIND_ADDR`, `MAIL_BIND_ADDR`, `S3_BIND_ADDR`, `OIDC_BIND_ADDR`.
+Datenbank, Mailpit, S3Mock und Dex sollten nie auf `0.0.0.0` gestellt werden (S3Mock akzeptiert beliebige Zugangsdaten,
+Dex enthält Testpasswörter, Mailpit hat keine Anmeldung).
+
+Backend hinter einem vorhandenen Reverse Proxy (Domain, TLS und Proxy werden hier nicht eingerichtet):
+
+1. In `.env` setzen, `example.org` durch die echte Domain ersetzen:
+   ```
+   BACKEND_BIND_ADDR=0.0.0.0        # oder die LAN-IP des Docker-Hosts; Standardport 18080 über BACKEND_HOST_PORT
+   PUBLIC_BASE_URL=https://zeit.example.org
+   WEBAUTHN_ORIGIN=https://zeit.example.org
+   WEBAUTHN_RP_ID=zeit.example.org
+   ```
+   `WEBAUTHN_ORIGIN` und `PUBLIC_BASE_URL` müssen exakt die öffentliche `https://`-Adresse sein (ohne Pfad, ohne Slash am Ende),
+   `WEBAUTHN_RP_ID` der Hostname daraus. Bereits registrierte Passkeys gehören zur alten RP-ID und gelten danach nicht mehr.
+   Das Secure-Flag der Cookies folgt dem `https`-Schema der öffentlichen URL (siehe ADR/Handoffs zu Auth).
+2. Backend neu starten (`up-app` bzw. `up-sqlite`).
+3. Im Proxy die Domain auf `http://<docker-host>:18080` abbilden und `Host`, `X-Forwarded-Proto` und `X-Forwarded-For` durchreichen.
+4. Firewall: Port 18080 nur für den Proxy erreichbar machen.
+
+## Mailpit (`mail`)
+
+- Postfach-UI und API: `http://localhost:18025` (`/api/v1/messages`). SMTP für Host-Prozesse: `127.0.0.1:11025`, ohne TLS und Anmeldung.
+- Backend auf dem Host: `SMTP_HOST=127.0.0.1 SMTP_PORT=11025 SMTP_TLS=off SMTP_FROM=noreply@example.test`.
+- Backend im Container: `SMTP_HOST=mailpit`, `SMTP_PORT=1025`, `SMTP_TLS=off`, `SMTP_FROM` (Standardwerte in `compose.yaml`).
+- Geprüft wurde der komplette Ablauf mit `scripts/mail-recovery.e2e.spec.ts` (siehe Handoff).
+- Grenze: kein TLS/AUTH-Test. Mailpit ist kein echter Zustelldienst.
+
+## S3Mock (`s3`)
+
+- Adobe S3Mock akzeptiert **beliebige** Zugangsdaten und prüft keine Signaturen. Es testet die S3-Anbindung, nicht Rechteverhalten.
+- Bucket `timetrack-dev` wird beim Start angelegt; Daten bleiben im Volume `timetrack-dev-s3mock` erhalten (Neustart geprüft).
+  Der Container läuft als root, weil ein frisches Volume sonst nicht beschreibbar ist (nur Entwicklung).
+- Werte fürs Admin-Speicherformular: `scripts/dev-env.sh s3-env` gibt Endpoint `http://127.0.0.1:19090`, Region `us-east-1`,
+  Bucket `timetrack-dev`, Path-Style `true` und Dummy-Schlüssel aus. HTTPS (self-signed) auf 19191 nur für Clients, die das Zertifikat ignorieren.
+- Ein Backend im Container erreicht S3Mock unter `http://s3mock:9090` (gleiches Compose-Netz).
+- Das separate Projekt mit Volume `compose_s3mock-dev` bleibt unberührt.
+- Hinweis: Das offizielle MinIO-Image ist nicht mehr auf Docker Hub verfügbar; deshalb S3Mock.
+
+## Dex (`oidc`)
+
+- Issuer `http://localhost:15556/dex`, Discovery: `/.well-known/openid-configuration`. Konfiguration: `deploy/dex/config.yaml`.
+- Öffentlicher Client `timetrack-dev` (kein Secret, PKCE `S256`), Redirect-URIs `http://localhost:18080/auth/oidc/callback` und
+  `http://localhost:5173/auth/oidc/callback`.
+- Testnutzer (nur Testdaten): `alice@example.test` / `alice-dev-pass`, `bob@example.test` / `bob-dev-pass`.
+- Prüfung: `python3 -I scripts/oidc-pkce-check.py` führt Discovery, Autorisierung, Login, Code-Austausch mit PKCE aus (ohne Tokenwerte auszugeben).
+- Grenze: Der OIDC-Adapter im Backend ist noch nicht implementiert; Speicher ist `memory`, Neustart verwirft Sitzungen. Nur HTTP.
+
+## Offene Punkte
+
+- OIDC-Backend-Anbindung, Anmeldung per Dex gegen das Backend: noch nicht getestet.
+- SMTP mit TLS/AUTH, echte S3-Signaturen und Rechte: nicht abgedeckt.

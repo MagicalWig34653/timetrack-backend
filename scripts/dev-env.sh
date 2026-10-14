@@ -7,6 +7,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 PROJECT=timetrack-dev
 DC=(docker compose --project-name "$PROJECT" -f "$ROOT/compose.yaml")
+PROFILES=(--profile app --profile sqlite --profile mail --profile s3 --profile oidc)
 
 usage() {
   cat <<USAGE
@@ -16,6 +17,9 @@ Usage: scripts/dev-env.sh <command>
   up-app           build and start db + backend (profile app)
   up-sqlite        build and start backend in SQLite single-instance mode (profile sqlite)
   up-mail          start Mailpit (profile mail)
+  up-s3            start Adobe S3Mock (profile s3)
+  up-oidc          start Dex OIDC test provider (profile oidc)
+  s3-env           print S3 settings for the admin storage form
   down             stop the project containers (volumes are kept)
   logs [service]   follow logs
   db-shell         open the mariadb client inside the db container
@@ -59,16 +63,31 @@ case "$cmd" in
     need_env; "${DC[@]}" --profile sqlite up -d --build backend-sqlite ;;
   up-mail)
     need_env; "${DC[@]}" --profile mail up -d mailpit ;;
+  up-s3)
+    need_env; "${DC[@]}" --profile s3 up -d s3mock ;;
+  up-oidc)
+    need_env; "${DC[@]}" --profile oidc up -d dex ;;
+  s3-env)
+    need_env
+    cat <<S3ENV
+endpoint:    http://127.0.0.1:$(env_get S3_HTTP_HOST_PORT)
+region:      us-east-1
+bucket:      $(env_get S3_BUCKET)
+path-style:  true
+access key:  dummy-access-key   (S3Mock accepts any credentials)
+secret key:  dummy-secret-key
+S3ENV
+    ;;
   down)
-    need_env; "${DC[@]}" --profile app --profile sqlite --profile mail down ;;  # no -v on purpose
+    need_env; "${DC[@]}" "${PROFILES[@]}" down ;;  # no -v on purpose
   logs)
-    need_env; "${DC[@]}" --profile app --profile sqlite --profile mail logs -f "$@" ;;
+    need_env; "${DC[@]}" "${PROFILES[@]}" logs -f "$@" ;;
   db-shell)
     need_env
     "${DC[@]}" exec db sh -c 'exec mariadb -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE"' ;;
   status)
     need_env
-    "${DC[@]}" --profile app --profile sqlite --profile mail ps -a
+    "${DC[@]}" "${PROFILES[@]}" ps -a
     docker volume ls --filter name=timetrack-dev ;;
   build-multiarch)
     # Multi-platform results cannot be loaded into the local daemon; write OCI archive to a tmp dir.
