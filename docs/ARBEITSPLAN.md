@@ -78,3 +78,11 @@ Gegenseitiges Review: C9 soll nach Rückkehr des Kontingents (ab 20.10.) von Cod
 | C14 | Optionales OIDC (ADR-0007, Vertrag v0.5.0): Backend | Claude-Agent (Codex-Limit) | 8 | integriert (Merge `fa29acb`); 158 Tests inkl. MariaDB vom Lead nachgelaufen; Lauf gegen echtes Dex (Agent) | Vertrag v0.5.0, L10 |
 | L11 | OIDC-Oberfläche (Login, Einladung, Identitäten) gegen Mock | Claude-Agent | 5 | integriert (PWA `b03aa6c`); 297 Unit, 29 Mock-E2E, 49 E2E vom Lead nachgelaufen; nur gegen Mock | Vertrag v0.5.0 |
 | L12 | Echt-Integration Export/Import/Speicher/Anhänge inkl. Adobe S3Mock | Claude-Agent | 5 | integriert (PWA `72974f3`); 74 E2E (49+25) vom Lead nachgelaufen, S3Mock-Test lief | C11–C13 |
+
+## Etappe 4a: Berichtsheft (15.10.2026)
+
+| ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
+| --- | --- | --- | --- | --- | --- |
+| C15 | Berichtsheft-Backend (ADR-0008, Vertrag v0.6.0) | Claude-Agent (Codex-Limit) | 6 | in Arbeit (Worktree `../timetrack-backend-wt/c15`) | C13 |
+| L13 | Berichtsheft-Oberfläche gegen Mock | Claude-Agent | 6 | in Arbeit (PWA-Branch `l13-reports-ui`) | Vertrag v0.6.0 |
+| C16/C17/L14 | Etappe 4b: MCP (OAuth-Server, persönliche Bearer-Tokens, Tools) | offen | – | als Nächstes (ADR-0009) | 4a |
