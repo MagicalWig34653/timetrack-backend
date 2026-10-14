@@ -27,6 +27,7 @@ public struct Configuration: Sendable {
     public let smtpHost: String?
     public let smtpPort: Int
     public let smtp: SMTPConfiguration?
+    public let oidc: OIDCConfiguration?
 
     public init(environment: [String: String] = ProcessInfo.processInfo.environment) throws {
         func value(_ key: String, _ fallback: String) throws -> String {
@@ -62,6 +63,7 @@ public struct Configuration: Sendable {
         smtpHost = environment["SMTP_HOST"].flatMap { $0.isEmpty ? nil : $0 }
         smtpPort = try integer("SMTP_PORT", "587", 1...65535)
         smtp = try SMTPConfiguration(environment: environment)
+        oidc = try OIDCConfiguration(environment: environment)
         databaseDriver = driver
         dbHost = try value("DB_HOST", "127.0.0.1")
         dbPort = try integer("DB_PORT", "3306", 1...65535)
