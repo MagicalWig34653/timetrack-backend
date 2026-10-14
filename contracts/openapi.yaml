@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.2.1
+  version: 0.3.0
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -20,6 +20,7 @@ info:
     (4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form
     `<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.
     (6) No session listing endpoint in stage 1; only revoking other sessions.
+    Stage 3 (v0.3.0): see docs/decisions/ADR-0005. Half days as integers (30 days = 60). Sick absences and documents are never part of shares.
     Stage 2 decisions (v0.2.1): a work model `validFrom` may lie in the past but must be later than the previous version's `validFrom` (else 409 model_overlap);
     days on or after it are then evaluated by the new version (explicit user act). Future days are never `provisional`; today and days with a running segment are.
     A second accept of a suggestion returns 409 `suggestion_resolved`. Further codes: timer_already_running, no_running_timer, segment_overlap, stale_version, model_overlap.
@@ -523,6 +524,151 @@ paths:
       responses:
         '200': { description: verarbeitet, content: { application/json: { schema: { type: object, required: [result], properties: { result: { type: string, enum: [booked, suggested, ignored, recorded, duplicate, needs_review] }, segmentId: { type: [string, 'null'], format: uuid }, suggestionId: { type: [string, 'null'], format: uuid } } } } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/vacation/settings:
+    get:
+      operationId: getVacationSettings
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/VacationSettings' } } } } }
+    put:
+      operationId: putVacationSettings
+      description: Region, Jahresanspruch und Übertragsregel. Standard laut ADR-0005 (Annahme für Onboarding) 30 Tage und Region DE-ST.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/VacationSettings' } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/VacationSettings' } } } } }
+  /api/v1/vacation/snapshots:
+    post:
+      operationId: createVacationSnapshot
+      description: Stichtagsbestand (Resturlaub zu einem Datum). Ersetzt die davor liegende Kontohistorie; Verbrauch/Anspruch zählen erst ab dem Stichtag.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [date, remainingHalfDays], properties: { date: { type: string, format: date }, remainingHalfDays: { type: integer, minimum: 0 } } } } } }
+      responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/VacationBalance' } } } } }
+  /api/v1/vacation/adjustments:
+    post:
+      operationId: createVacationAdjustment
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [date, halfDays, reason], properties: { date: { type: string, format: date }, halfDays: { type: integer }, reason: { type: string, maxLength: 200 } } } } } }
+      responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/VacationBalance' } } } } }
+  /api/v1/vacation/balance:
+    get:
+      operationId: getVacationBalance
+      description: Kontostand für ein Urlaubsjahr (Kalenderjahr). available = Anspruch + Übertrag + Korrekturen − gebucht(genehmigt/genommen); geplant/beantragt separat, `availableAfterPlanned` als Vorschau.
+      security: [ { session: [] } ]
+      parameters: [ { name: year, in: query, required: true, schema: { type: integer } } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/VacationBalance' } } } } }
+  /api/v1/absences:
+    get:
+      operationId: listAbsences
+      security: [ { session: [] } ]
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Absence' } } } } } }
+    post:
+      operationId: createAbsence
+      description: Urlaub/Krankheit/sonstige Abwesenheit. Überlappung mit anderer Abwesenheit → 409 absence_overlap. Verbrauch in halben Tagen nur an Arbeitstagen des Modells, nicht an Feiertagen.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AbsenceInput' } } } }
+      responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/Absence' } } } }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/v1/absences/{id}:
+    put:
+      operationId: updateAbsence
+      description: Ändert Zeitraum/Status; Statuswechsel zählt Tage nie doppelt (genehmigt→genommen). If-Match auf version.
+      security: [ { session: [], csrf: [] } ]
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: If-Match, in: header, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AbsenceInput' } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Absence' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '412': { description: veraltete Version, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } } }
+    delete:
+      operationId: deleteAbsence
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '204': { description: gelöscht }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/calendar/holidays:
+    get:
+      operationId: listHolidays
+      description: Gesetzliche Feiertage der eingestellten Region (fest eingebaut, DE inkl. Bundesländer) plus eigene Einträge; Schulferien nur als vom Nutzer erfasste Zeiträume.
+      security: [ { session: [] } ]
+      parameters:
+        - { name: year, in: query, required: true, schema: { type: integer } }
+        - { name: region, in: query, schema: { type: string, description: ISO 3166-2, z. B. DE-ST; Standard aus Einstellungen } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/CalendarDay' } } } } } }
+  /api/v1/calendar/custom-days:
+    post:
+      operationId: createCustomCalendarDay
+      description: Eigener Feiertag/Brückentag oder Schulferien-Zeitraum.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [kind, startDate, endDate, name], properties: { kind: { type: string, enum: [holiday, school_holiday] }, startDate: { type: string, format: date }, endDate: { type: string, format: date }, name: { type: string, maxLength: 80 } } } } } }
+      responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/CalendarDay' } } } } }
+  /api/v1/calendar/custom-days/{id}:
+    delete:
+      operationId: deleteCustomCalendarDay
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '204': { description: gelöscht }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/plan/days:
+    get:
+      operationId: listPlanDays
+      description: Geplante Arbeitsform je Tag (Büro/HO/Kunde/Schule/frei) für den Zeitraum; Urlaub/Feiertage werden im Kalender zusätzlich abgeleitet geliefert.
+      security: [ { session: [] } ]
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/PlanDay' } } } } } }
+  /api/v1/plan/days/{date}:
+    put:
+      operationId: putPlanDay
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { name: date, in: path, required: true, schema: { type: string, format: date } } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PlanDayInput' } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/PlanDay' } } } } }
+    delete:
+      operationId: deletePlanDay
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { name: date, in: path, required: true, schema: { type: string, format: date } } ]
+      responses: { '204': { description: gelöscht } }
+  /api/v1/shares:
+    get:
+      operationId: listShares
+      description: Eigene ausgehende Freigaben.
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Share' } } } } } }
+    post:
+      operationId: createShare
+      description: Freigabe an ein anderes Konto derselben Instanz (Empfänger per handle), je Umfang plan/actual/vacation getrennt, nur lesend, standardmäßig nichts geteilt. Unbekannter Empfänger → 404 recipient_not_found (Annahme; kleine Instanz).
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [recipientHandle, scopes], properties: { recipientHandle: { type: string }, scopes: { $ref: '#/components/schemas/ShareScopes' } } } } } }
+      responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/Share' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/shares/{id}:
+    patch:
+      operationId: updateShare
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [scopes], properties: { scopes: { $ref: '#/components/schemas/ShareScopes' } } } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Share' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    delete:
+      operationId: revokeShare
+      description: Widerruft sofort; neue Abrufe liefern 404.
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '204': { description: widerrufen }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/shares/incoming:
+    get:
+      operationId: listIncomingShares
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/IncomingShare' } } } } } }
+  /api/v1/shares/incoming/{shareId}/view:
+    get:
+      operationId: viewShared
+      description: |
+        Begrenzte Ansicht für den Empfänger. Je freigegebenem Scope: plan = geplante Arbeitsform je Tag ohne Notizen; actual = nur bewertete Beginn/Ende und Dauer je Tag, keine Orte/Notizen/Segmente;
+        vacation = nur als Urlaub erkennbare Abwesenheiten (Zeiträume), niemals Krankheit/Unterlagen/Notizen. Nicht freigegebene Scopes fehlen. Widerrufen/fremd → 404.
+      security: [ { session: [] } ]
+      parameters:
+        - { name: shareId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/SharedView' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
 components:
   securitySchemes:
     session: { type: apiKey, in: cookie, name: tt_session }
@@ -760,3 +906,95 @@ components:
         occurredAt: { type: string, format: date-time }
         latitude: { type: [number, 'null'] }
         longitude: { type: [number, 'null'] }
+    VacationSettings:
+      type: object
+      required: [region, annualEntitlementHalfDays]
+      properties:
+        region: { type: string, default: DE-ST }
+        annualEntitlementHalfDays: { type: integer, minimum: 0, default: 60, description: 30 Tage = 60 halbe Tage (ADR-0005) }
+        carryOverHalfDays: { type: integer, minimum: 0, default: 0, description: Übertrag aus dem Vorjahr, sofern kein Stichtagsbestand gilt }
+        carryOverExpiry: { type: [string, 'null'], description: Verfall als MM-DD (z. B. 03-31) oder null }
+    VacationBalance:
+      type: object
+      required: [year, entitlementHalfDays, carryOverHalfDays, adjustmentHalfDays, bookedHalfDays, plannedHalfDays, availableHalfDays, availableAfterPlannedHalfDays]
+      properties:
+        year: { type: integer }
+        snapshotDate: { type: [string, 'null'], format: date }
+        entitlementHalfDays: { type: integer }
+        carryOverHalfDays: { type: integer }
+        adjustmentHalfDays: { type: integer }
+        bookedHalfDays: { type: integer, description: Status approved oder taken }
+        plannedHalfDays: { type: integer, description: Status planned oder requested }
+        availableHalfDays: { type: integer }
+        availableAfterPlannedHalfDays: { type: integer }
+    AbsenceInput:
+      type: object
+      required: [kind, startDate, endDate, status]
+      properties:
+        kind: { type: string, enum: [vacation, sick, other] }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        halfDayStart: { type: boolean, default: false, description: erster Tag nur halber Tag }
+        halfDayEnd: { type: boolean, default: false, description: letzter Tag nur halber Tag }
+        status: { type: string, enum: [planned, requested, approved, rejected, cancelled, taken] }
+        note: { type: [string, 'null'], maxLength: 500 }
+        documentStatus: { type: string, enum: [not_needed, pending, submitted], default: not_needed }
+        documentSubmittedOn: { type: [string, 'null'], format: date }
+        documentReferenceStart: { type: [string, 'null'], format: date }
+        documentReferenceEnd: { type: [string, 'null'], format: date }
+    Absence:
+      allOf:
+        - $ref: '#/components/schemas/AbsenceInput'
+        - type: object
+          required: [id, version, countedHalfDays]
+          properties: { id: { type: string, format: uuid }, version: { type: integer }, countedHalfDays: { type: integer, description: berechneter Verbrauch (nur Arbeitstage, ohne Feiertage) } }
+    CalendarDay:
+      type: object
+      required: [startDate, endDate, name, kind, source]
+      properties:
+        id: { type: [string, 'null'], format: uuid }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        name: { type: string }
+        kind: { type: string, enum: [holiday, school_holiday] }
+        source: { type: string, enum: [builtin, custom] }
+    PlanDayInput:
+      type: object
+      required: [mode]
+      properties:
+        mode: { type: string, enum: [office, home, customer, school, off] }
+        placeId: { type: [string, 'null'], format: uuid }
+        note: { type: [string, 'null'], maxLength: 200 }
+    PlanDay:
+      allOf:
+        - $ref: '#/components/schemas/PlanDayInput'
+        - type: object
+          required: [date]
+          properties: { date: { type: string, format: date } }
+    ShareScopes:
+      type: object
+      properties:
+        plan: { type: boolean, default: false }
+        actual: { type: boolean, default: false }
+        vacation: { type: boolean, default: false }
+    Share:
+      type: object
+      required: [id, recipientHandle, scopes, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        recipientHandle: { type: string }
+        scopes: { $ref: '#/components/schemas/ShareScopes' }
+        createdAt: { type: string, format: date-time }
+    IncomingShare:
+      type: object
+      required: [id, ownerDisplayName, scopes]
+      properties:
+        id: { type: string, format: uuid }
+        ownerDisplayName: { type: string }
+        scopes: { $ref: '#/components/schemas/ShareScopes' }
+    SharedView:
+      type: object
+      properties:
+        plan: { type: array, items: { type: object, required: [date, mode], properties: { date: { type: string, format: date }, mode: { type: string, enum: [office, home, customer, school, off] } } } }
+        actual: { type: array, items: { type: object, required: [date, evaluatedWorkSeconds], properties: { date: { type: string, format: date }, evaluatedStart: { type: [string, 'null'], format: date-time }, evaluatedEnd: { type: [string, 'null'], format: date-time }, evaluatedWorkSeconds: { type: integer } } } }
+        vacation: { type: array, items: { type: object, required: [startDate, endDate], properties: { startDate: { type: string, format: date }, endDate: { type: string, format: date } } } }
