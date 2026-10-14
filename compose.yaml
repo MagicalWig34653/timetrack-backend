@@ -49,6 +49,7 @@ services:
       WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN:-http://localhost:18080}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:18080}
       SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-336}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:-}
       AUTO_MIGRATE: ${AUTO_MIGRATE:-true}
       PWA_STATIC_DIR: ${PWA_STATIC_DIR:-/srv/pwa}
       SMTP_HOST: ${SMTP_HOST:-mailpit}

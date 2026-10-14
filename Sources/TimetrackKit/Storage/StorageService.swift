@@ -165,7 +165,7 @@ struct StorageService: Sendable {
             let settings = try await settingsRow(tx)
             guard size <= (settings?.maxUploadBytes ?? StorageLimits.defaultMaxUploadBytes), size <= StorageLimits.hardMaxUploadBytes else { throw StorageErrors.tooLarge }
             let chosen = StorageRules.select(settings?.rules ?? StorageSettingsDTO.defaults.rules, size: size)
-            let adapter = try backend(chosen, settings: settings)
+            let adapter = try self.backend(chosen, settings: settings)
             let row = StoredFileRecord()
             row.id = id; row.accountId = account; row.name = name; row.contentType = kind.mime; row.size = size; row.sha256 = sha
             row.backend = chosen.rawValue; row.storageKey = StorageKeys.make(for: id, kind: chosen); row.state = FileState.pending.rawValue
@@ -223,7 +223,7 @@ struct StorageService: Sendable {
             let row = try await ownedFile(tx, account, id)
             guard let kind = StorageBackendKind(rawValue: row.backend) else { throw StorageErrors.corrupt }
             // The file is always read through the backend it was written to, never through a fallback.
-            return (row, try backend(kind, settings: try await settingsRow(tx)))
+            return (row, try self.backend(kind, settings: try await settingsRow(tx)))
         }
         let data: Data
         do { data = try await backend.get(key: row.storageKey, db: db) } catch { throw StorageErrors.unavailable }
