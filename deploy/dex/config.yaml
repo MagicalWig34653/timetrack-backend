@@ -1,0 +1,35 @@
+# Dex test identity provider for OIDC adapter tests (profile `oidc`).
+# DEV/TEST ONLY: static users with documented test passwords. Never use in production.
+issuer: http://localhost:15556/dex
+
+storage:
+  type: memory
+
+web:
+  http: 0.0.0.0:5556
+
+oauth2:
+  skipApprovalScreen: true
+  # PKCE is enforced for the public client below by the client sending a code_challenge.
+
+enablePasswordDB: true
+
+staticClients:
+  - id: timetrack-dev
+    name: Timetrack (dev)
+    public: true
+    redirectURIs:
+      - http://localhost:18080/auth/oidc/callback
+      - http://localhost:5173/auth/oidc/callback
+
+staticPasswords:
+  # alice-dev-pass
+  - email: alice@example.test
+    hash: "$2a$10$gW.TpiP07jsVFRqyk4YHSeUMFMQyRpUl56uT923DHMs1NOgH4Z40S"
+    username: alice
+    userID: "00000000-0000-4000-8000-000000000001"
+  # bob-dev-pass
+  - email: bob@example.test
+    hash: "$2a$10$ZM1kAsG.4nMH4.dFrBiq0.NWvMmtOe9Z.GldYW2KhcuUyTvqJ.2H2"
+    username: bob
+    userID: "00000000-0000-4000-8000-000000000002"
