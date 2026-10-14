@@ -19,6 +19,7 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
     }
     for migration in StageOneSchema.migrations { app.migrations.add(migration) }
     app.migrations.add(CreateAuthLock())
+    for migration in StageTwoSchema.migrations { app.migrations.add(migration) }
     // Fluent installs the migrate command, including --revert and the global --yes flag.
     // Do not auto-apply migrations before explicit migrate/revert commands.
     if config.autoMigrate && !app.environment.arguments.contains("migrate") {
@@ -29,6 +30,8 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
     // Replace Vapor's default error and URL logging middleware: invite URLs contain secrets.
     app.middleware = Middlewares()
     app.middleware.use(APIErrorMiddleware())
+    app.middleware.use(TimeErrorMiddleware())
+    app.middleware.use(DeviceScopeGuard())
     app.middleware.use(PWAStaticMiddleware(directory: config.pwaStaticDirectory))
     app.asyncCommands.use(BootstrapAdmin(service: service), as: "bootstrap-admin")
     registerRoutes(app, service: service)
