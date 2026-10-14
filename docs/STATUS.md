@@ -1,65 +1,34 @@
 # Aktueller Projektstand
 
-Stand: 14.10.2026. Etappe 0/1 (Grundlage und Konten) ist lokal lauffähig und getestet (arm64 nativ, amd64 emuliert); `main` in beiden Repos.
-Sicherheitsrelevant und noch ungeprüft: siehe „Offen“.
+Stand: 15.10.2026. Backend und PWA decken Etappe 1–4 weitgehend ab (siehe unten); native Apps, KI und spätere Etappen fehlen. `main` in beiden Repos, keine Remotes, nichts veröffentlicht.
 
 ## Was läuft (vom Lead selbst ausgeführt)
 
-- **Backend (C1–C3, Codex)**: SwiftPM `TimetrackKit` + `App`; Konfiguration per Umgebung; Fluent-Migrationen für MariaDB und SQLite;
-  Einladungen (nur Hash, einmalig), Konten, Passkeys (webauthn-swift, mehrere pro Konto, einzelner Widerruf, Schutz des letzten),
-  Sitzungen (HttpOnly-Cookie, CSRF-Header), Recovery per Recovery-Codes, Rückfallpasswort (Argon2id) und E-Mail-Code (SMTP-Sender),
-  Admin-Einladungs-API, Rate-Limits, `App bootstrap-admin`, `App migrate`, `/health`, `/ready`, statische PWA mit SPA-Fallback.
-  `swift test --build-system native` → **31 Tests, 0 Fehler** auf SQLite und MariaDB 12.3.3 (Dev-Container), inkl. Konkurrenztests
-  (Einladung/Recovery genau ein Gewinner) und Kontentrennung über direkte IDs. Handoffs: `docs/handoffs/C1.md`, `C2.md`, `C3.md`.
-- **PWA (L1, L3b; Repo timetrack-pwa)**: Einladung/Registrierung, Login, Recovery, Passkey-/Recovery-/Sitzungsverwaltung, Admin-Einladungen.
-  `npm run check`, 32 Vitest-Tests, Build grün. **Playwright-E2E 15/15** gegen das echte Backend (Chromium, virtueller Authenticator, SQLite).
-- **Umgebung (L2, L3a)**: `compose.yaml` (Projekt `timetrack-dev`), `scripts/dev-env.sh`, MariaDB 12.3.3 auf 127.0.0.1:13306 mit
-  persistentem Volume. **arm64-Image** gebaut (611 MB), Container mit MariaDB und SQLite gestartet, `/health` `/ready` 200, Migrate-Befehl,
-  Bootstrap-Link, PWA-Auslieferung und SQLite-Persistenz laut Agent-Lauf belegt (`docs/handoffs/L3a.md`; vom Lead nicht einzeln wiederholt).
-- Codex-Review der PWA (L1/L3b) hat zwei Fehler gefunden (leere 202-Antwort bei E-Mail-Recovery, getrimmtes Rückfallpasswort); behoben (`8291dd0`).
-
-## Etappe 2 Zeittracking (14.10., Lead geprüft)
-
-- **C5/C6 (Codex)**: reine `TimeEngine` (Rundung nur äußerste Grenzen, Pausenschnittmengen, Schulregel, Zeitkonto, DST-sicher), Persistenz,
-  Arbeitsmodell-Versionen, Orte, Segmente mit Revisionen/If-Match, idempotenter Timer, Tagesbewertung, Zeitkonto, Vorschläge, Geräte-Token,
-  Automation-Endpunkt (`Bearer`, getrennt von Sitzungen). `swift test` → 61 Tests, 0 Fehler, inkl. MariaDB 12.3.3.
-- **L4/L5 (Claude)**: Heute/Zeit/Tag, Modelle, Orte, Zeitkonto, Vorschläge, Geräte; Playwright **29/29** gegen echtes Backend (ADR-Beispiel 7:15),
-  101 Unit-Tests, 6 Mock-E2E; `docs/SHORTCUTS.md` (in PWA-Repo).
-- **Codex-Review fand 2 Fehler** (Besuchsgrenze bei fehlendem Departure; Segmentverlust bei Modellwechsel mit anderer Tagesgrenze) → behoben in C7 (64 Tests grün, ADR-0004-Ergänzung).
-- **Nicht belegt**: Shortcuts auf echtem iPhone/Mac, Zeitleisten-Darstellung der neuen Seiten mit Echtdaten auf Mobilbreite/Dark Mode, Rate-Limit 429 der Automation, MariaDB-E2E.
-
-## Blocker (14.10.2026)
-
-Codex-Kontingent erschöpft („usage limit“, wieder ab 20.10.2026 07:50). C9 (Backend Urlaub/Abwesenheit/Kalender/Planung/Freigaben) nicht begonnen;
-PWA-Seiten (L6/L7a) laufen deshalb nur gegen den Mock. Vertrag v0.3.2 ist fertig, C8-Engine integriert.
-
-## Nächster Schritt
-
-Etappe 3 (Planung und Urlaub) laut `docs/decisions/ADR-0005-etappe3-planung-urlaub-vorgaben.md`: zuerst Vertrag v0.3.0, dann C8/C9 (Codex) und L6/L7.
-Nutzerantworten vom 14.10.: Urlaub 30 Tage/5-Tage-Woche als Startwerte, Berichtsheft im Standardformat, Gerätetests über eigene HTTPS-Testadresse (nachzureichen).
+- **Backend** (Swift/Vapor/Fluent, MariaDB 12.3 und SQLite): Konten, Einladungen, Passkeys, Sitzung/CSRF, Recovery (Codes, Rückfallpasswort, E-Mail via SMTP-Sender), optionales OIDC, Zeittracking (Modelle, Orte, Segmente mit Revisionen, idempotenter Timer,
+  Rundung nur äußerste Grenzen, Pausen, Schulregel, Zeitkonto), Automation per Geräte-Token (Shortcuts), Urlaub/Abwesenheiten/Feiertage (alle Bundesländer)/Planung/Freigaben, Export (XLSX/PDF/CSV), Import (CSV/XLSX mit Vorschau/Commit/Rollback),
+  Dateispeicher (DB/lokal/S3, Admin-Regeln, Anhänge), Berichtsheft (Standardformat, kopierbarer Text), OAuth-Server (DCR, PKCE, Refresh-Rotation), persönliche Tokens, Grants, MCP-Endpunkt `/mcp` mit 22 Tools.
+  **169 Tests, 0 Fehler** (`swift test --build-system native` gegen frische MariaDB-Testdatenbank; SQLite-Varianten immer). Linux-Image baut (`docker compose --profile app build backend`).
+- **PWA** (Svelte 5/SvelteKit statisch, Tailwind/shadcn-Stil): alle zugehörigen Seiten inkl. Berichtsheft, Export/Import, Speicher-Admin, Verbindungen/Tokens/MCP-Hilfe, OIDC. `npm run check` ohne Fehler, **384 Unit-Tests, 48 Mock-E2E, 120 Echt-E2E** (Playwright gegen echte Wegwerf-Backends, virtueller Passkey, S3Mock-Test).
+- **Live-Testinstanz**: `https://test.example.org` (→ 192.0.2.10:18080, Compose-Profil `app`, MariaDB) mit aktuellem Backend und PWA; erster Admin-Link noch zu erzeugen (siehe EINRICHTUNG.md/TESTUMGEBUNGEN.md).
+- **Testumgebungen** (`docs/TESTUMGEBUNGEN.md`): Mailpit (Mail-Recovery Ende-zu-Ende belegt), Adobe S3Mock, Dex (OIDC), Bind-Adressen.
 
 ## Offen / nicht belegt
 
-- **Linux amd64** (14.10., Lead): Image unter QEMU in Colima gebaut (≈55 min; SwiftPM braucht dort `taskset`-Workarounds), Container
-  `--platform linux/amd64` im SQLite-Modus: `uname -m` = x86_64, `/health` und `/ready` je 200. **Nicht belegt**: MariaDB-Modus unter amd64,
-  `build-multiarch`, echter amd64-Host (nur Emulation). Das Dockerfile wendet `taskset` auch bei nativen Builds an (soll Build-Argument werden).
-- Browserprüfung nur Headless-Chromium mit virtuellem Passkey; kein echter Plattform-Authenticator, kein Firefox/WebKit, kein Mobilbreite/Dark Mode.
-- E-Mail-Recovery nur gegen Fake-SMTP getestet (nicht gegen Mailpit/echten Server). MariaDB-Modus der E2E nicht umgesetzt.
-- Reverse-Proxy: Rate-Limit nutzt Peer-IP (kein `X-Forwarded-For`); globale `auth_lock`-Serialisierung begrenzt Durchsatz.
-- `/_app/*.js`-Unbekannte liefern SPA-Fallback 200 statt 404 (Kosmetik). Dev-Einladungstokens aus Tests bleiben in Dev-DBs bis Ablauf.
-- Abhängigkeiten: webauthn-swift 1.0.0-beta.1, Argon2Swift auf Branch `main` fixiert (siehe `docs/LIZENZEN.md`); npm-Lizenzen nicht von Lead geprüft.
-- Codex hat nur die PWA geprüft; Docker/Compose (L2/L3a) und Lead-Verträge noch ohne Codex-Review.
-- Nicht begonnen: OIDC, MCP, Zeittracking (Etappe 2+), Import/Export, Berichtsheft, KI, PWA-Manifest/Service Worker, native Apps (nur Startansicht).
+- **Geräte/Clients**: Shortcuts auf echtem iPhone/Mac, echter Plattform-Passkey, ChatGPT-/Claude-Connector gegen `/mcp` (Anleitung `docs/MCP.md`, nicht erprobt), Safari-Zwischenablage, Firefox/WebKit, Screenreader.
+- **Betrieb**: Colima-Datenplatte nahezu voll (40 GB) – `docker builder prune` oder größere Platte (TESTUMGEBUNGEN.md); amd64 nur emuliert und für SQLite belegt (Stand 14.10., nicht für den aktuellen Stand); hinter Reverse Proxy nutzt das Rate-Limit die Peer-IP; globale `auth_lock`-Serialisierung begrenzt Durchsatz.
+- **Fachlich offen**: IHK-Berichtsheft-Ausgabeformat (Standardprofil angenommen), E-Mail-SMTP nur gegen Mailpit/Fake (kein TLS/Auth real), Token-Ablauf (1 h Access) und abgelaufene Tokens nicht zeitgesteuert getestet, XLSX/PDF nicht in Excel/Viewer geöffnet, Import mit 20 000 Zeilen auf MariaDB nicht gemessen,
+  MariaDB-Blobs nahe 64 MiB, S3 nur gegen S3Mock, kein periodischer Aufräumjob für Speicher, einzelne Testdatenbank-Kollisionen bei paralleler Agent-Arbeit.
+- **Codex-Anteil**: Kontingent erschöpft bis 20.10.2026 07:50; seit C9 setzen Claude-Agents die ursprünglich für Codex vorgesehenen Pakete um (Nutzerentscheidung 14.10.); Codex-Reviews von C9–C17 und Dockerfile/Compose stehen aus.
+- **Nicht begonnen**: PWA-Manifest/Service Worker/Push/In-App-Hinweise (Etappe 4), native Apps macOS/iOS/watchOS und Kalenderbrücke (Etappe 5), KI/Mac-Worker, Selbstständigenfunktionen, Google-Kalender, Offline-Sync (Etappe 6), strukturierte PDF-Altberichte.
 
 ## Umgebung
 
-Swift 6.4, Node 26.5/npm 11.17, Docker 29.5.2 (Colima arm64, Datenpartition auf 40 GB vergrößert), Compose 5.3.1, Buildx 0.38,
-Codex-Plugin 1.0.6 / CLI 0.162.1. `swift test` mit Standard-Buildsystem scheitert lokal an Codesign-Xattrs → `--build-system native`.
+Swift 6.4, Node 26.5/npm 11.17, Docker 29.5.2 (Colima arm64), Compose 5.3.1, Buildx 0.38. `swift test` nur mit `--build-system native` (Standard scheitert an Codesign-Xattrs). Parallele Agents: je eigener Worktree und eigene Test-Datenbank (`MARIADB_TEST_DB`).
 In Colima laufen fremde Projekte: nur `timetrack-dev-*` anfassen.
 
-## Übergabe
+## Nächste Schritte
 
-Nächster Schritt: Etappe 2 (Zeittracking: Arbeitsmodelle, Abschnitte, Rundung, Konto) mit Vertrag zuerst; vorher amd64-Nachweis
-und Codex-Review von Docker/Compose. Worktrees `../timetrack-backend-wt/{c1,c2,c3,l2,l3a}` sind gemergt und können mit
-`git worktree remove` entfernt werden.
-Keine Remotes, nichts veröffentlicht.
+1. Nutzer: ersten Admin-Link erzeugen, mit echtem Passkey registrieren, Shortcuts/Passkeys/MCP-Connector prüfen (`docs/SHORTCUTS.md` im PWA-Repo, `docs/MCP.md`).
+2. PWA-Installierbarkeit (Manifest, Service Worker, Web Push, In-App-Hinweise) – Rest von Etappe 4.
+3. Native macOS-App (Etappe 5), danach iOS/iPadOS/watchOS; KI-Entwürfe/Mac-Worker.
+4. Nach Rückkehr des Codex-Kontingents: Codex-Adversarial-Reviews für Backend-Pakete C9–C17.
