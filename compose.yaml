@@ -1,0 +1,90 @@
+# Timetrack local development environment (Colima / Docker Compose).
+# Project name is fixed so volumes/networks never clash with other projects.
+name: timetrack-dev
+
+services:
+  db:
+    image: mariadb:12.3
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?run scripts/dev-env.sh init}
+      MARIADB_DATABASE: ${DB_NAME:-timetrack}
+      MARIADB_USER: ${DB_USER:-timetrack}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?run scripts/dev-env.sh init}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - timetrack-dev-db:/var/lib/mysql
+    ports:
+      - "127.0.0.1:${DB_HOST_PORT:-13306}:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  backend:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: timetrack-dev-backend:local
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: &backend-env
+      DATABASE_DRIVER: mariadb
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: ${DB_NAME:-timetrack}
+      DB_USER: ${DB_USER:-timetrack}
+      DB_PASSWORD: ${DB_PASSWORD:?run scripts/dev-env.sh init}
+      DB_TLS: ${DB_TLS:-false}
+      SQLITE_PATH: ${SQLITE_PATH:-/data/timetrack.sqlite}
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-localhost}
+      WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-Timetrack (dev)}
+      WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN:-http://localhost:18080}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:18080}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-336}
+      AUTO_MIGRATE: ${AUTO_MIGRATE:-true}
+      PWA_STATIC_DIR: ${PWA_STATIC_DIR:-/srv/pwa}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+    volumes:
+      - ${PWA_STATIC_HOST_DIR:-./deploy/pwa-empty}:/srv/pwa:ro
+    ports:
+      - "127.0.0.1:${BACKEND_HOST_PORT:-18080}:8080"
+
+  # SQLite single-instance mode: one replica only, never share the file between replicas.
+  backend-sqlite:
+    profiles: ["sqlite"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: timetrack-dev-backend:local
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+      DATABASE_DRIVER: sqlite
+      SQLITE_PATH: /data/timetrack.sqlite
+    volumes:
+      - timetrack-dev-sqlite:/data
+      - ${PWA_STATIC_HOST_DIR:-./deploy/pwa-empty}:/srv/pwa:ro
+    ports:
+      - "127.0.0.1:${BACKEND_HOST_PORT:-18080}:8080"
+
+  mailpit:
+    profiles: ["mail"]
+    image: axllent/mailpit:v1.29
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MAIL_UI_HOST_PORT:-18025}:8025"
+
+volumes:
+  timetrack-dev-db:
+    name: timetrack-dev-db
+  timetrack-dev-sqlite:
+    name: timetrack-dev-sqlite
