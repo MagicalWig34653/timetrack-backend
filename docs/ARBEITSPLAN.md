@@ -60,5 +60,7 @@ die native App folgt bei ihrem ersten Implementierungspaket. Kein aktiver Agent-
 
 ## Abweichung vom 50-%-Ziel (Nutzerentscheidung 14.10.2026)
 
-Wegen des erschöpften Codex-Kontingents setzt ein Claude-Agent C9 (8 Punkte) um. Das senkt den Codex-Anteil: nach Abschluss von C9 Codex 25 von 53 Punkten (47 %→ rechnerisch 25/53 ≈ 47 %),
-sofern C9 als Codex-Punkte NICHT gezählt wird – C9 zählt als Claude-Umsetzung. Gegenseitiges Review: C9 sollte nach Kontingent-Rückkehr (ab 20.10.) von Codex per Adversarial-Review geprüft werden; bis dahin Review durch einen unabhängigen Claude-Agenten.
+Wegen des erschöpften Codex-Kontingents setzt ein Claude-Agent C9 (8 Punkte) um. Stand der integrierten Punkte (Etappe 1–3a, ohne C9/L7b):
+Codex 37 (C1 5, C2 8, C3 3, C4 1, C5 5, C6 8, C7 2, C8 5), Claude 38 (L1 8, L2 3, L3a 2, L3b 3, L4 8, L5 4, L6 8, L7a 2 – Schätzwerte).
+Mit C9 als Claude-Umsetzung (+8) ergibt sich ein Verhältnis von ca. 45 % Codex zu 55 % Claude; innerhalb des Richtwerts 40–60 %, aber Etappe 3a allein liegt klar darunter (Codex C8 5 von 26).
+Gegenseitiges Review: C9 soll nach Rückkehr des Kontingents (ab 20.10.) von Codex per Adversarial-Review geprüft werden; bis dahin prüft ein unabhängiger Claude-Agent.
