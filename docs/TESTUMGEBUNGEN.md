@@ -89,3 +89,9 @@ PWA aktualisieren: neuen Build nach `deploy/pwa-static/` kopieren (kein Neustart
 
 Geprüft am 14.10.2026 (Lead, von außen über HTTPS): `https://test.example.org` liefert `/health` und `/ready` mit 200, die PWA samt SPA-Fallback und die API (401 ohne Sitzung). Der Nutzer erlaubt die Domain als Testziel.
 Konvention: Auf dieser Instanz keine automatisierten Registrierungen mit virtuellen Passkeys (der erste Admin soll der echte Nutzer mit echtem Passkey sein); automatisierte Tests laufen weiter gegen eigene Wegwerf-Backends (E2E-Ports 18090 ff.). Lesende Prüfungen sind erlaubt.
+
+## Speicherplatz in Colima (Stand 15.10.2026)
+
+Die Docker-Datenpartition der Colima-VM (40 GB) war am 15.10. wieder zu 100 % belegt (Images ~35 GB, Build-Cache ~14,6 GB, davon ~3,8 GB freigebbar). Folge: MariaDB meldete beim Anlegen neuer Tabellen „No space left on device“, das Backend startete in einer Schleife neu.
+Behelf: eigene, ungenutzte Image-Tags entfernen (`docker rmi timetrack-dev-backend:<tag>`). Dauerhaft: Build-Cache bereinigen (`docker builder prune`, betrifft alle Projekte in dieser Colima-VM nur als Cache) oder die Platte vergrößern (`colima stop && colima start --disk 80`).
+Prüfen mit `colima ssh -- df -h /var/lib/docker`. Das Projekt löscht nie fremde Images, Container oder Volumes.
