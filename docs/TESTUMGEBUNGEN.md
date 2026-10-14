@@ -86,3 +86,6 @@ Der Port ist damit im lokalen Netz offen – Zugriff nur über das eigene Netz/d
 
 Erster Admin: `docker compose --profile app run --rm -T backend bootstrap-admin` (Link `https://test.example.org/invite/<token>`, 72 h gültig, einmalig; nur Hash gespeichert).
 PWA aktualisieren: neuen Build nach `deploy/pwa-static/` kopieren (kein Neustart nötig); Backend aktualisieren: `scripts/dev-env.sh up-app` (baut das Image neu).
+
+Geprüft am 14.10.2026 (Lead, von außen über HTTPS): `https://test.example.org` liefert `/health` und `/ready` mit 200, die PWA samt SPA-Fallback und die API (401 ohne Sitzung). Der Nutzer erlaubt die Domain als Testziel.
+Konvention: Auf dieser Instanz keine automatisierten Registrierungen mit virtuellen Passkeys (der erste Admin soll der echte Nutzer mit echtem Passkey sein); automatisierte Tests laufen weiter gegen eigene Wegwerf-Backends (E2E-Ports 18090 ff.). Lesende Prüfungen sind erlaubt.
