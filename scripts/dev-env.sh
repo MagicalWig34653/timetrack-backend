@@ -30,6 +30,7 @@ USAGE
 }
 
 env_get() { grep -E "^$1=" .env | head -1 | cut -d= -f2-; }
+env_or() { local v; v="$(env_get "$1")"; echo "${v:-$2}"; }
 rand() { LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 28; }
 
 need_env() { [ -f .env ] || { echo ".env missing: run scripts/dev-env.sh init" >&2; exit 1; }; }
@@ -70,9 +71,9 @@ case "$cmd" in
   s3-env)
     need_env
     cat <<S3ENV
-endpoint:    http://127.0.0.1:$(env_get S3_HTTP_HOST_PORT)
+endpoint:    http://127.0.0.1:$(env_or S3_HTTP_HOST_PORT 19090)
 region:      us-east-1
-bucket:      $(env_get S3_BUCKET)
+bucket:      $(env_or S3_BUCKET timetrack-dev)
 path-style:  true
 access key:  dummy-access-key   (S3Mock accepts any credentials)
 secret key:  dummy-secret-key

@@ -10,7 +10,7 @@ issuer = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:15556/dex"
 user = sys.argv[2] if len(sys.argv) > 2 else "alice@example.test"
 password = sys.argv[3] if len(sys.argv) > 3 else "alice-dev-pass"
 client_id = "timetrack-dev"
-redirect = "http://localhost:18080/auth/oidc/callback"
+redirect = "http://localhost:18080/api/v1/auth/oidc/callback"
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):

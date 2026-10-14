@@ -62,8 +62,8 @@ Backend hinter einem vorhandenen Reverse Proxy (Domain, TLS und Proxy werden hie
 ## Dex (`oidc`)
 
 - Issuer `http://localhost:15556/dex`, Discovery: `/.well-known/openid-configuration`. Konfiguration: `deploy/dex/config.yaml`.
-- Öffentlicher Client `timetrack-dev` (kein Secret, PKCE `S256`), Redirect-URIs `http://localhost:18080/auth/oidc/callback` und
-  `http://localhost:5173/auth/oidc/callback`.
+- Öffentlicher Client `timetrack-dev` (kein Secret, PKCE `S256`), Redirect-URIs `http://localhost:18080/api/v1/auth/oidc/callback` und
+  `http://localhost:5173/api/v1/auth/oidc/callback`.
 - Testnutzer (nur Testdaten): `alice@example.test` / `alice-dev-pass`, `bob@example.test` / `bob-dev-pass`.
 - Prüfung: `python3 -I scripts/oidc-pkce-check.py` führt Discovery, Autorisierung, Login, Code-Austausch mit PKCE aus (ohne Tokenwerte auszugeben).
 - Grenze: Der OIDC-Adapter im Backend ist noch nicht implementiert; Speicher ist `memory`, Neustart verwirft Sitzungen. Nur HTTP.

@@ -75,5 +75,6 @@ Gegenseitiges Review: C9 soll nach Rückkehr des Kontingents (ab 20.10.) von Cod
 | ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
 | --- | --- | --- | --- | --- | --- |
 | L10 | Testumgebungen Mailpit, Adobe S3Mock, Dex, Bind-Adressen (`docs/TESTUMGEBUNGEN.md`) | Claude-Agent | 3 | integriert (`19d5f03`); Mail-Recovery Ende-zu-Ende mit Mailpit belegt; S3Mock-/Dex-Grundfunktion belegt; Backend gegen S3Mock/Dex noch nicht | C3 |
-| C14 | Optionales OIDC (ADR-0007, Vertrag v0.5.0): Backend | Claude-Agent (Codex-Limit) | 8 | in Arbeit (Claude-Agent, Worktree `../timetrack-backend-wt/c14`; mehrere Startversuche vom Berechtigungsprüfer abgelehnt, nach Nutzerfreigabe gestartet) | Vertrag v0.5.0, L10 |
+| C14 | Optionales OIDC (ADR-0007, Vertrag v0.5.0): Backend | Claude-Agent (Codex-Limit) | 8 | integriert (Merge `fa29acb`); 158 Tests inkl. MariaDB vom Lead nachgelaufen; Lauf gegen echtes Dex (Agent) | Vertrag v0.5.0, L10 |
 | L11 | OIDC-Oberfläche (Login, Einladung, Identitäten) gegen Mock | Claude-Agent | 5 | integriert (PWA `b03aa6c`); 297 Unit, 29 Mock-E2E, 49 E2E vom Lead nachgelaufen; nur gegen Mock | Vertrag v0.5.0 |
+| L12 | Echt-Integration Export/Import/Speicher/Anhänge inkl. Adobe S3Mock | Claude-Agent | 5 | integriert (PWA `72974f3`); 74 E2E (49+25) vom Lead nachgelaufen, S3Mock-Test lief | C11–C13 |
