@@ -28,6 +28,11 @@ Sicherheitsrelevant und noch ungeprüft: siehe „Offen“.
 - **Codex-Review fand 2 Fehler** (Besuchsgrenze bei fehlendem Departure; Segmentverlust bei Modellwechsel mit anderer Tagesgrenze) → behoben in C7 (64 Tests grün, ADR-0004-Ergänzung).
 - **Nicht belegt**: Shortcuts auf echtem iPhone/Mac, Zeitleisten-Darstellung der neuen Seiten mit Echtdaten auf Mobilbreite/Dark Mode, Rate-Limit 429 der Automation, MariaDB-E2E.
 
+## Blocker (14.10.2026)
+
+Codex-Kontingent erschöpft („usage limit“, wieder ab 20.10.2026 07:50). C9 (Backend Urlaub/Abwesenheit/Kalender/Planung/Freigaben) nicht begonnen;
+PWA-Seiten (L6/L7a) laufen deshalb nur gegen den Mock. Vertrag v0.3.2 ist fertig, C8-Engine integriert.
+
 ## Nächster Schritt
 
 Etappe 3 (Planung und Urlaub) laut `docs/decisions/ADR-0005-etappe3-planung-urlaub-vorgaben.md`: zuerst Vertrag v0.3.0, dann C8/C9 (Codex) und L6/L7.

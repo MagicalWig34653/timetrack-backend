@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.3.1
+  version: 0.3.2
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -20,6 +20,7 @@ info:
     (4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form
     `<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.
     (6) No session listing endpoint in stage 1; only revoking other sessions.
+    v0.3.2: Tagesmarkierung Feiertag hat Vorrang vor Urlaub am selben Tag; Krankheit wirkt nur mit Status approved/taken; Freigabe an sich selbst 400 `cannot_share_with_self`; DayEvaluation.markSource/targetOverrideSeconds.
     Stage 3 (v0.3.0/0.3.1): see docs/decisions/ADR-0005 (Entscheidungen 0.3.1: GET vacation/settings liefert Standardwerte mit configured=false; Übertrag je Jahr; Abwesenheiten rejected/cancelled blockieren keine Überlappung
     und haben countedHalfDays 0, countedHalfDays nur für kind=vacation; doppelte Freigabe 409 share_exists; Freigabe an sich selbst 400; Urlaubsansicht nur approved/taken; actual nur Tage mit Arbeitszeit;
     maximale Zeiträume für absences/plan/shared view 366 Tage, time/days 93 Tage, sonst 400 range_too_large). Half days as integers (30 days = 60). Sick absences and documents are never part of shares.
@@ -883,6 +884,8 @@ components:
         segmentIds: { type: array, items: { type: string, format: uuid } }
         segments: { type: array, items: { $ref: '#/components/schemas/Segment' }, description: Segmente dieses Arbeitstags (Zuordnung nach ADR-0004; ohne stornierte) }
         markCreditSeconds: { type: [integer, 'null'], description: gesetzte Gutschrift der Markierung }
+        markSource: { type: string, enum: [none, explicit, absence, holiday], description: Herkunft der wirksamen Markierung (explicit = manuell gesetzt) }
+        targetOverrideSeconds: { type: [integer, 'null'], description: abweichendes Soll, z. B. halber Urlaubstag }
         note: { type: [string, 'null'] }
         breakHints: { type: array, items: { type: object, required: [code], properties: { code: { type: string, enum: [break_missing_30, break_missing_45, break_part_too_short, work_over_6h_without_break] } } } }
     TimeAccount:

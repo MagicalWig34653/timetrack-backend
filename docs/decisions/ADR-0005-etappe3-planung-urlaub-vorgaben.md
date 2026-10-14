@@ -38,3 +38,9 @@ Formelzellen sicher). Feiertags-/Ferienquelle: Daten fest eingebaut oder konfigu
 - **Feiertage**: fest eingebaute Berechnung für Deutschland (bundesweit + Länder, Ostern gaußsch, Buß- und Bettag Sachsen), Region Standard `DE-ST`; keine Online-Abfrage. Eigene Feiertage/Schulferien als Zeiträume.
 - **Freigaben**: nur lesend, getrennt je Scope plan/actual/vacation, standardmäßig nichts. Ansicht des Empfängers enthält keine Notizen, Orte, Segmente, Krankheit oder Unterlagen. Widerruf sofort wirksam (404).
   Kein Verzeichnis: Empfänger per `handle`; unbekannt → 404 `recipient_not_found` (Annahme, kleine Instanz). Freigaben berühren weder Berichtshefte noch Dokumente.
+
+## Ergänzung 14.10.2026 (Lead): Rangfolge und Blocker
+
+- Rangfolge Tagesmarkierung: explizit > Feiertag > Urlaub/Krankheit (nur approved/taken). Die Herkunft steht in `DayEvaluation.markSource` (Vertrag v0.3.2).
+- **Blocker Codex-Kontingent**: Am 14.10.2026 meldet Codex „usage limit“ (frühestens wieder verfügbar am 20.10.2026 07:50 laut Meldung). C9 (Persistenz/REST Etappe 3a) wurde dadurch nicht begonnen.
+  Es zählt kein Codex-Anteil für C9, bis es tatsächlich umgesetzt ist.
