@@ -45,12 +45,13 @@ Branch `l3a-images`. Geänderte Dateien: `Dockerfile`, `compose.yaml`, `.env.exa
 - Erster Versuch: `swift package resolve` Exit 132 (SIGILL). Mit `deps`-Stage umgangen. Danach `swift build`:
   Manifest-Kompilierung stürzt ab ("Invalid manifest ... Signal 4"), auch mit `QEMU_CPU=max` und `-j 2`.
   `--cpuset-cpus=0` (nproc=1) lädt Manifeste fehlerfrei (ca. 4 min).
-- Aktueller Build mit `taskset`-Begrenzung (Dockerfile oben) kompiliert; bei Übergabe Schritt 913/922 nach ca. 28 min
-  (Schätzung gesamt 35 bis 45 min). Ergebnis zum Zeitpunkt der Übergabe unbekannt; Log im Scratchpad
-  (`amd64-build.log`). Nicht verifiziert: amd64-Image-Lauf, `uname -m` im Container, `/health`+`/ready` unter amd64.
+- Build mit den Workarounds erfolgreich: `docker buildx build --platform linux/amd64 --load`, 55 min 14 s (nur ein Kern, emuliert),
+  Image `timetrack-dev-backend:amd64` 147 MB (Größe laut `image inspect`, Architektur amd64).
+- Smoke-Run (`docker run --platform linux/amd64`, SQLite, Container `timetrack-dev-amd64-smoke`, danach entfernt): `uname -m` = x86_64,
+  `/health` und `/ready` 200 `{"status":"ok"}`, Container healthy.
 - `scripts/dev-env.sh build-multiarch` nicht ausgeführt (dauert wegen amd64 ebenso lange). Offen.
 
 ## Offen
 
-amd64-Abschluss und Smoke-Run (`timetrack-dev-amd64-smoke`, SQLite), `build-multiarch`, Build-Arg für die QEMU-Begrenzung,
+`build-multiarch` (amd64-Teil dauert ca. 55 min), Build-Arg für die QEMU-Begrenzung,
 statisches Linken, SPA-Fallback für unbekannte `/_app/*`-Dateien, Compose-Anonymvolume für `/data` im app-Profil.
