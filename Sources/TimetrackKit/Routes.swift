@@ -4,6 +4,9 @@ import Fluent
 func registerRoutes(_ app: Application, service: AuthService) {
     registerTimeRoutes(app, auth: service)
     registerPlanningRoutes(app, auth: service)
+    registerExportRoutes(app, auth: service)
+    registerImportRoutes(app, auth: service)
+    registerStorageRoutes(app, auth: service)
     app.get("health") { _ in StatusResponse(status: "ok") }
     app.get("ready") { request async -> Response in
         do {

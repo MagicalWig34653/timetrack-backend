@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.3.2
+  version: 0.4.0
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -20,6 +20,7 @@ info:
     (4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form
     `<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.
     (6) No session listing endpoint in stage 1; only revoking other sessions.
+    v0.4.0: Export/Import/Dateispeicher, siehe docs/decisions/ADR-0006. Fehlercodes: file_too_large (413), unsupported_type (415), import_not_ready, import_has_errors, rollback_conflict.
     v0.3.2: Tagesmarkierung Feiertag hat Vorrang vor Urlaub am selben Tag; Krankheit wirkt nur mit Status approved/taken; Freigabe an sich selbst 400 `cannot_share_with_self`; DayEvaluation.markSource/targetOverrideSeconds.
     Stage 3 (v0.3.0/0.3.1): see docs/decisions/ADR-0005 (Entscheidungen 0.3.1: GET vacation/settings liefert Standardwerte mit configured=false; Übertrag je Jahr; Abwesenheiten rejected/cancelled blockieren keine Überlappung
     und haben countedHalfDays 0, countedHalfDays nur für kind=vacation; doppelte Freigabe 409 share_exists; Freigabe an sich selbst 400; Urlaubsansicht nur approved/taken; actual nur Tage mit Arbeitszeit;
@@ -691,6 +692,136 @@ paths:
         - { name: from, in: query, required: true, schema: { type: string, format: date } }
         - { name: to, in: query, required: true, schema: { type: string, format: date } }
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/SharedView' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/export/time:
+    get:
+      operationId: exportTime
+      description: Arbeitszeitexport (siehe ADR-0006). Antwort ist eine Datei mit Content-Disposition attachment.
+      security: [ { session: [] } ]
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+        - { name: format, in: query, required: true, schema: { type: string, enum: [xlsx, pdf, csv] } }
+      responses:
+        '200': { description: Datei, content: { application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: { schema: { type: string, format: binary } }, application/pdf: { schema: { type: string, format: binary } }, text/csv: { schema: { type: string } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/v1/imports:
+    post:
+      operationId: uploadImport
+      description: Lädt eine CSV- oder XLSX-Datei (multipart/form-data, Feld file) hoch. Es werden noch keine Zeiten angelegt.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, required: [file], properties: { file: { type: string, format: binary } } } } } }
+      responses: { '201': { description: hochgeladen, content: { application/json: { schema: { $ref: '#/components/schemas/ImportJob' } } } }, '400': { $ref: '#/components/responses/BadRequest' } }
+  /api/v1/imports/{id}:
+    get:
+      operationId: getImport
+      security: [ { session: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/ImportJob' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    delete:
+      operationId: discardImport
+      description: Verwirft einen noch nicht übernommenen Import samt hochgeladener Datei.
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '204': { description: verworfen }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/v1/imports/{id}/preview:
+    get:
+      operationId: previewImportRows
+      description: Rohvorschau (erste 50 Zeilen des Blatts) zur Wahl von Kopfzeile und Spalten.
+      security: [ { session: [] } ]
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: sheet, in: query, schema: { type: string } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: object, required: [sheet, rows], properties: { sheet: { type: string }, rows: { type: array, items: { type: array, items: { type: [string, 'null'] } } } } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/imports/{id}/mapping:
+    put:
+      operationId: putImportMapping
+      description: Speichert die Zuordnung und liefert die Validierungsvorschau (noch keine Übernahme).
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ImportMapping' } } } }
+      responses: { '200': { description: Vorschau, content: { application/json: { schema: { $ref: '#/components/schemas/ImportPreview' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/imports/{id}/commit:
+    post:
+      operationId: commitImport
+      description: Übernimmt die zuletzt validierte Zuordnung in einer Transaktion. Wiederholung derselben Datei erzeugt keine Duplikate (skipped). Nur wenn keine Zeilenfehler bestehen oder ignoreErrors=true.
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { ignoreErrors: { type: boolean, default: false } } } } } }
+      responses: { '200': { description: übernommen, content: { application/json: { schema: { $ref: '#/components/schemas/ImportResult' } } } }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/v1/imports/{id}/rollback:
+    post:
+      operationId: rollbackImport
+      description: Nimmt eine übernommene Charge zurück (storniert deren Segmente), sofern sie seitdem unverändert sind; sonst 409 mit Konfliktliste.
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '200': { description: zurückgenommen, content: { application/json: { schema: { $ref: '#/components/schemas/ImportResult' } } } }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/v1/import-templates:
+    get:
+      operationId: listImportTemplates
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ImportTemplate' } } } } } }
+    post:
+      operationId: createImportTemplate
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name, mapping], properties: { name: { type: string, maxLength: 80 }, mapping: { $ref: '#/components/schemas/ImportMapping' } } } } } }
+      responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/ImportTemplate' } } } } }
+  /api/v1/import-templates/{id}:
+    delete:
+      operationId: deleteImportTemplate
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '204': { description: gelöscht }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/admin/storage:
+    get:
+      operationId: getStorageSettings
+      description: Nur Admin. Geheimnisse werden nie ausgegeben (hasSecret).
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/StorageSettings' } } } }, '403': { $ref: '#/components/responses/Forbidden' } }
+    put:
+      operationId: putStorageSettings
+      description: Nur Admin. Wirkt nur auf neue Uploads. secretAccessKey wird nur geschrieben, wenn angegeben. Ohne STORAGE_SECRET_KEY auf dem Server → 501 not_implemented bei S3.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/StorageSettingsInput' } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/StorageSettings' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '403': { $ref: '#/components/responses/Forbidden' }, '501': { $ref: '#/components/responses/NotImplemented' } }
+  /api/v1/files:
+    post:
+      operationId: uploadFile
+      description: Lädt eine Datei hoch (multipart, Feld file). Speicherort nach Admin-Regeln. Typ-Whitelist und Größenlimit; 413 file_too_large, 415 unsupported_type.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, required: [file], properties: { file: { type: string, format: binary } } } } } }
+      responses: { '201': { description: gespeichert, content: { application/json: { schema: { $ref: '#/components/schemas/FileMeta' } } } }, '400': { $ref: '#/components/responses/BadRequest' } }
+  /api/v1/files/{id}:
+    get:
+      operationId: downloadFile
+      description: Nur Eigentümer. Content-Disposition attachment, nosniff.
+      security: [ { session: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '200': { description: Datei, content: { application/octet-stream: { schema: { type: string, format: binary } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    delete:
+      operationId: deleteFile
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '204': { description: gelöscht }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/absences/{id}/attachments:
+    get:
+      operationId: listAbsenceAttachments
+      security: [ { session: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/FileMeta' } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    post:
+      operationId: attachFileToAbsence
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [fileId], properties: { fileId: { type: string, format: uuid } } } } } }
+      responses: { '201': { description: verknüpft, content: { application/json: { schema: { $ref: '#/components/schemas/FileMeta' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/absences/{id}/attachments/{fileId}:
+    delete:
+      operationId: detachFileFromAbsence
+      security: [ { session: [], csrf: [] } ]
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: fileId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { '204': { description: Verknüpfung entfernt }, '404': { $ref: '#/components/responses/NotFound' } }
 components:
   securitySchemes:
     session: { type: apiKey, in: cookie, name: tt_session }
@@ -1024,3 +1155,102 @@ components:
         plan: { type: array, items: { type: object, required: [date, mode], properties: { date: { type: string, format: date }, mode: { type: string, enum: [office, home, customer, school, off] } } } }
         actual: { type: array, items: { type: object, required: [date, evaluatedWorkSeconds], properties: { date: { type: string, format: date }, evaluatedStart: { type: [string, 'null'], format: date-time }, evaluatedEnd: { type: [string, 'null'], format: date-time }, evaluatedWorkSeconds: { type: integer } } } }
         vacation: { type: array, items: { type: object, required: [startDate, endDate], properties: { startDate: { type: string, format: date }, endDate: { type: string, format: date } } } }
+    ImportJob:
+      type: object
+      required: [id, filename, kind, status, sheets, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        filename: { type: string }
+        kind: { type: string, enum: [csv, xlsx] }
+        status: { type: string, enum: [uploaded, mapped, committed, rolled_back] }
+        sheets: { type: array, items: { type: string } }
+        sha256: { type: string }
+        createdAt: { type: string, format: date-time }
+    ImportMapping:
+      type: object
+      required: [sheet, headerRow, columns, dateFormat, timeFormat]
+      properties:
+        sheet: { type: string }
+        headerRow: { type: integer, minimum: 0, description: 0 = keine Kopfzeile }
+        timezone: { type: string, default: Europe/Berlin }
+        dateFormat: { type: string, enum: [dd.MM.yyyy, yyyy-MM-dd, excel_serial] }
+        timeFormat: { type: string, enum: [HH:mm, excel_fraction, decimal_hours] }
+        defaultKind: { $ref: '#/components/schemas/SegmentKind' }
+        columns:
+          type: object
+          required: [date]
+          properties:
+            date: { type: integer, minimum: 0 }
+            start: { type: [integer, 'null'], minimum: 0 }
+            end: { type: [integer, 'null'], minimum: 0 }
+            duration: { type: [integer, 'null'], minimum: 0, description: Dauer statt Ende (Format laut timeFormat) }
+            kind: { type: [integer, 'null'], minimum: 0 }
+            place: { type: [integer, 'null'], minimum: 0 }
+            note: { type: [integer, 'null'], minimum: 0 }
+        skipSummaryRows: { type: boolean, default: true }
+    ImportPreview:
+      type: object
+      required: [rows, valid, errors, duplicates, sample]
+      properties:
+        rows: { type: integer }
+        valid: { type: integer }
+        duplicates: { type: integer }
+        errors: { type: array, items: { type: object, required: [row, code], properties: { row: { type: integer }, code: { type: string, enum: [date_invalid, time_invalid, end_before_start, missing_value, overlap, formula_without_value, summary_row, unknown_place] } } } }
+        sample: { type: array, items: { type: object, properties: { date: { type: string, format: date }, startedAt: { type: string, format: date-time }, endedAt: { type: string, format: date-time }, kind: { $ref: '#/components/schemas/SegmentKind' } } } }
+    ImportResult:
+      type: object
+      required: [batchId, created, skipped]
+      properties:
+        batchId: { type: string, format: uuid }
+        created: { type: integer }
+        skipped: { type: integer }
+        conflicts: { type: array, items: { type: string, format: uuid } }
+    ImportTemplate:
+      type: object
+      required: [id, name, mapping]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        mapping: { $ref: '#/components/schemas/ImportMapping' }
+    StorageRule:
+      type: object
+      required: [backend]
+      properties:
+        maxBytes: { type: [integer, 'null'], minimum: 1, description: obere Grenze (inklusive); null = alles darüber/Rest }
+        backend: { type: string, enum: [db, s3, local] }
+    StorageSettingsInput:
+      type: object
+      required: [rules]
+      properties:
+        rules: { type: array, minItems: 1, items: { $ref: '#/components/schemas/StorageRule' }, description: geordnet; erste passende Regel gewinnt; letzte muss maxBytes null haben }
+        maxUploadBytes: { type: integer, minimum: 1, default: 10485760 }
+        localPath: { type: [string, 'null'] }
+        s3:
+          type: [object, 'null']
+          properties:
+            endpoint: { type: string }
+            region: { type: string }
+            bucket: { type: string }
+            pathStyle: { type: boolean, default: true }
+            accessKeyId: { type: string }
+            secretAccessKey: { type: string, writeOnly: true }
+    StorageSettings:
+      type: object
+      required: [rules, maxUploadBytes, hasSecret]
+      properties:
+        rules: { type: array, items: { $ref: '#/components/schemas/StorageRule' } }
+        maxUploadBytes: { type: integer }
+        localPath: { type: [string, 'null'] }
+        s3: { type: [object, 'null'], properties: { endpoint: { type: string }, region: { type: string }, bucket: { type: string }, pathStyle: { type: boolean }, accessKeyId: { type: string } } }
+        hasSecret: { type: boolean }
+    FileMeta:
+      type: object
+      required: [id, name, size, sha256, contentType, backend, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        size: { type: integer }
+        sha256: { type: string }
+        contentType: { type: string }
+        backend: { type: string, enum: [db, s3, local] }
+        createdAt: { type: string, format: date-time }

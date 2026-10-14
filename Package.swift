@@ -12,7 +12,8 @@ let package = Package(
         .package(url: "https://github.com/vapor/fluent-mysql-driver.git", from: "4.0.0"),
         .package(url: "https://github.com/vapor/fluent-sqlite-driver.git", from: "4.0.0"),
         .package(url: "https://github.com/swift-server/webauthn-swift.git", from: "1.0.0-beta.1"),
-        .package(url: "https://github.com/tmthecoder/Argon2Swift.git", branch: "main")
+        .package(url: "https://github.com/tmthecoder/Argon2Swift.git", branch: "main"),
+        .package(url: "https://github.com/weichsel/ZIPFoundation.git", from: "0.9.19")
     ],
     targets: [
         .target(name: "TimetrackKit", dependencies: [
@@ -25,7 +26,8 @@ let package = Package(
             .product(name: "FluentMySQLDriver", package: "fluent-mysql-driver"),
             .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver"),
             .product(name: "WebAuthn", package: "webauthn-swift"),
-            .product(name: "Argon2Swift", package: "Argon2Swift")
+            .product(name: "Argon2Swift", package: "Argon2Swift"),
+            .product(name: "ZIPFoundation", package: "ZIPFoundation")
         ], resources: [.copy("Resources/RecoveryMail.de.json")]),
         .executableTarget(name: "App", dependencies: ["TimetrackKit"]),
         .testTarget(name: "TimetrackKitTests", dependencies: ["TimetrackKit", .product(name: "NIOEmbedded", package: "swift-nio"), .product(name: "XCTVapor", package: "vapor")])
