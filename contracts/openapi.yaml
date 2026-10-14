@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.7.0
+  version: 0.8.0
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -20,6 +20,7 @@ info:
     (4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form
     `<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.
     (6) No session listing endpoint in stage 1; only revoking other sessions.
+    v0.8.0: Hinweise/Web Push (ADR-0010). Push-Nutzlast ohne Details, Ruhezeiten stellen Push zurück; REST-Fehlercodes: push_unavailable (501), too_many_subscriptions (409).
     v0.7.0: MCP/OAuth/persönliche Tokens (ADR-0009). Fehlercodes REST: reauth_required, insufficient_scope; OAuth-Endpunkte folgen RFC 6749/7009/7591/8414/9728 (Fehler als JSON `error`/`error_description`).
     v0.6.0: Berichtsheft (ADR-0008). Fehlercodes: stale_version (412), not_found; Quellen mit fileId benötigen eine eigene Datei (404 sonst).
     v0.5.1: Speicher: 503 storage_unavailable (Backend einer bestehenden Datei nicht konfiguriert), 500 storage_corrupt, 409 conflict bei mehr als 20 Anhängen je Abwesenheit; PUT /admin/storage ersetzt die gesamte Konfiguration (`s3: null` löscht S3-Konfiguration und Secret, `s3` ohne secretAccessKey behält das gespeicherte Secret). OIDC: für purpose=link führen Fehler nach `/settings/identities?oidc_error=<code>`; 'frische Sitzung nötig' ist 403 reauth_required; ungültiges inviteToken bei start = 404; pendingId gilt 10 Minuten (danach 404); der Passkey-Widerruf zählt externe Identitäten als Anmeldemethode.
@@ -1057,6 +1058,68 @@ paths:
     get:
       operationId: mcpGet
       responses: { '405': { description: kein SSE-Stream in v1 } }
+  /api/v1/notifications:
+    get:
+      operationId: listNotifications
+      security: [ { session: [] } ]
+      parameters:
+        - { name: unreadOnly, in: query, schema: { type: boolean, default: false } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: before, in: query, schema: { type: string, format: date-time } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: object, required: [items, unreadCount], properties: { items: { type: array, items: { $ref: '#/components/schemas/Notification' } }, unreadCount: { type: integer } } } } } } }
+  /api/v1/notifications/read:
+    post:
+      operationId: markNotificationsRead
+      description: Markiert die angegebenen (oder bei all=true alle) Hinweise als gelesen.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { ids: { type: array, items: { type: string, format: uuid }, maxItems: 200 }, all: { type: boolean } } } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: object, required: [unreadCount], properties: { unreadCount: { type: integer } } } } } } }
+  /api/v1/notifications/{id}:
+    delete:
+      operationId: deleteNotification
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '204': { description: gelöscht }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/notifications/settings:
+    get:
+      operationId: getNotificationSettings
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/NotificationSettings' } } } } }
+    put:
+      operationId: putNotificationSettings
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/NotificationSettings' } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/NotificationSettings' } } } }, '400': { $ref: '#/components/responses/BadRequest' } }
+  /api/v1/push/config:
+    get:
+      operationId: pushConfig
+      description: Ob Web Push auf diesem Server verfügbar ist (VAPID konfiguriert) und der öffentliche Schlüssel.
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: object, required: [available], properties: { available: { type: boolean }, vapidPublicKey: { type: string, description: base64url uncompressed P-256 } } } } } } }
+  /api/v1/me/push-subscriptions:
+    get:
+      operationId: listPushSubscriptions
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/PushSubscriptionInfo' } } } } } }
+    post:
+      operationId: createPushSubscription
+      description: Registriert das Gerät (idempotent über endpoint). 501 wenn Push nicht verfügbar, 409 bei mehr als 10 Abos.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [endpoint, keys], properties: { endpoint: { type: string, format: uri }, keys: { type: object, required: [p256dh, auth], properties: { p256dh: { type: string }, auth: { type: string } } }, userAgent: { type: string, maxLength: 200 } } } } } }
+      responses: { '201': { description: registriert, content: { application/json: { schema: { $ref: '#/components/schemas/PushSubscriptionInfo' } } } }, '501': { $ref: '#/components/responses/NotImplemented' } }
+  /api/v1/me/push-subscriptions/{id}:
+    delete:
+      operationId: deletePushSubscription
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '204': { description: entfernt }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/me/push-subscriptions/{id}/test:
+    post:
+      operationId: sendTestPush
+      description: Sendet eine generische Testnachricht an dieses Abo (Rate-Limit 5 je Stunde).
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '202': { description: gesendet }, '404': { $ref: '#/components/responses/NotFound' }, '429': { $ref: '#/components/responses/TooMany' }, '501': { $ref: '#/components/responses/NotImplemented' } }
 components:
   securitySchemes:
     session: { type: apiKey, in: cookie, name: tt_session }
@@ -1595,3 +1658,44 @@ components:
         createdAt: { type: string, format: date-time }
         expiresAt: { type: string, format: date-time }
         lastUsedAt: { type: [string, 'null'], format: date-time }
+    NotificationKind:
+      type: string
+      enum: [running_timer, pending_suggestions, report_gap, document_submission, system]
+    Notification:
+      type: object
+      required: [id, kind, title, body, createdAt, read]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { $ref: '#/components/schemas/NotificationKind' }
+        title: { type: string }
+        body: { type: string }
+        url: { type: [string, 'null'], description: relativer PWA-Pfad }
+        createdAt: { type: string, format: date-time }
+        read: { type: boolean }
+    NotificationSettings:
+      type: object
+      required: [categories]
+      properties:
+        categories:
+          type: object
+          description: Schlüssel = NotificationKind (ohne system)
+          additionalProperties:
+            type: object
+            required: [inApp, push]
+            properties:
+              inApp: { type: boolean }
+              push: { type: boolean }
+              thresholdMinutes: { type: integer, minimum: 30, maximum: 1440, description: nur running_timer }
+              weekday: { type: integer, minimum: 1, maximum: 7, description: nur report_gap }
+              time: { type: string, pattern: '^[0-2][0-9]:[0-5][0-9]$', description: nur report_gap, lokal }
+        quietStart: { type: [string, 'null'], pattern: '^[0-2][0-9]:[0-5][0-9]$' }
+        quietEnd: { type: [string, 'null'], pattern: '^[0-2][0-9]:[0-5][0-9]$' }
+    PushSubscriptionInfo:
+      type: object
+      required: [id, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        host: { type: string, description: Push-Dienst-Host (nicht der volle Endpunkt) }
+        userAgent: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+        lastSuccessAt: { type: [string, 'null'], format: date-time }

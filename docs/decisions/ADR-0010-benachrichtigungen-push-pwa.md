@@ -1,0 +1,22 @@
+# ADR-0010: In-App-Hinweise, Web Push und PWA-Installierbarkeit (Etappe 4c)
+
+Status: akzeptiert (Lead-Entscheidung 15.10.2026; KONZEPT.md Abschnitt 7: In-App-Hinweise und Push, E-Mail optional, je Kategorie abschaltbar, Ruhezeiten/Zeitzonen, Push standardmäßig ohne sensible Details, Kerntracking nie von Push abhängig). Alles Weitere sind Annahmen.
+
+## Backend
+
+- **Kategorien** (`kind`): `running_timer` (Timer läuft länger als `thresholdMinutes`, Standard 600; einmal je Segment), `pending_suggestions` (offene Automatik-Vorschläge älter als 30 min; höchstens ein Hinweis je 6 h), `report_gap` (Berichtsheft der abgelaufenen/aktuellen Woche ohne Einträge zur eingestellten Erinnerungszeit, Standard Freitag 15:00 lokal; einmal je Woche), `document_submission` (Abwesenheit mit `documentStatus=pending`, älter als 3 Tage; einmal je Abwesenheit und Tag max. einmal).
+- **Einstellungen je Konto** (Standard: alle Kategorien an, Push aus bis Abo): `inAppEnabled`, `pushEnabled` je Kategorie, Ruhezeiten `quietStart`/`quietEnd` (lokal HH:mm, Standard 22:00–07:00, leer = keine), Zeitzone = Zeitzone des aktuellen Arbeitsmodells (sonst Europe/Berlin). In Ruhezeiten werden Push-Nachrichten **zurückgestellt** (nicht verworfen, höchstens bis zum Ende der Ruhezeit), In-App-Hinweise entstehen sofort.
+- **Hinweisliste**: Tabelle `notifications` (Konto, Kategorie, Titel, Text, Link in der PWA, erzeugt, gelesen, Deduplikationsschlüssel eindeutig je Konto). In-App-Texte dürfen Details nennen (nur für den Eigentümer); **Push-Nutzlast enthält nur generische deutsche Texte** („Timer läuft noch“, „Offene Vorschläge“, „Berichtsheft-Erinnerung“, „Unterlagen offen“) und die Ziel-URL, keine Namen, Zeiten, Orte oder Notizen.
+- **Scheduler**: in-Prozess-Hintergrundjob (alle 60 s, Vapor `Lifecycle`/Task) mit DB-Lease (Tabelle `job_leases`, ein Prozess führt aus, Lease 90 s, Wiederholung bei Absturz), idempotent über Deduplikationsschlüssel; nie fatal für den Server; abschaltbar mit `NOTIFICATIONS_ENABLED=false`; Testbar über injizierte Uhr und `runOnce(now:)`.
+- **Web Push** (RFC 8030/8291/8292): VAPID-Schlüsselpaar (ES256/P-256) aus `VAPID_PRIVATE_KEY` (base64url 32 Byte) + `VAPID_SUBJECT` (mailto: oder https:); fehlen sie, ist Push nicht verfügbar (`GET /push/config` → `available:false`, Abos 501), In-App funktioniert trotzdem. Nachrichten mit `aes128gcm` verschlüsselt (Implementierung mit swift-crypto, geprüft gegen den RFC-8291-Beispielvektor), `TTL` 24 h, `Urgency: normal`, VAPID-JWT (aud = Push-Dienst-Origin, exp ≤ 12 h). Antworten 404/410 löschen das Abo; 429/5xx → Retry mit Backoff (höchstens 3 Versuche, dann verwerfen). Endpunkte der Abos müssen https sein (http nur Loopback für Tests), Länge/Schlüssel validiert (p256dh 65 Byte uncompressed, auth 16 Byte), höchstens 10 Abos je Konto, kein Zugriff auf Fremdabos.
+- Kein Pflicht-E-Mail-Kanal in Etappe 4 (optional später über den vorhandenen Mailer).
+
+## PWA
+
+- `manifest.webmanifest` (Name, Kurzname, `display: standalone`, Theme/Hintergrund, Icons 192/512/maskable aus einem selbst gezeichneten SVG-Symbol ohne Markenbezug, `lang: de`, `start_url: /`, `scope: /`), Apple-Meta-Tags/-Icon für iOS-Home-Bildschirm. Service Worker (SvelteKit `service-worker.ts`): Precache der gebauten Assets + Shell, **nie** API-Antworten cachen (nur Netz), Offline-Seite mit klarem Hinweis „Offline – Änderungen werden nicht gespeichert“ (kein Offline-Schreiben, keine vorgetäuschte Speicherung), Update-Hinweis bei neuer Version, Push-Handler (`push`, `notificationclick` öffnet die Ziel-URL im vorhandenen Fenster), `/oauth/*`, `/mcp`, `/.well-known/*`, `/api/*` bleiben ausgenommen.
+- Benachrichtigungszentrum `/notifications` (ungelesen/gelesen, alle als gelesen markieren, Deep-Links), Glocken-Symbol mit Zähler in der Navigation; Einstellungsseite `/settings/notifications` (Kategorien In-App/Push, Schwellen, Ruhezeiten, Push aktivieren/deaktivieren mit Erklärung zur iOS-Homebildschirm-Voraussetzung, Testnachricht senden, Abos der eigenen Geräte auflisten/entfernen). Installationshinweis (beforeinstallprompt bzw. iOS-Anleitung).
+- Ablehnung der Push-Berechtigung verhindert weder Tracking noch In-App-Hinweise.
+
+## Pakete
+
+C18 Backend (Einstellungen, Hinweise, Scheduler, Push-Sender, Abos), L16 PWA (Manifest, Service Worker, Zentrum, Einstellungen), danach E2E mit Fake-Push-Dienst. Nicht prüfbar ohne Nutzer: echte Push-Zustellung auf iPhone/Safari/Chrome über die Testdomain.
