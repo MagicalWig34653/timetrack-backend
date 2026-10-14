@@ -7,6 +7,7 @@ func registerRoutes(_ app: Application, service: AuthService) {
     registerExportRoutes(app, auth: service)
     registerImportRoutes(app, auth: service)
     registerStorageRoutes(app, auth: service)
+    registerReportRoutes(app, auth: service)
     registerOIDCRoutes(app, auth: service)
     app.get("health") { _ in StatusResponse(status: "ok") }
     app.get("ready") { request async -> Response in

@@ -24,6 +24,7 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
     for migration in ImportSchema.migrations { app.migrations.add(migration) }
     for migration in StorageSchema.migrations { app.migrations.add(migration) }
     for migration in OIDCSchema.migrations { app.migrations.add(migration) }
+    for migration in ReportSchema.migrations { app.migrations.add(migration) }
     // Fluent installs the migrate command, including --revert and the global --yes flag.
     // Do not auto-apply migrations before explicit migrate/revert commands.
     if config.autoMigrate && !app.environment.arguments.contains("migrate") {
