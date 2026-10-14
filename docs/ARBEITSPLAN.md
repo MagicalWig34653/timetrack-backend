@@ -30,7 +30,7 @@ Abnahmebedingungen: `UMSETZUNG.md`. Vorgehen: `ENTWICKLUNGSABLAUF.md`.
 | C11 | Etappe 3b: Export XLSX/PDF/CSV (eigene Writer, ADR-0006) | Claude-Agent (Codex-Limit) | 5 | integriert (`028f8ff`); 96→111 Tests inkl. MariaDB (Lead) | Vertrag v0.4.0 |
 | C12 | Etappe 3b: Import CSV/XLSX mit Vorschau, Commit, Rollback | Claude-Agent (Codex-Limit) | 8 | integriert (`4f71fb6`); 111 Tests inkl. MariaDB (Lead) | Vertrag v0.4.0 |
 | C13 | Etappe 3b: Dateispeicher DB/S3/lokal, Admin-Regeln, Anhänge | Claude-Agent (Codex-Limit) | 8 | **nicht gestartet**: Agent-Start vom Berechtigungsprüfer abgelehnt (14.10.); Worktree `../timetrack-backend-wt/c13` bereit | Vertrag v0.4.0 |
-| L9 | Etappe 3b: PWA Export/Import/Speicher/Anhänge gegen Mock | Claude-Agent | 8 | in Arbeit (PWA-Branch `l9-export-import-storage-ui`) | Vertrag v0.4.0 |
+| L9 | Etappe 3b: PWA Export/Import/Speicher/Anhänge gegen Mock | Claude-Agent | 8 | integriert (PWA-Repo `main`); 262 Unit, 23 Mock-E2E, 49 E2E vom Lead nachgelaufen; nur gegen Mock | Vertrag v0.4.0 |
 
 Umfang gesamt 36 Punkte: Codex 17 (47 %: C1 5, C2 8, C3 3, C4 1), Claude 19 (53 %: L1 8, L2 3, L3a 2, L3b 3, Lead-Verträge/Integration nicht gezählt).
 Alle Pakete integriert; Belege je Paket in `docs/handoffs/` (Backend) bzw. PWA-Repo. Der Codex-Anteil besteht aus
