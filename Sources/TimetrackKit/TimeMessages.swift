@@ -13,6 +13,11 @@ enum TimeMessages {
         "segment_overlap": "Der Zeitraum überschneidet sich mit einem vorhandenen Abschnitt.",
         "stale_version": "Der Abschnitt wurde inzwischen geändert. Bitte lade ihn neu.",
         "model_overlap": "Der Gültigkeitszeitraum überschneidet sich mit einer vorhandenen Modellversion.",
+        "range_too_large": "Der gewählte Zeitraum ist zu groß.",
+        "absence_overlap": "Der Zeitraum überschneidet sich mit einer anderen Abwesenheit.",
+        "share_exists": "Für dieses Konto besteht bereits eine Freigabe.",
+        "cannot_share_with_self": "Eine Freigabe an das eigene Konto ist nicht möglich.",
+        "recipient_not_found": "Das Empfängerkonto wurde nicht gefunden.",
         "suggestion_resolved": "Dieser Vorschlag wurde bereits bearbeitet.",
     ]
 }

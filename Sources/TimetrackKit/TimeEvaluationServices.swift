@@ -5,13 +5,27 @@ struct TimeEvaluationSnapshot: Sendable {
     let models: [EngineWorkModel]
     let segments: [EngineSegment]
     let preferences: [String: DayPreferences]
+    var absences: [EngineAbsence] = []
+    var customDays: [CustomCalendarDay] = []
+    var region = "DE-ST"
+    /// Precedence (ADR-0005, contract v0.3.2): explicit mark > holiday on a model workday > approved/taken absence.
+    private func effective(_ date: LocalDate, explicit: DayPreferences) throws -> (DayPreferences, DayMarkSource) {
+        if explicit.mark != .none { return (explicit, .explicit) }
+        // Years outside the built-in catalogue simply have no built-in holidays.
+        let builtin = (try? HolidayCalendar.holidays(year: date.year, region: region)) ?? []
+        let days = builtin + customDays
+        let holiday = try AbsenceDayEffects.preferences(for: date, models: models, absences: [], calendarDays: days, explicit: explicit)
+        if holiday.mark == .holiday { return (holiday, .holiday) }
+        let result = try AbsenceDayEffects.preferences(for: date, models: models, absences: absences, calendarDays: days, explicit: explicit)
+        return (result, result.mark == .none ? .none : .absence)
+    }
     func evaluate(_ date: LocalDate, now: Date) throws -> DayEvaluationResult {
         let selectedModel = try TimeEngine.selectModel(for: date, models: models)
         // A model gap has no contractual target or rounding rules. Keep actual time visible.
         let zone = models.last(where: { $0.validFrom <= date })?.timezone ?? models.first?.timezone ?? "Europe/Berlin"
         let model = selectedModel ?? EngineWorkModel(validFrom: date, validTo: date, timezone: zone,
             weeklyTargetSeconds: 0, workdays: [], roundingEnabled: false, schoolFullDayThresholdSeconds: Int.max)
-        let preferences = preferences[date.description] ?? DayPreferences()
+        let (preferences, markSource) = try effective(date, explicit: preferences[date.description] ?? DayPreferences())
         let segments = try segments.filter { segment in
             guard !segment.voided else { return false }
             if let owner = try TimeEngine.assignment(for: segment.startedAt, models: models) {
@@ -20,13 +34,15 @@ struct TimeEvaluationSnapshot: Sendable {
             return selectedModel == nil && LocalDate.local(segment.startedAt, calendar: model.calendar) == date
         }
         let result = try TimeEngine.evaluateAssignedDay(date: date, model: model, segments: segments, preferences: preferences, now: now)
-        return DayEvaluationResult(date: result.date, modelId: selectedModel?.id, mark: result.mark,
+        var evaluation = DayEvaluationResult(date: result.date, modelId: selectedModel?.id, mark: result.mark,
             skipFixedBreaks: result.skipFixedBreaks, targetSeconds: result.targetSeconds, rawWorkSeconds: result.rawWorkSeconds,
             breakDeductionSeconds: result.breakDeductionSeconds, startAdjustSeconds: result.startAdjustSeconds, endAdjustSeconds: result.endAdjustSeconds,
             evaluatedWorkSeconds: result.evaluatedWorkSeconds, creditSeconds: result.creditSeconds,
             evaluatedStart: result.evaluatedStart, evaluatedEnd: result.evaluatedEnd,
             provisional: date == LocalDate.local(now, calendar: model.calendar) || result.provisional,
             segmentIds: result.segmentIds, segments: result.segments, markCreditSeconds: result.markCreditSeconds, note: result.note, breakHints: result.breakHints)
+        evaluation.markSource = markSource; evaluation.targetOverrideSeconds = preferences.targetOverrideSeconds
+        return evaluation
     }
 }
 
@@ -43,21 +59,22 @@ struct DayService: Sendable {
             (row.date, DayPreferences(mark: DayMarkKind(rawValue: row.mark) ?? .none,
                 creditSeconds: row.creditSeconds, skipFixedBreaks: row.skipFixedBreaks, note: row.note))
         })
-        return .init(models: models, segments: segments, preferences: preferences)
+        return .init(models: models, segments: segments, preferences: preferences,
+                     absences: try await scope.vacation.engineAbsences(), customDays: try await scope.vacation.customDays(),
+                     region: try await scope.vacation.settings().region)
     }
     func evaluate(_ date: LocalDate, now: Date = Date()) async throws -> DayEvaluationResult {
         try await snapshot().evaluate(date, now: now)
     }
-    func range(from: LocalDate, to: LocalDate) async throws -> [DayEvaluationResult] {
-        guard to >= from else { throw APIError.invalid }
+    func range(from: LocalDate, to: LocalDate, limit: Int = PlanningLimits.dayRangeDays) async throws -> [DayEvaluationResult] {
+        try LocalDate.checkedRange(from: from, to: to, maxDays: limit)
         let snapshot = try await snapshot(); let now = Date()
         var values: [DayEvaluationResult] = []; var date = from
-        while values.count < 93 {
+        while true {
             values.append(try snapshot.evaluate(date, now: now))
             if date == to { return values }
             date = date.addingDays(1)
         }
-        throw APIError.invalid
     }
     func set(_ date: LocalDate, input: DayInput) async throws -> DayEvaluationResult {
         guard input.creditSeconds.map({ $0 >= 0 }) ?? true, (input.note?.count ?? 0) <= 200 else { throw APIError.invalid }

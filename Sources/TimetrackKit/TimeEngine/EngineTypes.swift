@@ -174,6 +174,8 @@ public enum DayMarkKind: String, Codable, Sendable {
     case none, holiday, vacation, sick
     case schoolCredit = "school_credit"
 }
+/// Origin of the effective day mark (contract v0.3.2).
+public enum DayMarkSource: String, Codable, Sendable { case none, explicit, absence, holiday }
 public struct DayPreferences: Equatable, Sendable {
     public var mark: DayMarkKind
     public var creditSeconds: Int?
@@ -219,6 +221,9 @@ public struct DayEvaluationResult: Equatable, Encodable, Sendable {
     public let markCreditSeconds: Int?
     public let note: String?
     public let breakHints: [BreakHint]
+    /// Set by the persistence layer when absences or holidays shape the day; the pure engine leaves the defaults.
+    public var markSource: DayMarkSource = .none
+    public var targetOverrideSeconds: Int? = nil
 
     public func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -233,11 +238,13 @@ public struct DayEvaluationResult: Equatable, Encodable, Sendable {
         try c.encode(provisional, forKey: .provisional); try c.encode(segmentIds, forKey: .segmentIds)
         try c.encode(segments, forKey: .segments); try c.encode(markCreditSeconds, forKey: .markCreditSeconds)
         try c.encode(note, forKey: .note); try c.encode(breakHints, forKey: .breakHints)
+        try c.encode(markSource, forKey: .markSource); try c.encode(targetOverrideSeconds, forKey: .targetOverrideSeconds)
     }
     private enum CodingKeys: String, CodingKey {
         case date, modelId, mark, skipFixedBreaks, targetSeconds, rawWorkSeconds, breakDeductionSeconds
         case startAdjustSeconds, endAdjustSeconds, evaluatedWorkSeconds, creditSeconds, deltaSeconds
         case evaluatedStart, evaluatedEnd, provisional, segmentIds, segments, markCreditSeconds, note, breakHints
+        case markSource, targetOverrideSeconds
     }
 }
 
