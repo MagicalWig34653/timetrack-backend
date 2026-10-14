@@ -136,7 +136,8 @@ extension AuthService {
                 try current.fresh()
                 let count = try await Passkey.query(on: tx).filter(\.$accountId == key.accountId).filter(\.$revokedAt == nil).count()
                 let recovery = try await recoveryStatus(current, on: tx)
-                guard count > 1 || recovery.recoveryCodes.active || recovery.fallbackPassword.active || recovery.email.active else { throw APIError(.conflict, "last_passkey") }
+                let identities = try await ExternalIdentity.query(on: tx).filter(\.$accountId == key.accountId).count()
+                guard count > 1 || identities > 0 || recovery.recoveryCodes.active || recovery.fallbackPassword.active || recovery.email.active else { throw APIError(.conflict, "last_passkey") }
                 key.revokedAt = Date()
             }
             try await key.update(on: tx); return try PasskeyDTO(key)
