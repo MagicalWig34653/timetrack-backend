@@ -56,6 +56,7 @@ public enum TimeEngine {
         guard model.contains(date) else { throw TimeEngineError.modelNotEffective }
         guard now.timeIntervalSince1970.isFinite else { throw TimeEngineError.invalidSegment }
         guard preferences.creditSeconds.map({ $0 >= 0 }) ?? true else { throw TimeEngineError.invalidPreferences }
+        guard preferences.targetOverrideSeconds.map({ $0 >= 0 }) ?? true else { throw TimeEngineError.invalidPreferences }
         let calendar = model.calendar
         let today = LocalDate.local(now, calendar: calendar)
         var selected: [EngineSegment] = []
@@ -81,7 +82,7 @@ public enum TimeEngine {
         }
         let baseTarget = target(for: date, model: model)
         let absence = [.holiday, .vacation, .sick].contains(preferences.mark)
-        let target = absence ? 0 : baseTarget
+        let target = preferences.targetOverrideSeconds ?? (absence ? 0 : baseTarget)
         // Explicit marks win over automatic school credit; absence without credit still allows actual work.
         let automaticSchool = preferences.mark == .none && selected.contains { $0.kind == .school }
             && school >= model.schoolFullDayThresholdSeconds
@@ -175,7 +176,7 @@ public enum TimeEngine {
                                   evaluations: evaluations, adjustments: adjustments)
     }
 
-    private static func target(for date: LocalDate, model: EngineWorkModel) -> Int {
+    static func target(for date: LocalDate, model: EngineWorkModel) -> Int {
         let weekday = (model.calendar.component(.weekday, from: instant(date, minutes: 720, calendar: model.calendar)) + 5) % 7 + 1
         guard model.workdays.contains(weekday) else { return 0 }
         return model.dailyTargetSeconds[weekday] ?? (model.weeklyTargetSeconds / model.workdays.count)

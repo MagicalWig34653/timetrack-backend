@@ -179,8 +179,11 @@ public struct DayPreferences: Equatable, Sendable {
     public var creditSeconds: Int?
     public var skipFixedBreaks: Bool
     public var note: String?
-    public init(mark: DayMarkKind = .none, creditSeconds: Int? = nil, skipFixedBreaks: Bool = false, note: String? = nil) {
+    public var targetOverrideSeconds: Int?
+    public init(mark: DayMarkKind = .none, creditSeconds: Int? = nil, skipFixedBreaks: Bool = false, note: String? = nil,
+                targetOverrideSeconds: Int? = nil) {
         self.mark = mark; self.creditSeconds = creditSeconds; self.skipFixedBreaks = skipFixedBreaks; self.note = note
+        self.targetOverrideSeconds = targetOverrideSeconds
     }
 }
 public struct BreakHint: Equatable, Codable, Sendable {
