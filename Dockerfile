@@ -4,16 +4,29 @@
 
 ARG SWIFT_VERSION=6.3
 
-FROM swift:${SWIFT_VERSION}-noble AS build
+# Dependency resolution only fetches git sources (architecture independent). It runs on the
+# native builder platform because `swift package resolve` crashes under QEMU emulation
+# (Illegal instruction) when the target platform differs from the host.
+FROM --platform=$BUILDPLATFORM swift:${SWIFT_VERSION}-noble AS deps
 WORKDIR /build
-
-# Resolve dependencies first so this layer is cached while only sources change.
 COPY Package.swift Package.resolved ./
 RUN swift package resolve
 
+FROM swift:${SWIFT_VERSION}-noble AS build
+WORKDIR /build
+COPY Package.swift Package.resolved ./
+COPY --from=deps /build/.build /build/.build
+
 COPY Sources ./Sources
-# Tests/ is optional (not needed for the release binary).
-RUN swift build -c release --product App \
+# Tests/ must exist: SwiftPM validates declared test targets even when only building --product App.
+COPY Tests ./Tests
+# SwiftPM loads package manifests with massive thread parallelism, which crashes under QEMU user-mode
+# emulation (SIGILL, amd64 build on an arm64 host). Pinning this one step to a single CPU makes SwiftPM
+# load the manifests sequentially and fills the manifest cache; the build below then runs on all CPUs.
+# On native builds the extra step is cheap (a few seconds).
+RUN taskset -c 0 swift package describe > /dev/null
+
+RUN taskset -c 0-1 swift build -c release --product App -j 2 \
     && mkdir -p /staging \
     && cp "$(swift build -c release --show-bin-path)/App" /staging/App \
     && (find "$(swift build -c release --show-bin-path)" -maxdepth 1 -name '*.resources' -exec cp -R {} /staging/ \;)
