@@ -42,7 +42,7 @@ services:
       DB_NAME: ${DB_NAME:-timetrack}
       DB_USER: ${DB_USER:-timetrack}
       DB_PASSWORD: ${DB_PASSWORD:?run scripts/dev-env.sh init}
-      DB_TLS: ${DB_TLS:-false}
+      DB_TLS: ${DB_TLS:-off}
       SQLITE_PATH: ${SQLITE_PATH:-/data/timetrack.sqlite}
       WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-localhost}
       WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-Timetrack (dev)}
