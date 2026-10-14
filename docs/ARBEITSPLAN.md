@@ -27,8 +27,8 @@ Abnahmebedingungen: `UMSETZUNG.md`. Vorgehen: `ENTWICKLUNGSABLAUF.md`.
 | L7 | Etappe 3a: Echt-Integration + E2E | Claude-Agent | 3 | offen | C9, L6 |
 | C10 | Review-Fixes C9 (Überlauf-Absturz, Modellende, Buß- und Bettag, Kleinigkeiten) | Claude-Agent | 2 | integriert; 86 Tests inkl. MariaDB, 49 E2E vom Lead nachgelaufen | C9 |
 | L7b | Etappe 3a: Echt-Integration E2E (20 neue Specs) | Claude-Agent | 3 | integriert (PWA `5e242a3`); 49 E2E zweimal vom Lead nachgelaufen | C9, L7a |
-| C11 | Etappe 3b: Export XLSX/PDF/CSV (eigene Writer, ADR-0006) | Claude-Agent (Codex-Limit) | 5 | in Arbeit (Worktree `../timetrack-backend-wt/c11`) | Vertrag v0.4.0 |
-| C12 | Etappe 3b: Import CSV/XLSX mit Vorschau, Commit, Rollback | Claude-Agent (Codex-Limit) | 8 | in Arbeit (Worktree `../timetrack-backend-wt/c12`) | Vertrag v0.4.0 |
+| C11 | Etappe 3b: Export XLSX/PDF/CSV (eigene Writer, ADR-0006) | Claude-Agent (Codex-Limit) | 5 | integriert (`028f8ff`); 96→111 Tests inkl. MariaDB (Lead) | Vertrag v0.4.0 |
+| C12 | Etappe 3b: Import CSV/XLSX mit Vorschau, Commit, Rollback | Claude-Agent (Codex-Limit) | 8 | integriert (`4f71fb6`); 111 Tests inkl. MariaDB (Lead) | Vertrag v0.4.0 |
 | C13 | Etappe 3b: Dateispeicher DB/S3/lokal, Admin-Regeln, Anhänge | Claude-Agent (Codex-Limit) | 8 | **nicht gestartet**: Agent-Start vom Berechtigungsprüfer abgelehnt (14.10.); Worktree `../timetrack-backend-wt/c13` bereit | Vertrag v0.4.0 |
 | L9 | Etappe 3b: PWA Export/Import/Speicher/Anhänge gegen Mock | Claude-Agent | 8 | in Arbeit (PWA-Branch `l9-export-import-storage-ui`) | Vertrag v0.4.0 |
 

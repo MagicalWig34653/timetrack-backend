@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.4.0
+  version: 0.4.1
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -20,6 +20,7 @@ info:
     (4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form
     `<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.
     (6) No session listing endpoint in stage 1; only revoking other sessions.
+    v0.4.1: Import-Ergänzungen (allowOvernight, errorCount, rolledBack, Fehlercodes unknown_kind/note_too_long/too_many_rows; rollback_conflict liefert conflicts auch oben; je Konto max. 20 offene Importe, 50 Vorlagen).
     v0.4.0: Export/Import/Dateispeicher, siehe docs/decisions/ADR-0006. Fehlercodes: file_too_large (413), unsupported_type (415), import_not_ready, import_has_errors, rollback_conflict.
     v0.3.2: Tagesmarkierung Feiertag hat Vorrang vor Urlaub am selben Tag; Krankheit wirkt nur mit Status approved/taken; Freigabe an sich selbst 400 `cannot_share_with_self`; DayEvaluation.markSource/targetOverrideSeconds.
     Stage 3 (v0.3.0/0.3.1): see docs/decisions/ADR-0005 (Entscheidungen 0.3.1: GET vacation/settings liefert Standardwerte mit configured=false; Übertrag je Jahr; Abwesenheiten rejected/cancelled blockieren keine Überlappung
@@ -1188,19 +1189,23 @@ components:
             place: { type: [integer, 'null'], minimum: 0 }
             note: { type: [integer, 'null'], minimum: 0 }
         skipSummaryRows: { type: boolean, default: true }
+        allowOvernight: { type: boolean, default: false, description: Ende vor Beginn gilt als Folgetag; sonst Fehler end_before_start (24:00 immer erlaubt) }
     ImportPreview:
       type: object
       required: [rows, valid, errors, duplicates, sample]
       properties:
         rows: { type: integer }
+        errorCount: { type: integer, description: Gesamtzahl der Fehler; errors ist auf 1000 begrenzt }
+        skippedSummaryRows: { type: integer }
         valid: { type: integer }
         duplicates: { type: integer }
-        errors: { type: array, items: { type: object, required: [row, code], properties: { row: { type: integer }, code: { type: string, enum: [date_invalid, time_invalid, end_before_start, missing_value, overlap, formula_without_value, summary_row, unknown_place] } } } }
+        errors: { type: array, items: { type: object, required: [row, code], properties: { row: { type: integer }, code: { type: string, enum: [date_invalid, time_invalid, end_before_start, missing_value, overlap, formula_without_value, summary_row, unknown_place, unknown_kind, note_too_long] } } } }
         sample: { type: array, items: { type: object, properties: { date: { type: string, format: date }, startedAt: { type: string, format: date-time }, endedAt: { type: string, format: date-time }, kind: { $ref: '#/components/schemas/SegmentKind' } } } }
     ImportResult:
       type: object
       required: [batchId, created, skipped]
       properties:
+        rolledBack: { type: integer, description: bei Rollback die Zahl stornierter Segmente }
         batchId: { type: string, format: uuid }
         created: { type: integer }
         skipped: { type: integer }
