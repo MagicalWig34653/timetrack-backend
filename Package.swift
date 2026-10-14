@@ -10,7 +10,7 @@ let package = Package(
         .package(url: "https://github.com/vapor/fluent-mysql-driver.git", from: "4.0.0"),
         .package(url: "https://github.com/vapor/fluent-sqlite-driver.git", from: "4.0.0"),
         .package(url: "https://github.com/swift-server/webauthn-swift.git", from: "1.0.0-beta.1"),
-        .package(url: "https://github.com/tmthecoder/Argon2Swift.git", from: "1.0.4")
+        .package(url: "https://github.com/tmthecoder/Argon2Swift.git", branch: "main")
     ],
     targets: [
         .target(name: "TimetrackKit", dependencies: [
