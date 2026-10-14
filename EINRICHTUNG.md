@@ -195,3 +195,23 @@ xcodebuild -project Timetrack.xcodeproj -scheme TimetrackMac -configuration Debu
 
 macOS ist erstes Ziel; iOS/iPadOS-Gerätetests und watchOS folgen später.
 Produkt-Bundle-IDs sind vorläufig. Geräteinstallation erfordert eigene Signing-Einrichtung.
+
+## 10. Lauffähiger Stand (14.10.2026)
+
+Alle Befehle im jeweiligen Repo-Hauptordner.
+
+```sh
+# Dev-Datenbank (MariaDB 12.3, 127.0.0.1:13306, Volume timetrack-dev-db; Stopp ohne Datenverlust)
+scripts/dev-env.sh init && scripts/dev-env.sh up     # down: scripts/dev-env.sh down  (nie -v)
+# Backend-Tests (SQLite immer; MariaDB mit Exporten)
+eval "$(scripts/dev-env.sh test-db | grep ^export)"   # Testdatenbank timetrack_test einmalig anlegen
+swift test --build-system native
+# Backend lokal (SQLite) + erster Admin
+SQLITE_PATH=/tmp/tt.sqlite AUTO_MIGRATE=true swift run --build-system native App bootstrap-admin
+SQLITE_PATH=/tmp/tt.sqlite AUTO_MIGRATE=true swift run --build-system native App serve --hostname 127.0.0.1 --port 18080
+# Container (arm64): scripts/dev-env.sh up-app | up-sqlite | up-mail
+# PWA (Repo timetrack-pwa): npm ci; npm run dev (Proxy auf :18080, http://localhost:5173), npm run dev:mock, npm test, npm run test:e2e
+```
+
+WebAuthn lokal: immer `http://localhost:<port>` (RP-ID `localhost`), nicht `127.0.0.1`.
+Platz in Colima prüfen: `colima ssh -- df -h /var/lib/docker`. Lizenzen: `docs/LIZENZEN.md`. Details je Paket: `docs/handoffs/`.

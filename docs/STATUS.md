@@ -1,47 +1,45 @@
 # Aktueller Projektstand
 
-Stand: 14.10.2026. Etappe 0/1 in Arbeit; Backend ist Hauptrepo (Branch `main`).
+Stand: 14.10.2026. Etappe 0/1 (Grundlage und Konten) ist lokal lauffähig und getestet; `main` in beiden Repos.
+Sicherheitsrelevant und noch ungeprüft: siehe „Offen“.
 
-## Integriert und geprüft
+## Was läuft (vom Lead selbst ausgeführt)
 
-- **C1 (Codex)**: Bibliothek `TimetrackKit` + dünner `App`, typisierte Konfiguration, Fluent-Migrationen/Modelle für
-  Konten, Passkeys, Sitzungen, Einladungen, Challenges, Recovery, Rate-Limits; `GET /health`, `GET /ready`;
-  `App migrate`; atomarer Einmalverbrauch (`SingleUse`). Details: `docs/handoffs/C1.md`.
-  Geprüft (Lead, 14.10.): `swift test --build-system native` → 7 Tests, 0 Fehler, inkl. MariaDB 12.3.3 (Dev-Container)
-  und SQLite (Speicher/Datei), Konkurrenztest Einmalverbrauch.
-- **L2 (Claude)**: `compose.yaml` (Projekt `timetrack-dev`, MariaDB 12.3 auf 127.0.0.1:13306, Profile app/sqlite/mail),
-  `.env.example`, `scripts/dev-env.sh`, Dockerfile. DB-Start, Persistenz über down/up und Zugriff verifiziert.
-  **Nicht verifiziert**: alle Image-Builds (arm64/amd64), Container-Start des Backends – Colima-Datenpartition voll
-  (20 GiB, ~243 MB frei). Details: `docs/handoffs/L2.md`.
-- **L1 (Claude, Repo timetrack-pwa)**: SPA-Oberfläche (Einladung/Registrierung, Login, Recovery, Passkey-/Recovery-/
-  Sitzungsverwaltung, Admin-Einladungen), typisierter API-Client, WebAuthn-Helfer, Mock-Modus.
-  `npm run check`, 31 Vitest-Tests und `npm run build` grün; gegen Mock im Headless-Browser angesehen.
-  **Nicht verifiziert**: echtes Backend, echter Passkey, Smartphone-Breite/Dark Mode.
-- Vertrag `contracts/openapi.yaml` v0.1.0 (Auth, Passkeys, Recovery, Einladungen) mit Fehlercodes und Lead-Entscheidungen.
+- **Backend (C1–C3, Codex)**: SwiftPM `TimetrackKit` + `App`; Konfiguration per Umgebung; Fluent-Migrationen für MariaDB und SQLite;
+  Einladungen (nur Hash, einmalig), Konten, Passkeys (webauthn-swift, mehrere pro Konto, einzelner Widerruf, Schutz des letzten),
+  Sitzungen (HttpOnly-Cookie, CSRF-Header), Recovery per Recovery-Codes, Rückfallpasswort (Argon2id) und E-Mail-Code (SMTP-Sender),
+  Admin-Einladungs-API, Rate-Limits, `App bootstrap-admin`, `App migrate`, `/health`, `/ready`, statische PWA mit SPA-Fallback.
+  `swift test --build-system native` → **31 Tests, 0 Fehler** auf SQLite und MariaDB 12.3.3 (Dev-Container), inkl. Konkurrenztests
+  (Einladung/Recovery genau ein Gewinner) und Kontentrennung über direkte IDs. Handoffs: `docs/handoffs/C1.md`, `C2.md`, `C3.md`.
+- **PWA (L1, L3b; Repo timetrack-pwa)**: Einladung/Registrierung, Login, Recovery, Passkey-/Recovery-/Sitzungsverwaltung, Admin-Einladungen.
+  `npm run check`, 32 Vitest-Tests, Build grün. **Playwright-E2E 15/15** gegen das echte Backend (Chromium, virtueller Authenticator, SQLite).
+- **Umgebung (L2, L3a)**: `compose.yaml` (Projekt `timetrack-dev`), `scripts/dev-env.sh`, MariaDB 12.3.3 auf 127.0.0.1:13306 mit
+  persistentem Volume. **arm64-Image** gebaut (611 MB), Container mit MariaDB und SQLite gestartet, `/health` `/ready` 200, Migrate-Befehl,
+  Bootstrap-Link, PWA-Auslieferung und SQLite-Persistenz laut Agent-Lauf belegt (`docs/handoffs/L3a.md`; vom Lead nicht einzeln wiederholt).
+- Codex-Review der PWA (L1/L3b) hat zwei Fehler gefunden (leere 202-Antwort bei E-Mail-Recovery, getrimmtes Rückfallpasswort); behoben (`8291dd0`).
 
-## In Arbeit
+## Offen / nicht belegt
 
-- **C2 (Codex)**: Sitzungen/CSRF, Einladung/Konten, WebAuthn, Recovery, Admin-API, statische PWA-Auslieferung.
-  Worktree `../timetrack-backend-wt/c2`, Branch `c2-auth-services`, Basis `9608d9e`. Noch nichts integriert.
+- **Linux amd64**: Build unter QEMU in Colima läuft sehr langsam (SwiftPM stürzt ohne `taskset`-Workarounds ab; >35 min).
+  amd64-Image, Laufzeit (`/health`) und `build-multiarch` sind **nicht nachgewiesen**. Dockerfile nutzt `taskset` auch für native Builds
+  (unnötig, soll Build-Argument werden). Alternative: echter amd64-Host oder Rosetta-Colima.
+- Browserprüfung nur Headless-Chromium mit virtuellem Passkey; kein echter Plattform-Authenticator, kein Firefox/WebKit, kein Mobilbreite/Dark Mode.
+- E-Mail-Recovery nur gegen Fake-SMTP getestet (nicht gegen Mailpit/echten Server). MariaDB-Modus der E2E nicht umgesetzt.
+- Reverse-Proxy: Rate-Limit nutzt Peer-IP (kein `X-Forwarded-For`); globale `auth_lock`-Serialisierung begrenzt Durchsatz.
+- `/_app/*.js`-Unbekannte liefern SPA-Fallback 200 statt 404 (Kosmetik). Dev-Einladungstokens aus Tests bleiben in Dev-DBs bis Ablauf.
+- Abhängigkeiten: webauthn-swift 1.0.0-beta.1, Argon2Swift auf Branch `main` fixiert (siehe `docs/LIZENZEN.md`); npm-Lizenzen nicht von Lead geprüft.
+- Codex hat nur die PWA geprüft; Docker/Compose (L2/L3a) und Lead-Verträge noch ohne Codex-Review.
+- Nicht begonnen: OIDC, MCP, Zeittracking (Etappe 2+), Import/Export, Berichtsheft, KI, PWA-Manifest/Service Worker, native Apps (nur Startansicht).
 
-## Offen
+## Umgebung
 
-- L3: Image-Builds (arm64, amd64 getrennt nachweisen), Browser-E2E mit virtuellem WebAuthn-Authenticator.
-- Blocker Nutzeraktion: Colima-Speicherplatz (siehe EINRICHTUNG.md, Abschnitt Docker-Speicher).
-- Dependency-Lizenzprüfung (neu: webauthn-swift Apache-2.0, Argon2Swift MIT; Argon2Swift auf Branch `main` fixiert,
-  da Abhängigkeit `phc-winner-argon2` unstabil – bei Updates prüfen), OIDC, MCP, Zeittracking und alle späteren Etappen.
-- Native Apps: nur Startansicht (XcodeGen-Projekt); iOS-Build/Gerätetests/watchOS offen.
-- E-Mail-Versand real, Rate-Limit-Feintuning, PWA-Manifest/Service Worker.
-
-## Umgebung (14.10.2026)
-
-Swift 6.4, Node 26.5/npm 11.17, Docker 29.5.2 (Colima, ARM64), Compose 5.3.1, Buildx 0.38 (jetzt vorhanden;
-`cliPluginsExtraDirs` in `~/.docker/config.json` ergänzt). Codex-Plugin 1.0.6, Codex CLI 0.162.1, Login aktiv.
-`swift test` mit Standard-Buildsystem scheitert lokal an Codesign-Xattrs im .xctest; `--build-system native` nutzen.
-In Colima laufen fremde Projekte (Host-Ports 3306/3310/5432/9090/82xx belegt) – nur `timetrack-dev-*` anfassen.
+Swift 6.4, Node 26.5/npm 11.17, Docker 29.5.2 (Colima arm64, Datenpartition auf 40 GB vergrößert), Compose 5.3.1, Buildx 0.38,
+Codex-Plugin 1.0.6 / CLI 0.162.1. `swift test` mit Standard-Buildsystem scheitert lokal an Codesign-Xattrs → `--build-system native`.
+In Colima laufen fremde Projekte: nur `timetrack-dev-*` anfassen.
 
 ## Übergabe
 
-Nächster Schritt: C2 abnehmen (Diff lesen, Tests inkl. MariaDB laufen lassen: `eval "$(scripts/dev-env.sh test-db | grep ^export)"`,
-Testdatenbank `timetrack_test` im Dev-Container ggf. anlegen), nach `main` mergen, Platz in Colima schaffen, dann L3.
+Nächster Schritt: Etappe 2 (Zeittracking: Arbeitsmodelle, Abschnitte, Rundung, Konto) mit Vertrag zuerst; vorher amd64-Nachweis
+und Codex-Review von Docker/Compose. Worktrees `../timetrack-backend-wt/{c1,c2,c3,l2,l3a}` sind gemergt und können mit
+`git worktree remove` entfernt werden. Der amd64-Build (Agent L3a, Log `/private/tmp/claude-501/amd64-build.log`) kann noch laufen.
 Keine Remotes, nichts veröffentlicht.
