@@ -10,6 +10,16 @@ info:
     WebAuthn-Optionen/-Antworten folgen den JSON-Formen der W3C-Spezifikation (base64url-Felder).
     Fehler immer als application/json `{ "error": { "code": string, "message": string } }`.
     Antworten verraten nie, ob eine Kontoadresse existiert.
+    Error codes (English, stable): bad_request, unauthorized, forbidden, not_found, conflict, handle_taken,
+    last_passkey, too_many_requests, not_implemented, invalid_code, csrf_invalid,
+    recovery_session_restricted, reauth_required, not_ready.
+    Decisions (Lead, 14.10.2026): (1) register/options returns 409 handle_taken for duplicate handle and 400 bad_request
+    for validation errors. (2) Adding/revoking passkeys and changing recovery settings require a "fresh" session
+    (login within the last 10 minutes) or a recovery session; otherwise 403 reauth_required, and the client signs in again.
+    (3) A successful POST /me/passkeys/verify inside a recovery session upgrades it to a normal session (recovery=false).
+    (4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form
+    `<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.
+    (6) No session listing endpoint in stage 1; only revoking other sessions.
 servers:
   - url: /
 paths:
