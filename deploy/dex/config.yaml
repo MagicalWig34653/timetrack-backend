@@ -19,8 +19,8 @@ staticClients:
     name: Timetrack (dev)
     public: true
     redirectURIs:
-      - http://localhost:18080/auth/oidc/callback
-      - http://localhost:5173/auth/oidc/callback
+      - http://localhost:18080/api/v1/auth/oidc/callback
+      - http://localhost:5173/api/v1/auth/oidc/callback
 
 staticPasswords:
   # alice-dev-pass
