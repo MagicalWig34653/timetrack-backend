@@ -9,6 +9,8 @@ func registerRoutes(_ app: Application, service: AuthService) {
     registerStorageRoutes(app, auth: service)
     registerReportRoutes(app, auth: service)
     registerOIDCRoutes(app, auth: service)
+    // TODO(C16 merge): set `app.mcpAuthenticator` to the adapter around authenticateMcpBearer; until then every /mcp token is rejected (401).
+    registerMCPRoutes(app, auth: service)
     app.get("health") { _ in StatusResponse(status: "ok") }
     app.get("ready") { request async -> Response in
         do {
