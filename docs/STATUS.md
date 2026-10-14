@@ -1,59 +1,47 @@
 # Aktueller Projektstand
 
-Stand: 13.10.2026. Drei lokale Git-Repos auf main eingerichtet; Backend ist Hauptrepo.
-Die Grundgerüste sind ausführbar, Fachfunktionen noch nicht implementiert.
+Stand: 14.10.2026. Etappe 0/1 in Arbeit; Backend ist Hauptrepo (Branch `main`).
 
-## Vorhanden
+## Integriert und geprüft
 
-- Kanonische Konzepte, ADRs, Agent-Einstiege, Arbeitsplan, Einrichtung und Claude-Startprompt hier.
-- SwiftPM/Vapor-Backend: GET /health als reine Prozess-Liveness.
-- Fluent sowie MariaDB-/SQLite-Treiber aufgelöst in Package.resolved; noch keine DB-Konfiguration/Migrationen.
-- SvelteKit 3 / Svelte 5 / TypeScript / Tailwind 4 / shadcn-svelte mit Static Adapter,
-  Startseite und Badge; npm-Lockfile und lokale Werkzeugversionen im PWA-Repo.
-- XcodeGen-Projekt und generiertes Timetrack.xcodeproj mit SwiftUI-Grundansicht,
-  Targets TimetrackMac und TimetrackIOS (iPhone/iPad), OS 27.
-- AGPL-3.0-only-Lizenztext in allen drei Repos. Keine Git-Remotes.
-- contracts/openapi.yaml beschreibt ausschließlich den vorhandenen Health-Endpunkt.
+- **C1 (Codex)**: Bibliothek `TimetrackKit` + dünner `App`, typisierte Konfiguration, Fluent-Migrationen/Modelle für
+  Konten, Passkeys, Sitzungen, Einladungen, Challenges, Recovery, Rate-Limits; `GET /health`, `GET /ready`;
+  `App migrate`; atomarer Einmalverbrauch (`SingleUse`). Details: `docs/handoffs/C1.md`.
+  Geprüft (Lead, 14.10.): `swift test --build-system native` → 7 Tests, 0 Fehler, inkl. MariaDB 12.3.3 (Dev-Container)
+  und SQLite (Speicher/Datei), Konkurrenztest Einmalverbrauch.
+- **L2 (Claude)**: `compose.yaml` (Projekt `timetrack-dev`, MariaDB 12.3 auf 127.0.0.1:13306, Profile app/sqlite/mail),
+  `.env.example`, `scripts/dev-env.sh`, Dockerfile. DB-Start, Persistenz über down/up und Zugriff verifiziert.
+  **Nicht verifiziert**: alle Image-Builds (arm64/amd64), Container-Start des Backends – Colima-Datenpartition voll
+  (20 GiB, ~243 MB frei). Details: `docs/handoffs/L2.md`.
+- **L1 (Claude, Repo timetrack-pwa)**: SPA-Oberfläche (Einladung/Registrierung, Login, Recovery, Passkey-/Recovery-/
+  Sitzungsverwaltung, Admin-Einladungen), typisierter API-Client, WebAuthn-Helfer, Mock-Modus.
+  `npm run check`, 31 Vitest-Tests und `npm run build` grün; gegen Mock im Headless-Browser angesehen.
+  **Nicht verifiziert**: echtes Backend, echter Passkey, Smartphone-Breite/Dark Mode.
+- Vertrag `contracts/openapi.yaml` v0.1.0 (Auth, Passkeys, Recovery, Einladungen) mit Fehlercodes und Lead-Entscheidungen.
 
-## Prüfungen am 13.10.2026
+## In Arbeit
 
-- Schreib-/Lese-/Löschzugriff in beiden Ziel-Elternordnern erfolgreich geprüft.
-- Backend: swift build erfolgreich mit Swift 6.4 auf macOS ARM64.
-- Backend kurz auf 127.0.0.1:18089 gestartet; GET /health → 200 und {"status":"ok"}; danach beendet.
-- PWA: npm run check ohne Fehler/Warnungen; npm run build erzeugt statische Dateien in build/.
-- Apple: xcodegen generate erfolgreich; xcodebuild für TimetrackMac mit CODE_SIGNING_ALLOWED=NO erfolgreich.
-- npm-/Swift-Downloads und lokaler HTTP-Test benötigten erweiterte Sandboxfreigabe.
-  Kein Projektfehler: eingeschränktes Netzwerk meldete ENOTFOUND, Socket-bind war nicht erlaubt.
+- **C2 (Codex)**: Sitzungen/CSRF, Einladung/Konten, WebAuthn, Recovery, Admin-API, statische PWA-Auslieferung.
+  Worktree `../timetrack-backend-wt/c2`, Branch `c2-auth-services`, Basis `9608d9e`. Noch nichts integriert.
 
-## Offen und Grenzen
+## Offen
 
-Keine DB-/Auth-/Kontentrennungs-/Fachtests, keine Browserprüfung oder API-Anbindung der Clients.
-PWA-Installation, Manifest/Service Worker, Push und Offline-Verhalten noch nicht implementiert.
-MariaDB/SQLite-Anbindung und Transaktionen, Passkeys/Recovery/OIDC/Einladungen, Zeittracking,
-MCP, Import/Export, Kalender, Berichtsheft und KI sind noch geplant.
-Native App nur Startansicht: keine Funktionalität, keine Gerätesignierung, kein watchOS-Target.
-iOS/iPadOS-Build und Geräteprüfung offen. Linux amd64/arm64 und Docker-Images noch nicht geprüft.
-Compose/Swarm-Dateien fehlen; Colima/Daemon wurde bei diesem Setup nicht erneut geprüft.
-Frühere Sitzung: Socket-Zugriff verweigert, Colima meldete not running; Buildx nicht verfügbar.
-Vollständige Dependency-Lizenzprüfung offen. Noctule/IDE-Bedienung nicht automatisch geprüft.
+- L3: Image-Builds (arm64, amd64 getrennt nachweisen), Browser-E2E mit virtuellem WebAuthn-Authenticator.
+- Blocker Nutzeraktion: Colima-Speicherplatz (siehe EINRICHTUNG.md, Abschnitt Docker-Speicher).
+- Dependency-Lizenzprüfung (neu: webauthn-swift Apache-2.0, Argon2Swift MIT; Argon2Swift auf Branch `main` fixiert,
+  da Abhängigkeit `phc-winner-argon2` unstabil – bei Updates prüfen), OIDC, MCP, Zeittracking und alle späteren Etappen.
+- Native Apps: nur Startansicht (XcodeGen-Projekt); iOS-Build/Gerätetests/watchOS offen.
+- E-Mail-Versand real, Rate-Limit-Feintuning, PWA-Manifest/Service Worker.
+
+## Umgebung (14.10.2026)
+
+Swift 6.4, Node 26.5/npm 11.17, Docker 29.5.2 (Colima, ARM64), Compose 5.3.1, Buildx 0.38 (jetzt vorhanden;
+`cliPluginsExtraDirs` in `~/.docker/config.json` ergänzt). Codex-Plugin 1.0.6, Codex CLI 0.162.1, Login aktiv.
+`swift test` mit Standard-Buildsystem scheitert lokal an Codesign-Xattrs im .xctest; `--build-system native` nutzen.
+In Colima laufen fremde Projekte (Host-Ports 3306/3310/5432/9090/82xx belegt) – nur `timetrack-dev-*` anfassen.
 
 ## Übergabe
 
-Diese Vorbereitung wurde direkt durch Codex erledigt, nicht über einen Claude-Plugin-Auftrag.
-Noch kein tatsächlicher Claude/Codex-Anteil der fachlichen Meilensteine messbar.
-Keine Hintergrunddienste oder Agent-Aufträge laufen aus diesem Setup weiter; keine Migrationen/Datenänderungen.
-Die Grundgerüste sind in Ausgangscommits auf main gesichert; Commit-IDs per git log -1 je Repo.
-Brainstorm ist archivierte Vorbereitung. Pfade: REPOSITORIES.md. Clients haben eigene lokale Statusdateien.
-
-Nächster Schritt: Claude im Backend-Hauptrepo starten, EINRICHTUNG.md und CLAUDE_STARTPROMPT.md
-verwenden. Zuerst Plugin/Colima prüfen, Fachverträge definieren und Pakete C1/L1/L2 konkret aufteilen.
-C1 konfiguriert DB-Auswahl und erste Migrationen; L2 stellt den lokalen Container-Durchstich her.
-Offene Produktdetails: KONZEPT.md Abschnitt 9. Keine bestätigten Grundentscheidungen neu aufrollen.
-
-## Nachtrag 14.10.2026 – Sprachvorgabe
-
-Code Englisch, nutzerseitige Texte Deutsch verbindlich im Entwicklungsablauf festgehalten.
-Backend-AGENTS.md, CLAUDE.md, Startprompt und beide Client-AGENTS.md verweisen darauf.
-Nur Dokumentation geändert; Diffs geprüft, Builds nicht erneut ausgeführt.
-Bestehende deutsche UI-Texte sind noch direkt eingebettet; beim nächsten Client-Schritt
-in Lokalisierungsressourcen überführen. Fachlicher Arbeitsplan ansonsten unverändert.
+Nächster Schritt: C2 abnehmen (Diff lesen, Tests inkl. MariaDB laufen lassen: `eval "$(scripts/dev-env.sh test-db | grep ^export)"`,
+Testdatenbank `timetrack_test` im Dev-Container ggf. anlegen), nach `main` mergen, Platz in Colima schaffen, dann L3.
+Keine Remotes, nichts veröffentlicht.

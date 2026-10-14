@@ -7,13 +7,14 @@ Abnahmebedingungen: `UMSETZUNG.md`. Vorgehen: `ENTWICKLUNGSABLAUF.md`.
 | ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
 | --- | --- | --- | --- | --- | --- |
 | P0 | Voraussetzungen, Git, API-Vertrag (`contracts/openapi.yaml`, ADR-0003), Zuweisung | Claude-Lead | – | integriert 14.10. | keine |
-| C1 | Swift-Konfiguration, MariaDB/SQLite, Migrationen, Modelle, /ready, DB-Testbasis | Codex | 5 | offen (Worktree `../timetrack-backend-wt/c1`) | P0 |
-| C2 | Einladung/Konten, Sitzung/CSRF, WebAuthn, Recovery-Dienste, Admin-Einladungs-API, Integrationstests | Codex | 8 | offen | C1 |
-| L1 | Svelte-Oberfläche Auth/Passkeys/Recovery/Einladungen (Repo timetrack-pwa) | Claude-Agent | 8 | offen | P0; Integration nach C2 |
-| L2 | Dockerfile, Compose dev/prod, MariaDB-Dev, amd64-Build, Browserdurchstich | Claude-Agent | 5 | offen | P0; Integration nach C1/C2/L1 |
+| C1 | Swift-Konfiguration, MariaDB/SQLite, Migrationen, Modelle, /ready, DB-Testbasis | Codex | 5 | **integriert** (`f643f0d`); 7 Tests grün inkl. MariaDB 12.3.3 | P0 |
+| C2 | Einladung/Konten, Sitzung/CSRF, WebAuthn, Recovery-Dienste, Admin-API, statische PWA, Integrationstests | Codex | 8 | in Arbeit (Worktree `../timetrack-backend-wt/c2`, Branch `c2-auth-services`) | C1 |
+| L1 | Svelte-Oberfläche Auth/Passkeys/Recovery/Einladungen (Repo timetrack-pwa) | Claude-Agent | 8 | **integriert** (PWA `1cd79e0`); 31 Tests gegen Mock | P0 |
+| L2 | Dockerfile, Compose dev, MariaDB-Dev, Skripte | Claude-Agent | 3 | **teilweise integriert** (`d78bb0a`): DB-Umgebung verifiziert; Image-Builds blockiert (Colima-Disk voll) | P0 |
+| L3 | Image-Builds arm64/amd64, Browser-E2E mit virtuellem Authenticator gegen echtes Backend | Claude-Agent | 4 | offen | C2, L1, L2, freier Colima-Platz |
 
-Vorgeschlagener Implementierungsumfang: Codex 13/26 Punkte, Claude 13/26 Punkte.
-Tatsächlich abgeschlossen: 0 Punkte; ein realer Codex-Anteil ist noch nicht messbar.
+Geplanter Umfang: Codex 13/28 Punkte (46 %), Claude 15/28 (54 %); L2 auf 3 + L3 4 aufgeteilt.
+Abgeschlossen und integriert: Codex 5 (C1), Claude 11 (L1 8 + L2 3). C2 (8) läuft.
 Koordination und gegenseitige Reviews getrennt erfassen, nicht als Implementierung umetikettieren.
 Große Pakete vor Vergabe in überprüfbare Teilaufgaben zerlegen; keine acht Punkte als einen
 unbegrenzten Agent-Auftrag vergeben. Spätere Etappen stehen in `UMSETZUNG.md`.
