@@ -12,14 +12,14 @@ struct TimeEvaluationSnapshot: Sendable {
         let model = selectedModel ?? EngineWorkModel(validFrom: date, validTo: date, timezone: zone,
             weeklyTargetSeconds: 0, workdays: [], roundingEnabled: false, schoolFullDayThresholdSeconds: Int.max)
         let preferences = preferences[date.description] ?? DayPreferences()
-        // At timezone/boundary transitions choose the newest matching version exactly once.
         let segments = try segments.filter { segment in
-            let owner = try models.reversed().first { candidate in
-                candidate.contains(try TimeEngine.assignedDate(for: segment.startedAt, model: candidate))
+            guard !segment.voided else { return false }
+            if let owner = try TimeEngine.assignment(for: segment.startedAt, models: models) {
+                return owner.model.id == selectedModel?.id && owner.date == date
             }
-            return selectedModel == nil ? owner == nil : owner?.id == model.id
+            return selectedModel == nil && LocalDate.local(segment.startedAt, calendar: model.calendar) == date
         }
-        let result = try TimeEngine.evaluateDay(date: date, model: model, segments: segments, preferences: preferences, now: now)
+        let result = try TimeEngine.evaluateAssignedDay(date: date, model: model, segments: segments, preferences: preferences, now: now)
         return DayEvaluationResult(date: result.date, modelId: selectedModel?.id, mark: result.mark,
             skipFixedBreaks: result.skipFixedBreaks, targetSeconds: result.targetSeconds, rawWorkSeconds: result.rawWorkSeconds,
             breakDeductionSeconds: result.breakDeductionSeconds, startAdjustSeconds: result.startAdjustSeconds, endAdjustSeconds: result.endAdjustSeconds,

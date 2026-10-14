@@ -71,8 +71,8 @@ struct AutomationService: Sendable {
         } else if place.automationMode == "off" || place.archived == true {
             result.result = "recorded"
         } else {
-            let lastArrival = history.lastIndex { $0.type == "arrival" && $0.result.result == "recorded" }
-            let visit = (lastArrival.map { Array(history[$0...]) } ?? []).filter { $0.result.result != "needs_review" }
+            let lastArrival = history.lastIndex { $0.type == "arrival" }
+            let visit = (lastArrival.map { Array(history[$0...]) } ?? []).filter { $0.type == "arrival" || $0.result.result != "needs_review" }
             let arrival = visit.first
             let closed = visit.contains { ["departure", "cancel"].contains($0.type) }
             let confirmed = visit.first { $0.type == "presence_confirmed" && ["booked", "suggested"].contains($0.result.result) }
@@ -84,7 +84,8 @@ struct AutomationService: Sendable {
                     result = .init(result: "needs_review", segmentId: running.id, suggestionId: suggestion.id)
                 }
             case "presence_confirmed":
-                if confirmed != nil || closed { result.result = "ignored" }
+                if arrival?.result.result == "needs_review" { result.result = "needs_review" }
+                else if confirmed != nil || closed { result.result = "ignored" }
                 else if let arrival, input.occurredAt.timeIntervalSince(arrival.occurredAt) >= Double(place.confirmAfterSeconds ?? 300) {
                     if place.automationMode == "suggest" {
                         let suggestion = try await scope.suggestions.create(type: "start", placeId: input.placeId, start: arrival.occurredAt, end: nil, segmentId: nil)
@@ -97,11 +98,19 @@ struct AutomationService: Sendable {
                     }
                 } else { result.result = arrival == nil ? "needs_review" : "ignored" }
             case "departure":
-                if closed { result.result = "needs_review" }
+                if let running = try await scope.timer.current(), running.source == "automation",
+                   confirmed?.result.segmentId != running.id {
+                    // No confirmation in this visit owns the unresolved running segment.
+                    let suggestion = try await missingDeparture(running, proposedEnd: input.occurredAt)
+                    result = .init(result: "suggested", segmentId: running.id, suggestionId: suggestion.id)
+                } else if closed { result.result = "needs_review" }
                 else if let confirmed, let segmentId = confirmed.result.segmentId {
                     let row = try await scope.segments.record(segmentId)
                     if row.endedAt != nil || row.voidedAt != nil || input.occurredAt <= row.startedAt { result.result = "needs_review" }
-                    else {
+                    else if row.needsReview {
+                        let suggestion = try await missingDeparture(row, proposedEnd: input.occurredAt)
+                        result = .init(result: "suggested", segmentId: segmentId, suggestionId: suggestion.id)
+                    } else {
                         var next = try row.dto(); next.endedAt = input.occurredAt
                         _ = try await scope.segments.revise(row, value: next, reason: "Automation departure")
                         result = .init(result: "booked", segmentId: segmentId)

@@ -21,8 +21,37 @@ public enum TimeEngine {
         return minutes < model.dayBoundaryMinutes ? date.addingDays(-1) : date
     }
 
+    /// Version starts are local midnights; adjacent versions share the successor's start instant.
+    static func assignment(for start: Date, models: [EngineWorkModel]) throws -> (model: EngineWorkModel, date: LocalDate)? {
+        guard start.timeIntervalSince1970.isFinite else { throw TimeEngineError.invalidSegment }
+        let sorted = models.sorted { $0.validFrom < $1.validFrom }
+        _ = try selectModel(for: LocalDate("2000-01-01"), models: sorted)
+        func midnight(_ date: LocalDate, _ model: EngineWorkModel) -> Date {
+            model.calendar.date(from: DateComponents(year: date.year, month: date.month, day: date.day))!
+        }
+        for index in sorted.indices.reversed() {
+            let model = sorted[index]
+            guard start >= midnight(model.validFrom, model) else { continue }
+            if let end = model.validTo {
+                let successor = index + 1 < sorted.count ? sorted[index + 1] : nil
+                let limit = successor.map { $0.validFrom == end.addingDays(1) ? midnight($0.validFrom, $0) : midnight(end.addingDays(1), model) }
+                    ?? midnight(end.addingDays(1), model)
+                guard start < limit else { continue }
+            }
+            let shifted = try assignedDate(for: start, model: model)
+            let bounded = max(shifted, model.validFrom)
+            return (model, model.validTo.map { min(bounded, $0) } ?? bounded)
+        }
+        return nil
+    }
+
     public static func evaluateDay(date: LocalDate, model: EngineWorkModel, segments: [EngineSegment],
                                    preferences: DayPreferences = DayPreferences(), now: Date) throws -> DayEvaluationResult {
+        try evaluateAssignedDay(date: date, model: model, segments: segments, preferences: preferences, now: now, preassigned: false)
+    }
+
+    static func evaluateAssignedDay(date: LocalDate, model: EngineWorkModel, segments: [EngineSegment],
+                                    preferences: DayPreferences, now: Date, preassigned: Bool = true) throws -> DayEvaluationResult {
         try model.validate()
         guard model.contains(date) else { throw TimeEngineError.modelNotEffective }
         guard now.timeIntervalSince1970.isFinite else { throw TimeEngineError.invalidSegment }
@@ -32,7 +61,7 @@ public enum TimeEngine {
         var selected: [EngineSegment] = []
         for segment in segments where !segment.voided {
             try validate(segment)
-            if try assignedDate(for: segment.startedAt, model: model) == date { selected.append(segment) }
+            if try preassigned || assignedDate(for: segment.startedAt, model: model) == date { selected.append(segment) }
         }
         selected.sort {
             $0.startedAt == $1.startedAt ? $0.id.uuidString < $1.id.uuidString : $0.startedAt < $1.startedAt
@@ -134,7 +163,11 @@ public enum TimeEngine {
         _ = try selectModel(for: date, models: models)
         while date <= min(asOf, today) {
             guard let model = try selectModel(for: date, models: models) else { throw TimeEngineError.missingModel(date) }
-            evaluations.append(try evaluateDay(date: date, model: model, segments: segments,
+            let assigned = try segments.filter {
+                guard !$0.voided, let owner = try assignment(for: $0.startedAt, models: models) else { return false }
+                return owner.model.id == model.id && owner.date == date
+            }
+            evaluations.append(try evaluateAssignedDay(date: date, model: model, segments: assigned,
                                                preferences: preferences[date] ?? DayPreferences(), now: now))
             date = date.addingDays(1)
         }
