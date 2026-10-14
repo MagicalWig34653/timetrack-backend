@@ -52,7 +52,7 @@ struct DeviceTokenMiddleware: AsyncMiddleware {
 // Applied before session middleware, including to stage-one routes.
 struct DeviceScopeGuard: AsyncMiddleware {
     func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
-        if request.url.path != "/api/v1/automation/events", request.headers.bearerAuthorization != nil { throw APIError.unauthorized }
+        if request.url.path != "/api/v1/automation/events", request.url.path != "/mcp", request.headers.bearerAuthorization != nil { throw APIError.unauthorized }
         return try await next.respond(to: request)
     }
 }
