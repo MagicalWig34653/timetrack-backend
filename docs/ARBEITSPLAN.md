@@ -90,3 +90,11 @@ Gegenseitiges Review: C9 soll nach Rückkehr des Kontingents (ab 20.10.) von Cod
 | C17 | Etappe 4b: MCP-Endpunkt `/mcp` + Tools (gegen abgestimmte Authenticator-Schnittstelle) | Claude-Agent (Codex-Limit) | 8 | integriert (Merge); 166 Tests inkl. MariaDB (frische DB, 2 Läufe) vom Lead; `/mcp` liefert 401, bis C16 verdrahtet ist | Vertrag v0.7.0 |
 | L15 | Etappe 4b: PWA Consent, API-Tokens, Verbindungen, MCP-Hilfe gegen Mock | Claude-Agent | 5 | integriert (PWA `46019ba`); 384 Unit, 48 Mock-E2E vom Lead; nur gegen Mock | Vertrag v0.7.0 |
 | X1 | Verdrahtung C16↔C17 (Adapter), Gesamt-E2E MCP mit Skript-Client, OAuth-Flow im Browser | Lead + Claude-Agent | 4 | integriert (PWA `4fe690b`); 120 E2E (93+27) vom Lead nachgelaufen | C16, C17, L15 |
+
+## Etappe 4c: Hinweise, Web Push, PWA-Installierbarkeit (15.10.2026)
+
+| ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
+| --- | --- | --- | --- | --- | --- |
+| C18 | Hinweise, Erinnerungs-Scheduler, Web-Push-Sender (ADR-0010, Vertrag v0.8.0) | Claude-Agent (Codex-Limit) | 8 | in Arbeit (Worktree `../timetrack-backend-wt/c18`) | Vertrag v0.8.0 |
+| L16 | PWA: Manifest/Icons, Service Worker, Offline-Hinweis, Hinweiszentrum, Push-Einstellungen | Claude-Agent | 8 | **nicht gestartet**: Agent-Start vom Berechtigungsprüfer abgelehnt; Worktree `../timetrack-pwa-wt/l16` bereit | Vertrag v0.8.0 |
+| X2 | E2E mit Fake-Push-Dienst, Gesamtabgleich | Claude-Agent | 3 | offen | C18, L16 |
