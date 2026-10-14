@@ -20,6 +20,7 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
     for migration in StageOneSchema.migrations { app.migrations.add(migration) }
     app.migrations.add(CreateAuthLock())
     for migration in StageTwoSchema.migrations { app.migrations.add(migration) }
+    for migration in StageThreeSchema.migrations { app.migrations.add(migration) }
     // Fluent installs the migrate command, including --revert and the global --yes flag.
     // Do not auto-apply migrations before explicit migrate/revert commands.
     if config.autoMigrate && !app.environment.arguments.contains("migrate") {

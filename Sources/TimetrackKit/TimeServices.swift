@@ -16,6 +16,11 @@ struct TimeServices: Sendable {
     var suggestions: SuggestionService { .init(scope: self) }
     var devices: DeviceTokenService { .init(scope: self) }
     var automation: AutomationService { .init(scope: self) }
+    var vacation: VacationService { .init(scope: self) }
+    var absences: AbsenceService { .init(scope: self) }
+    var calendar: CalendarService { .init(scope: self) }
+    var plans: PlanService { .init(scope: self) }
+    var shares: ShareService { .init(scope: self) }
 
     static func session<T: Sendable>(_ context: AuthContext, auth: AuthService, db: any Database,
                                     operation: @escaping @Sendable (TimeServices) async throws -> T) async throws -> T {
