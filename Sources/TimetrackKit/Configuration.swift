@@ -23,6 +23,9 @@ public struct Configuration: Sendable {
     public let publicBaseURL: URL
     public let sessionTTLHours: Int
     public let autoMigrate: Bool
+    public let pwaStaticDirectory: String
+    public let smtpHost: String?
+    public let smtpPort: Int
 
     public init(environment: [String: String] = ProcessInfo.processInfo.environment) throws {
         func value(_ key: String, _ fallback: String) throws -> String {
@@ -54,6 +57,9 @@ public struct Configuration: Sendable {
         guard let driver = Driver(rawValue: environment["DATABASE_DRIVER"] ?? "sqlite") else {
             throw ConfigurationError(key: "DATABASE_DRIVER", reason: "expected mariadb or sqlite")
         }
+        pwaStaticDirectory = environment["PWA_STATIC_DIR"] ?? "/srv/pwa"
+        smtpHost = environment["SMTP_HOST"].flatMap { $0.isEmpty ? nil : $0 }
+        smtpPort = try integer("SMTP_PORT", "1025", 1...65535)
         databaseDriver = driver
         dbHost = try value("DB_HOST", "127.0.0.1")
         dbPort = try integer("DB_PORT", "3306", 1...65535)
