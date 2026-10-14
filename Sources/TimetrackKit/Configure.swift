@@ -3,7 +3,7 @@ import Fluent
 import FluentMySQLDriver
 import FluentSQLiteDriver
 
-public func configure(_ app: Application, configuration: Configuration? = nil) async throws {
+public func configure(_ app: Application, configuration: Configuration? = nil, mailSender: (any MailSender)? = nil) async throws {
     let config = try configuration ?? Configuration()
     switch config.databaseDriver {
     case .sqlite:
@@ -18,26 +18,19 @@ public func configure(_ app: Application, configuration: Configuration? = nil) a
         app.databases.use(.mysql(configuration: mysql, sqlLogLevel: nil), as: .mysql)
     }
     for migration in StageOneSchema.migrations { app.migrations.add(migration) }
+    app.migrations.add(CreateAuthLock())
     // Fluent installs the migrate command, including --revert and the global --yes flag.
     // Do not auto-apply migrations before explicit migrate/revert commands.
     if config.autoMigrate && !app.environment.arguments.contains("migrate") {
         try await app.autoMigrate()
     }
-    app.get("health") { _ in StatusResponse(status: "ok") }
-    app.get("ready") { request async -> Response in
-        do {
-            let sql = try requireSQL(request.db)
-            try await sql.raw("SELECT 1").run()
-            guard try await app.migrator.previewPrepareBatch().get().isEmpty else {
-                return try await NotReadyResponse().encodeResponse(status: .serviceUnavailable, for: request)
-            }
-            return try await StatusResponse(status: "ok").encodeResponse(for: request)
-        } catch {
-            // Do not expose driver errors, connection details or bound values.
-            return (try? await NotReadyResponse().encodeResponse(status: .serviceUnavailable, for: request))
-                ?? Response(status: .serviceUnavailable)
-        }
-    }
+    let service = AuthService(configuration: config, mailSender: mailSender)
+    // Replace Vapor's default error and URL logging middleware: invite URLs contain secrets.
+    app.middleware = Middlewares()
+    app.middleware.use(APIErrorMiddleware())
+    app.middleware.use(PWAStaticMiddleware(directory: config.pwaStaticDirectory))
+    app.asyncCommands.use(BootstrapAdmin(service: service), as: "bootstrap-admin")
+    registerRoutes(app, service: service)
 }
 
 public struct StatusResponse: Content { public let status: String }
