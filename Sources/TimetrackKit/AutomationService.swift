@@ -12,7 +12,7 @@ struct DeviceTokenService: Sendable {
         try await DeviceTokenRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).filter(\.$revokedAt == nil).all().map { try dto($0) }
     }
     func create(_ input: DeviceTokenInput) async throws -> DeviceTokenDTO {
-        guard input.name.count <= 80, input.expiresInDays.map({ (1...730).contains($0) }) ?? true else { throw APIError.invalid }
+        guard input.name.fitsColumn(80), input.expiresInDays.map({ (1...730).contains($0) }) ?? true else { throw APIError.invalid }
         let token = Secrets.token(); let now = Date()
         let row = DeviceTokenRecord(); row.accountId = scope.accountId; row.tokenHash = Secrets.hash(token); row.scope = "automation"
         row.name = input.name; row.createdAt = now; row.expiresAt = input.expiresInDays.map { now.addingTimeInterval(Double($0) * 86400) }
@@ -60,7 +60,7 @@ struct DeviceScopeGuard: AsyncMiddleware {
 struct AutomationService: Sendable {
     let scope: TimeServices
     func process(_ input: AutomationInput) async throws -> AutomationResult {
-        guard input.deviceId.count <= 80, ["arrival", "presence_confirmed", "departure", "cancel"].contains(input.type) else { throw APIError.invalid }
+        guard input.deviceId.fitsColumn(80), ["arrival", "presence_confirmed", "departure", "cancel"].contains(input.type) else { throw APIError.invalid }
         if let existing = try await AutomationEventRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).filter(\.$eventId == input.eventId).first() { return existing.result }
         let place = try await scope.places.record(input.placeId).payload
         let history = try await AutomationEventRecord.query(on: scope.db).filter(\.$accountId == scope.accountId)

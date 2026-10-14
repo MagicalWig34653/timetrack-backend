@@ -46,7 +46,8 @@ public enum HolidayCalendar {
             try fixed(11, 1, "Allerheiligen")
         }
         if region == "DE-SN" {
-            var date = try LocalDate(year: year, month: 11, day: 22)
+            // Wednesday strictly before 23 November, i.e. between 16 and 22 November inclusive.
+            var date = try LocalDate(year: year, month: 11, day: 23)
             repeat { date = date.addingDays(-1) } while weekday(date) != 3
             add(date, "Buß- und Bettag")
         }

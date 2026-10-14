@@ -142,8 +142,13 @@ func timeDecode<T: Decodable>(_ type: T.Type, request: Request) throws -> T {
     }
     return try decoder.decode(type, from: Data(body.readableBytesView))
 }
+extension String {
+    /// Length limits count unicode scalars: MariaDB VARCHAR/utf8mb4 counts code points, not grapheme clusters,
+    /// so a Swift `count` could admit values the column rejects (which would surface as a 500).
+    func fitsColumn(_ limit: Int) -> Bool { unicodeScalars.count <= limit }
+}
 func validateReason(_ reason: String) throws {
-    guard !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, reason.count <= 200 else { throw APIError.invalid }
+    guard !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, reason.fitsColumn(200) else { throw APIError.invalid }
 }
 
 func timeInstant(_ value: String) -> Date? {

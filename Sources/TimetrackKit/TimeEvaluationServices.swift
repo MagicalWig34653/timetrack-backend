@@ -77,7 +77,7 @@ struct DayService: Sendable {
         }
     }
     func set(_ date: LocalDate, input: DayInput) async throws -> DayEvaluationResult {
-        guard input.creditSeconds.map({ $0 >= 0 }) ?? true, (input.note?.count ?? 0) <= 200 else { throw APIError.invalid }
+        guard input.creditSeconds.map({ (0...86_400).contains($0) }) ?? true, input.note?.fitsColumn(200) ?? true else { throw APIError.invalid }
         let existing = try await preference(date)
         let row = existing ?? DayPreferenceRecord()
         if existing == nil { row.accountId = scope.accountId; row.date = date.description; row.mark = "none"; row.skipFixedBreaks = false }
@@ -124,7 +124,7 @@ struct AccountService: Sendable {
     }
     func adjust(_ input: AdjustmentInput) async throws -> TimeAccountResult {
         try validateReason(input.reason)
-        guard ["opening", "correction"].contains(input.kind) else { throw APIError.invalid }
+        guard ["opening", "correction"].contains(input.kind), abs(input.seconds) <= 1_000_000_000 else { throw APIError.invalid }
         if input.kind == "opening", try await AdjustmentRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).filter(\.$opening == 1).first() != nil {
             throw APIError(.conflict, "conflict")
         }

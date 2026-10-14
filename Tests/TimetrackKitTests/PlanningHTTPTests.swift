@@ -81,7 +81,7 @@ extension AuthTests {
         XCTAssertEqual(value["bookedHalfDays"] as? Int, 10); XCTAssertEqual(value["availableHalfDays"] as? Int, 58)
         let stale = try await api(app, context, .PUT, "absences/" + id, absenceBody("2026-10-12", "2026-10-16"), .preconditionFailed, version: 1)
         XCTAssertEqual(try errorCode(stale), "stale_version")
-        try await api(app, context, .PUT, "absences/" + id, absenceBody("2026-10-12", "2026-10-16"), .preconditionFailed)
+        try await api(app, context, .PUT, "absences/" + id, absenceBody("2026-10-12", "2026-10-16"), .badRequest)   // C10: If-Match is required
 
         // Planned and requested are previewed separately.
         try await createAbsence(app, context, absenceBody("2026-11-02", "2026-11-06", status: "planned"))

@@ -257,4 +257,51 @@ final class VacationEngineTests: XCTestCase {
         let snapshot = try VacationSnapshot(date: date("2026-01-01"), remainingHalfDays: 5)
         XCTAssertThrowsError(try VacationEngine.balance(year: 2026, absences: [], models: [], snapshots: [snapshot, snapshot]))
     }
+
+    // MARK: C10 review fixes
+
+    func testNoStoredValueCanTrapTheBalance() throws {
+        let huge = Int.max
+        let snapshot = VacationSnapshot(date: try date("2026-03-01"), remainingHalfDays: huge)
+        let adjustments = [VacationAdjustment(date: try date("2026-04-01"), halfDays: huge),
+                           VacationAdjustment(date: try date("2026-04-02"), halfDays: huge)]
+        let item = try absence("2026-06-01", "2026-06-05")
+        let result = try VacationEngine.balance(year: 2026, absences: [item], models: [model()], snapshots: [snapshot],
+                                                adjustments: adjustments)
+        XCTAssertGreaterThan(result.availableHalfDays, Int.max - 100)
+        let negative = VacationAdjustment(date: try date("2026-04-01"), halfDays: Int.min)
+        let low = try VacationEngine.balance(year: 2026, absences: [item], models: [model()],
+                                             adjustments: [negative, negative])
+        XCTAssertLessThan(low.availableHalfDays, Int.min + 100)
+        XCTAssertLessThan(low.availableAfterPlannedHalfDays, Int.min + 100)
+        XCTAssertThrowsError(try VacationEngine.balance(year: 2026, settings: VacationSettings(annualEntitlementHalfDays: Int.max),
+                                                        absences: [], models: [model()]))
+        XCTAssertThrowsError(try VacationEngine.balance(year: 2026, settings: VacationSettings(carryOverByYear: [2026: Int.max]),
+                                                        absences: [], models: [model()]))
+    }
+
+    func testLenientCountTreatsDaysWithoutModelAsZero() throws {
+        var ended = try model(); ended.validTo = try date("2026-06-02")
+        let item = try absence("2026-06-01", "2026-06-05")
+        XCTAssertEqual(try VacationEngine.countedHalfDays(for: item, models: [ended], lenient: true), 4)
+        XCTAssertThrowsError(try VacationEngine.countedHalfDays(for: item, models: [ended]))
+        let after = try absence("2026-06-10", "2026-06-12")
+        XCTAssertEqual(try VacationEngine.countedHalfDays(for: after, models: [ended], lenient: true), 0)
+        let result = try VacationEngine.balance(year: 2026, absences: [item, after], models: [ended], lenient: true)
+        XCTAssertEqual(result.bookedHalfDays, 4)
+    }
+
+    func testBussUndBettagMatchesRuleForEveryYear() throws {
+        for year in 2020...2032 {
+            // Rule: the Wednesday strictly before 23 November, i.e. in 16...22 November.
+            let expected = try (16...22).map { try LocalDate(year: year, month: 11, day: $0) }
+                .first { HolidayCalendar.weekday($0) == 3 }
+            let found = try HolidayCalendar.holidays(year: year, region: "DE-SN").first { $0.name == "Buß- und Bettag" }
+            XCTAssertEqual(found?.startDate, expected, "year \(year)")
+            XCTAssertEqual(found.map { HolidayCalendar.weekday($0.startDate) }, 3)
+            XCTAssertFalse(try HolidayCalendar.holidays(year: year, region: "DE-ST").contains { $0.name == "Buß- und Bettag" })
+        }
+        XCTAssertEqual(try HolidayCalendar.holidays(year: 2023, region: "DE-SN").first { $0.name == "Buß- und Bettag" }?.startDate.description, "2023-11-22")
+        XCTAssertEqual(try HolidayCalendar.holidays(year: 2029, region: "DE-SN").first { $0.name == "Buß- und Bettag" }?.startDate.description, "2029-11-21")
+    }
 }

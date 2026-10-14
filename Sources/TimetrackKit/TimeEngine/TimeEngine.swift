@@ -141,9 +141,9 @@ public enum TimeEngine {
             guard dates.contains(date) else { throw TimeEngineError.missingEvaluation(date) }
             date = date.addingDays(1)
         }
-        let adjustment = adjustments.filter { $0.date >= accountStart && $0.date <= cutoff }.reduce(0) { $0 + $1.seconds }
+        let adjustment = adjustments.filter { $0.date >= accountStart && $0.date <= cutoff }.reduce(0) { saturatingAdd($0, $1.seconds) }
         return TimeAccountResult(asOf: cutoff, accountStart: accountStart,
-                                 balanceSeconds: openingSeconds + adjustment + included.reduce(0) { $0 + $1.deltaSeconds },
+                                 balanceSeconds: saturatingAdd(saturatingAdd(openingSeconds, adjustment), included.reduce(0) { saturatingAdd($0, $1.deltaSeconds) }),
                                  openingSeconds: openingSeconds, adjustmentSeconds: adjustment,
                                  provisional: (accountStart <= today && cutoff == today) || included.contains { $0.provisional })
     }

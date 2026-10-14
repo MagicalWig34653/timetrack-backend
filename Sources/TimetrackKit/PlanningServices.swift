@@ -43,9 +43,9 @@ struct VacationService: Sendable {
                                 carryOverByYear: carry, carryOverExpiry: dto.carryOverExpiry)
     }
     func save(_ input: VacationSettingsDTO) async throws -> VacationSettingsDTO {
-        guard HolidayCalendar.supportedRegions.contains(input.region), input.annualEntitlementHalfDays >= 0 else { throw APIError.invalid }
+        guard HolidayCalendar.supportedRegions.contains(input.region), (0...VacationLimits.maxHalfDays).contains(input.annualEntitlementHalfDays) else { throw APIError.invalid }
         for (key, value) in input.carryOverByYear ?? [:] {
-            guard key.count == 4, let year = Int(key), String(year) == key, (1990...2100).contains(year), value >= 0 else { throw APIError.invalid }
+            guard key.count == 4, let year = Int(key), String(year) == key, (1990...2100).contains(year), (0...VacationLimits.maxHalfDays).contains(value) else { throw APIError.invalid }
         }
         if let expiry = input.carryOverExpiry {
             // Validated against a non-leap year so that the expiry exists in every year.
@@ -81,10 +81,10 @@ struct VacationService: Sendable {
             .map { VacationAdjustment(date: try LocalDate($0.date), halfDays: $0.halfDays) }
         let custom = try await customDays()
         return VacationBalanceDTO(try VacationEngine.balance(year: year, settings: settings, absences: absences, models: models,
-            snapshots: snapshots, adjustments: adjustments, customCalendarDays: custom))
+            snapshots: snapshots, adjustments: adjustments, customCalendarDays: custom, lenient: true))
     }
     func createSnapshot(_ input: SnapshotInput) async throws -> VacationBalanceDTO {
-        guard input.remainingHalfDays >= 0, (1990...2100).contains(input.date.year) else { throw APIError.invalid }
+        guard (0...VacationLimits.maxHalfDays).contains(input.remainingHalfDays), (1990...2100).contains(input.date.year) else { throw APIError.invalid }
         guard try await VacationSnapshotRecord.query(on: scope.db).filter(\.$accountId == scope.accountId)
             .filter(\.$date == input.date.description).first() == nil else { throw APIError(.conflict, "conflict") }
         let row = VacationSnapshotRecord(); row.id = UUID(); row.accountId = scope.accountId
@@ -152,9 +152,10 @@ struct AbsenceCounter: Sendable {
     func count(_ absence: EngineAbsence) throws -> Int {
         guard absence.kind == .vacation, absence.status.isActive else { return 0 }
         let builtin = try (absence.startDate.year...absence.endDate.year).flatMap { try HolidayCalendar.holidays(year: $0, region: region) }
-        return try VacationEngine.countedHalfDays(for: absence, models: models, calendarDays: builtin + custom)
+        // Days outside every work model (e.g. after a training ended) count 0 instead of failing.
+        return try VacationEngine.countedHalfDays(for: absence, models: models, calendarDays: builtin + custom, lenient: true)
     }
-    /// Read paths never fail on a model gap; they show 0 instead.
+    /// Read paths never fail; they show 0 on any inconsistency.
     func lenientCount(_ absence: EngineAbsence) -> Int { (try? count(absence)) ?? 0 }
 }
 
@@ -181,7 +182,7 @@ struct AbsenceService: Sendable {
     }
     private func validate(_ input: AbsenceInputDTO) throws {
         guard input.startDate <= input.endDate, input.endDate <= input.startDate.addingDays(PlanningLimits.absenceDays - 1),
-              (input.note?.count ?? 0) <= 500, ["not_needed", "pending", "submitted"].contains(input.documentStatus ?? "not_needed") else { throw APIError.invalid }
+              input.note?.fitsColumn(500) ?? true, ["not_needed", "pending", "submitted"].contains(input.documentStatus ?? "not_needed") else { throw APIError.invalid }
         if let start = input.documentReferenceStart, let end = input.documentReferenceEnd, start > end { throw APIError.invalid }
     }
     private func ensureNoOverlap(_ candidate: EngineAbsence) async throws {
@@ -238,7 +239,7 @@ struct CalendarService: Sendable {
     }
     func createCustom(_ input: CustomDayInput) async throws -> CalendarDayDTO {
         let name = input.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty, name.count <= 80, input.startDate <= input.endDate,
+        guard !name.isEmpty, name.fitsColumn(80), input.startDate <= input.endDate,
               input.endDate <= input.startDate.addingDays(PlanningLimits.absenceDays - 1) else { throw APIError.invalid }
         let row = CustomCalendarDayRecord(); row.id = UUID(); row.accountId = scope.accountId; row.kind = input.kind.rawValue
         row.startDate = input.startDate.description; row.endDate = input.endDate.description; row.name = name
@@ -264,8 +265,12 @@ struct PlanService: Sendable {
         try await rows(from: from, to: to).map { .init(date: try LocalDate($0.date), mode: $0.mode, placeId: $0.placeId, note: $0.note) }
     }
     func put(_ date: LocalDate, _ input: PlanDayInput) async throws -> PlanDayDTO {
-        guard Self.modes.contains(input.mode), (input.note?.count ?? 0) <= 200 else { throw APIError.invalid }
-        if let place = input.placeId { _ = try await scope.places.record(place) }
+        guard Self.modes.contains(input.mode), input.note?.fitsColumn(200) ?? true else { throw APIError.invalid }
+        if let place = input.placeId {
+            // Archived places are treated like foreign ones.
+            let row = try await scope.places.record(place)
+            guard row.payload.archived != true else { throw APIError.missing }
+        }
         let row = try await PlanDayRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).filter(\.$date == date.description).first() ?? PlanDayRecord()
         row.accountId = scope.accountId; row.date = date.description; row.mode = input.mode; row.placeId = input.placeId; row.note = input.note
         try await row.save(on: scope.db)
