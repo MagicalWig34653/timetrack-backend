@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -331,10 +331,197 @@ paths:
       security: [ { session: [], csrf: [] } ]
       parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
       responses: { '204': { description: widerrufen }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/work-models:
+    get:
+      operationId: listWorkModels
+      description: Alle Arbeitsmodell-Versionen des Kontos, nach validFrom sortiert.
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/WorkModel' } } } } } }
+    post:
+      operationId: createWorkModel
+      description: Legt eine neue Modellversion an. Eine laufende Vorversion wird am Vortag von validFrom beendet; Vergangenheit wird nie verändert (409 model_overlap bei Überschneidung mit späteren Versionen).
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/WorkModelInput' } } } }
+      responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/WorkModel' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/v1/work-models/{id}:
+    get:
+      operationId: getWorkModel
+      security: [ { session: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/WorkModel' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    patch:
+      operationId: endWorkModel
+      description: Setzt nur validTo (z. B. Ausbildungsende). Weitere Felder sind unveränderlich; neue Regeln = neue Version.
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [validTo], properties: { validTo: { type: string, format: date } } } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/WorkModel' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/v1/places:
+    get:
+      operationId: listPlaces
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Place' } } } } } }
+    post:
+      operationId: createPlace
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PlaceInput' } } } }
+      responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/Place' } } } } }
+  /api/v1/places/{id}:
+    put:
+      operationId: updatePlace
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PlaceInput' } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Place' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    delete:
+      operationId: archivePlace
+      description: Archiviert den Ort (bestehende Segmente behalten ihre Referenz).
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '204': { description: archiviert }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/time/segments:
+    get:
+      operationId: listSegments
+      description: Segmente, deren Beginn in [from, to) (UTC-Instants) liegt; Rohzeiten und Revisionsanzahl enthalten, stornierte nur mit includeVoided.
+      security: [ { session: [] } ]
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: includeVoided, in: query, schema: { type: boolean, default: false } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Segment' } } } } } }
+    post:
+      operationId: createSegment
+      description: Manueller Eintrag (abgeschlossen oder, ohne endedAt, laufend). Überschneidung mit anderem Segment → 409 segment_overlap.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SegmentInput' } } } }
+      responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/Segment' } } } }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/v1/time/segments/{id}:
+    patch:
+      operationId: correctSegment
+      description: Korrektur mit Pflichtgrund; If-Match muss die aktuelle version enthalten (sonst 412 stale_version). Rohzeiten bleiben erhalten, es entsteht eine Revision.
+      security: [ { session: [], csrf: [] } ]
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: If-Match, in: header, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SegmentCorrection' } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Segment' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' }, '412': { description: veraltete Version, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } } }
+    delete:
+      operationId: voidSegment
+      description: Storniert das Segment (Soft-Delete mit Grund im Query `reason`); Rohdaten bleiben.
+      security: [ { session: [], csrf: [] } ]
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: reason, in: query, required: true, schema: { type: string, maxLength: 200 } }
+      responses: { '204': { description: storniert }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/time/timer:
+    get:
+      operationId: currentTimer
+      security: [ { session: [] } ]
+      responses: { '200': { description: laufendes Segment oder null, content: { application/json: { schema: { oneOf: [ { $ref: '#/components/schemas/Segment' }, { type: 'null' } ] } } } } }
+  /api/v1/time/timer/start:
+    post:
+      operationId: startTimer
+      description: Idempotent über clientEventId. Läuft bereits ein anderes Segment → 409 timer_already_running.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [clientEventId], properties: { clientEventId: { type: string, format: uuid }, kind: { $ref: '#/components/schemas/SegmentKind' }, placeId: { type: [string, 'null'], format: uuid } } } } } }
+      responses: { '200': { description: gestartet oder bereits durch dieses Ereignis gestartet, content: { application/json: { schema: { $ref: '#/components/schemas/Segment' } } } }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/v1/time/timer/stop:
+    post:
+      operationId: stopTimer
+      description: Idempotent über clientEventId; ohne laufendes Segment und ohne früheres Ereignis → 409 no_running_timer.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [clientEventId], properties: { clientEventId: { type: string, format: uuid } } } } } }
+      responses: { '200': { description: gestoppt, content: { application/json: { schema: { $ref: '#/components/schemas/Segment' } } } }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/v1/time/days:
+    get:
+      operationId: listDayEvaluations
+      description: Bewertungen für lokale Tage von..bis (max. 93 Tage), einschließlich Tagen ohne Segmente (Soll/Markierung).
+      security: [ { session: [] } ]
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/DayEvaluation' } } } } } }
+  /api/v1/time/days/{date}:
+    get:
+      operationId: getDayEvaluation
+      security: [ { session: [] } ]
+      parameters: [ { name: date, in: path, required: true, schema: { type: string, format: date } } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/DayEvaluation' } } } } }
+    put:
+      operationId: setDayPreferences
+      description: Tagesmarkierung und/oder Überspringen fester Pausen setzen (leere Markierung `none` entfernt sie).
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { name: date, in: path, required: true, schema: { type: string, format: date } } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { mark: { $ref: '#/components/schemas/DayMarkKind' }, creditSeconds: { type: [integer, 'null'], minimum: 0 }, skipFixedBreaks: { type: boolean }, note: { type: [string, 'null'], maxLength: 200 } } } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/DayEvaluation' } } } } }
+  /api/v1/time/account:
+    get:
+      operationId: getTimeAccount
+      description: Zeitkontosaldo bis einschließlich asOf (Standard heute); heutiger Tag ist vorläufig.
+      security: [ { session: [] } ]
+      parameters: [ { name: asOf, in: query, schema: { type: string, format: date } } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/TimeAccount' } } } } }
+  /api/v1/time/account/adjustments:
+    post:
+      operationId: createAccountAdjustment
+      description: Anfangsstand (kind=opening, höchstens einer, setzt accountStart) oder datierte Korrektur.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [kind, date, seconds, reason], properties: { kind: { type: string, enum: [opening, correction] }, date: { type: string, format: date }, seconds: { type: integer }, reason: { type: string, maxLength: 200 } } } } } }
+      responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/TimeAccount' } } } }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/v1/time/suggestions:
+    get:
+      operationId: listSuggestions
+      security: [ { session: [] } ]
+      responses: { '200': { description: offene Vorschläge, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Suggestion' } } } } } }
+  /api/v1/time/suggestions/{id}/accept:
+    post:
+      operationId: acceptSuggestion
+      description: Erzeugt aus dem Vorschlag ein Segment bzw. beendet das offene (Zeiten optional überschreibbar). Einmalig; zweites Mal → 409.
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { startedAt: { type: string, format: date-time }, endedAt: { type: string, format: date-time } } } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Segment' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/v1/time/suggestions/{id}/reject:
+    post:
+      operationId: rejectSuggestion
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '204': { description: verworfen }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/me/device-tokens:
+    get:
+      operationId: listDeviceTokens
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/DeviceToken' } } } } } }
+    post:
+      operationId: createDeviceToken
+      description: Erzeugt ein Gerätetoken (nur Automation-Scope). Klartext nur in dieser Antwort.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string, maxLength: 80 }, expiresInDays: { type: integer, minimum: 1, maximum: 730 } } } } } }
+      responses: { '201': { description: erzeugt, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/DeviceToken' }, { type: object, required: [token], properties: { token: { type: string } } } ] } } } } }
+  /api/v1/me/device-tokens/{id}:
+    delete:
+      operationId: revokeDeviceToken
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '204': { description: widerrufen }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/automation/events:
+    post:
+      operationId: postAutomationEvent
+      description: |
+        Für Shortcuts. Auth: `Authorization: Bearer <device token>` (kein Cookie/CSRF). Idempotent über eventId; ein Duplikat liefert das erste Ergebnis.
+        Ergebnis je nach Ortsmodus: `booked`, `suggested`, `ignored`, `recorded` (nur festgehalten), `duplicate`, `needs_review`.
+      security: [ { deviceToken: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AutomationEvent' } } } }
+      responses:
+        '200': { description: verarbeitet, content: { application/json: { schema: { type: object, required: [result], properties: { result: { type: string, enum: [booked, suggested, ignored, recorded, duplicate, needs_review] }, segmentId: { type: [string, 'null'], format: uuid }, suggestionId: { type: [string, 'null'], format: uuid } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 components:
   securitySchemes:
     session: { type: apiKey, in: cookie, name: tt_session }
+    deviceToken: { type: http, scheme: bearer }
     csrf: { type: apiKey, in: header, name: X-CSRF-Token }
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
   responses:
     BadRequest: { description: ungültige Anfrage, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     Unauthorized: { description: nicht angemeldet oder Nachweis ungültig, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -420,3 +607,144 @@ components:
         - type: object
           required: [token]
           properties: { token: { type: string } }
+    SegmentKind: { type: string, enum: [work, travel, school] }
+    DayMarkKind: { type: string, enum: [none, holiday, vacation, sick, school_credit] }
+    WorkModelInput:
+      type: object
+      required: [validFrom, weeklyTargetSeconds, workdays]
+      properties:
+        validFrom: { type: string, format: date }
+        validTo: { type: [string, 'null'], format: date }
+        timezone: { type: string, default: Europe/Berlin }
+        weeklyTargetSeconds: { type: integer, minimum: 0 }
+        workdays: { type: array, items: { type: integer, minimum: 1, maximum: 7, description: 1=Montag..7=Sonntag } }
+        dailyTargetSeconds: { type: object, additionalProperties: { type: integer, minimum: 0 }, description: optional je Wochentag "1".."7", hat Vorrang }
+        travelCountsAsWork: { type: boolean, default: true }
+        roundingEnabled: { type: boolean, default: true }
+        roundingMinutes: { type: integer, minimum: 1, maximum: 60, default: 15 }
+        schoolFullDayThresholdSeconds: { type: integer, minimum: 0, default: 10800 }
+        schoolCreditSeconds: { type: [integer, 'null'], description: null = Tages-Soll }
+        dayBoundaryMinutes: { type: integer, minimum: 0, maximum: 719, default: 0 }
+        fixedBreaks: { type: array, items: { type: object, required: [start, end], properties: { start: { type: string, pattern: '^[0-2][0-9]:[0-5][0-9]$' }, end: { type: string, pattern: '^[0-2][0-9]:[0-5][0-9]$' } } } }
+    WorkModel:
+      allOf:
+        - $ref: '#/components/schemas/WorkModelInput'
+        - type: object
+          required: [id, createdAt]
+          properties: { id: { type: string, format: uuid }, createdAt: { type: string, format: date-time } }
+    PlaceInput:
+      type: object
+      required: [name, kind, automationMode]
+      properties:
+        name: { type: string, maxLength: 80 }
+        kind: { type: string, enum: [office, home, customer, school, other] }
+        automationMode: { type: string, enum: [direct, suggest, off] }
+        latitude: { type: [number, 'null'] }
+        longitude: { type: [number, 'null'] }
+        radiusMeters: { type: [integer, 'null'], minimum: 20 }
+        confirmAfterSeconds: { type: integer, minimum: 0, default: 300 }
+        defaultSegmentKind: { $ref: '#/components/schemas/SegmentKind' }
+    Place:
+      allOf:
+        - $ref: '#/components/schemas/PlaceInput'
+        - type: object
+          required: [id, archived]
+          properties: { id: { type: string, format: uuid }, archived: { type: boolean } }
+    SegmentInput:
+      type: object
+      required: [kind, startedAt]
+      properties:
+        kind: { $ref: '#/components/schemas/SegmentKind' }
+        placeId: { type: [string, 'null'], format: uuid }
+        startedAt: { type: string, format: date-time }
+        endedAt: { type: [string, 'null'], format: date-time }
+        note: { type: [string, 'null'], maxLength: 500 }
+    SegmentCorrection:
+      type: object
+      required: [reason]
+      properties:
+        startedAt: { type: string, format: date-time }
+        endedAt: { type: [string, 'null'], format: date-time }
+        kind: { $ref: '#/components/schemas/SegmentKind' }
+        placeId: { type: [string, 'null'], format: uuid }
+        note: { type: [string, 'null'], maxLength: 500 }
+        reason: { type: string, minLength: 1, maxLength: 200 }
+    Segment:
+      type: object
+      required: [id, kind, startedAt, endedAt, rawStartedAt, rawEndedAt, source, version, voided, needsReview]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { $ref: '#/components/schemas/SegmentKind' }
+        placeId: { type: [string, 'null'], format: uuid }
+        startedAt: { type: string, format: date-time }
+        endedAt: { type: [string, 'null'], format: date-time }
+        rawStartedAt: { type: string, format: date-time }
+        rawEndedAt: { type: [string, 'null'], format: date-time }
+        source: { type: string, enum: [timer, manual, automation, suggestion, import] }
+        note: { type: [string, 'null'] }
+        version: { type: integer }
+        voided: { type: boolean }
+        needsReview: { type: boolean }
+        revisions: { type: integer, description: Anzahl Korrekturen }
+    DayEvaluation:
+      type: object
+      required: [date, targetSeconds, rawWorkSeconds, breakDeductionSeconds, startAdjustSeconds, endAdjustSeconds, evaluatedWorkSeconds, creditSeconds, deltaSeconds, provisional, segmentIds, breakHints]
+      properties:
+        date: { type: string, format: date }
+        modelId: { type: [string, 'null'], format: uuid }
+        mark: { $ref: '#/components/schemas/DayMarkKind' }
+        skipFixedBreaks: { type: boolean }
+        targetSeconds: { type: integer }
+        rawWorkSeconds: { type: integer }
+        breakDeductionSeconds: { type: integer }
+        startAdjustSeconds: { type: integer }
+        endAdjustSeconds: { type: integer }
+        evaluatedWorkSeconds: { type: integer }
+        creditSeconds: { type: integer, description: Schulregel/Markierungsgutschrift anstelle der Segmentsumme }
+        deltaSeconds: { type: integer, description: evaluated(+credit) - target }
+        evaluatedStart: { type: [string, 'null'], format: date-time }
+        evaluatedEnd: { type: [string, 'null'], format: date-time }
+        provisional: { type: boolean }
+        segmentIds: { type: array, items: { type: string, format: uuid } }
+        breakHints: { type: array, items: { type: object, required: [code], properties: { code: { type: string, enum: [break_missing_30, break_missing_45, break_part_too_short, work_over_6h_without_break] } } } }
+    TimeAccount:
+      type: object
+      required: [asOf, balanceSeconds, openingSeconds, adjustmentSeconds, provisional]
+      properties:
+        asOf: { type: string, format: date }
+        accountStart: { type: [string, 'null'], format: date }
+        balanceSeconds: { type: integer }
+        openingSeconds: { type: integer }
+        adjustmentSeconds: { type: integer }
+        provisional: { type: boolean }
+    Suggestion:
+      type: object
+      required: [id, type, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string, enum: [start, end] }
+        placeId: { type: [string, 'null'], format: uuid }
+        proposedStartedAt: { type: [string, 'null'], format: date-time }
+        proposedEndedAt: { type: [string, 'null'], format: date-time }
+        segmentId: { type: [string, 'null'], format: uuid }
+        createdAt: { type: string, format: date-time }
+    DeviceToken:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        lastUsedAt: { type: [string, 'null'], format: date-time }
+    AutomationEvent:
+      type: object
+      required: [eventId, deviceId, type, occurredAt, placeId]
+      properties:
+        eventId: { type: string, format: uuid }
+        deviceId: { type: string, maxLength: 80 }
+        type: { type: string, enum: [arrival, presence_confirmed, departure, cancel] }
+        placeId: { type: string, format: uuid }
+        occurredAt: { type: string, format: date-time }
+        latitude: { type: [number, 'null'] }
+        longitude: { type: [number, 'null'] }
