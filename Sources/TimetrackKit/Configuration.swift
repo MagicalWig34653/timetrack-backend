@@ -26,6 +26,7 @@ public struct Configuration: Sendable {
     public let pwaStaticDirectory: String
     public let smtpHost: String?
     public let smtpPort: Int
+    public let smtp: SMTPConfiguration?
 
     public init(environment: [String: String] = ProcessInfo.processInfo.environment) throws {
         func value(_ key: String, _ fallback: String) throws -> String {
@@ -59,7 +60,8 @@ public struct Configuration: Sendable {
         }
         pwaStaticDirectory = environment["PWA_STATIC_DIR"] ?? "/srv/pwa"
         smtpHost = environment["SMTP_HOST"].flatMap { $0.isEmpty ? nil : $0 }
-        smtpPort = try integer("SMTP_PORT", "1025", 1...65535)
+        smtpPort = try integer("SMTP_PORT", "587", 1...65535)
+        smtp = try SMTPConfiguration(environment: environment)
         databaseDriver = driver
         dbHost = try value("DB_HOST", "127.0.0.1")
         dbPort = try integer("DB_PORT", "3306", 1...65535)
