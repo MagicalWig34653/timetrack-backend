@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.4.1
+  version: 0.5.0
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -20,6 +20,7 @@ info:
     (4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form
     `<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.
     (6) No session listing endpoint in stage 1; only revoking other sessions.
+    v0.5.0: OIDC (optional) siehe ADR-0007. Konfiguration: OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET (optional), OIDC_NAME, OIDC_SCOPES (Standard `openid email profile`). Kein Pflicht-Authentik; Registrierung weiter nur mit Einladung.
     v0.4.1: Import-Ergänzungen (allowOvernight, errorCount, rolledBack, Fehlercodes unknown_kind/note_too_long/too_many_rows; rollback_conflict liefert conflicts auch oben; je Konto max. 20 offene Importe, 50 Vorlagen).
     v0.4.0: Export/Import/Dateispeicher, siehe docs/decisions/ADR-0006. Fehlercodes: file_too_large (413), unsupported_type (415), import_not_ready, import_has_errors, rollback_conflict.
     v0.3.2: Tagesmarkierung Feiertag hat Vorrang vor Urlaub am selben Tag; Krankheit wirkt nur mit Status approved/taken; Freigabe an sich selbst 400 `cannot_share_with_self`; DayEvaluation.markSource/targetOverrideSeconds.
@@ -823,6 +824,53 @@ paths:
         - { $ref: '#/components/parameters/Id' }
         - { name: fileId, in: path, required: true, schema: { type: string, format: uuid } }
       responses: { '204': { description: Verknüpfung entfernt }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/auth/oidc/config:
+    get:
+      operationId: oidcConfig
+      description: Ob OIDC auf diesem Server konfiguriert ist (OIDC_ISSUER und OIDC_CLIENT_ID). Optional, keine Pflicht.
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: object, required: [enabled], properties: { enabled: { type: boolean }, name: { type: string, description: Anzeigename des Anbieters } } } } } } }
+  /api/v1/auth/oidc/start:
+    post:
+      operationId: oidcStart
+      description: |
+        Startet Authorization Code Flow mit PKCE (S256), state und nonce serverseitig gespeichert (10 min, einmalig).
+        purpose=login: Anmeldung mit bereits verknüpfter Identität. purpose=link: eingeloggtes Konto verknüpft eine Identität (frische Sitzung nötig). purpose=register: Einladung (inviteToken) mit Identität einlösen.
+        Antwort enthält die Anbieter-URL, zu der der Browser navigiert.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [purpose], properties: { purpose: { type: string, enum: [login, link, register] }, inviteToken: { type: string } } } } } }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { type: object, required: [authorizationUrl], properties: { authorizationUrl: { type: string, format: uri } } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '501': { $ref: '#/components/responses/NotImplemented' }
+  /api/v1/auth/oidc/callback:
+    get:
+      operationId: oidcCallback
+      description: |
+        Redirect-Ziel des Anbieters (PUBLIC_BASE_URL/api/v1/auth/oidc/callback). Tauscht den Code (PKCE), validiert id_token (Signatur über JWKS, iss, aud, exp, nonce, azp) und wertet die Identität (issuer, sub) aus; E-Mail-Adressen verknüpfen nie automatisch.
+        Antwort ist immer ein 302 auf die PWA: login → `/` (Sitzungscookie gesetzt); link → `/settings/identities?linked=1`; register → `/invite/<token>?oidc=<pendingId>` (Konto wird erst mit POST /auth/oidc/register angelegt);
+        Fehler → `/login?oidc_error=<code>` mit Codes oidc_not_linked, oidc_state_invalid, oidc_token_invalid, oidc_identity_taken, oidc_invite_invalid, oidc_reauth_required, oidc_failed. Keine Tokens in URLs/Logs.
+      parameters:
+        - { name: code, in: query, schema: { type: string } }
+        - { name: state, in: query, schema: { type: string } }
+        - { name: error, in: query, schema: { type: string } }
+      responses: { '302': { description: Weiterleitung zur PWA } }
+  /api/v1/auth/oidc/register:
+    post:
+      operationId: oidcRegister
+      description: Schließt die Registrierung per Einladung und OIDC-Identität ab (handle und Anzeigename wählen). Einladung und Identität werden atomar verbraucht; es entsteht ein Konto ohne Passkey, die PWA bietet anschließend die Passkey-Einrichtung an.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [pendingId, handle, displayName], properties: { pendingId: { type: string }, handle: { type: string, pattern: '^[a-z0-9][a-z0-9._-]{2,31}$' }, displayName: { type: string, minLength: 1, maxLength: 80 } } } } } }
+      responses: { '201': { description: Konto angelegt; Set-Cookie tt_session, content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/v1/me/identities:
+    get:
+      operationId: listIdentities
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ExternalIdentity' } } } } } }
+  /api/v1/me/identities/{id}:
+    delete:
+      operationId: unlinkIdentity
+      description: Entfernt die Verknüpfung (frische Sitzung nötig). Nicht möglich, wenn dadurch keine Anmeldemethode (Passkey oder andere Identität) übrig bliebe → 409 last_login_method.
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '204': { description: entfernt }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' } }
 components:
   securitySchemes:
     session: { type: apiKey, in: cookie, name: tt_session }
@@ -1259,3 +1307,12 @@ components:
         contentType: { type: string }
         backend: { type: string, enum: [db, s3, local] }
         createdAt: { type: string, format: date-time }
+    ExternalIdentity:
+      type: object
+      required: [id, providerName, linkedAt]
+      properties:
+        id: { type: string, format: uuid }
+        providerName: { type: string }
+        emailHint: { type: [string, 'null'], description: Anzeige der E-Mail des Anbieters, nur Hinweis, nie Verknüpfungsgrundlage }
+        linkedAt: { type: string, format: date-time }
+        lastUsedAt: { type: [string, 'null'], format: date-time }
