@@ -18,6 +18,16 @@ Sicherheitsrelevant und noch ungeprüft: siehe „Offen“.
   Bootstrap-Link, PWA-Auslieferung und SQLite-Persistenz laut Agent-Lauf belegt (`docs/handoffs/L3a.md`; vom Lead nicht einzeln wiederholt).
 - Codex-Review der PWA (L1/L3b) hat zwei Fehler gefunden (leere 202-Antwort bei E-Mail-Recovery, getrimmtes Rückfallpasswort); behoben (`8291dd0`).
 
+## Etappe 2 Zeittracking (14.10., Lead geprüft)
+
+- **C5/C6 (Codex)**: reine `TimeEngine` (Rundung nur äußerste Grenzen, Pausenschnittmengen, Schulregel, Zeitkonto, DST-sicher), Persistenz,
+  Arbeitsmodell-Versionen, Orte, Segmente mit Revisionen/If-Match, idempotenter Timer, Tagesbewertung, Zeitkonto, Vorschläge, Geräte-Token,
+  Automation-Endpunkt (`Bearer`, getrennt von Sitzungen). `swift test` → 61 Tests, 0 Fehler, inkl. MariaDB 12.3.3.
+- **L4/L5 (Claude)**: Heute/Zeit/Tag, Modelle, Orte, Zeitkonto, Vorschläge, Geräte; Playwright **29/29** gegen echtes Backend (ADR-Beispiel 7:15),
+  101 Unit-Tests, 6 Mock-E2E; `docs/SHORTCUTS.md` (in PWA-Repo).
+- **Codex-Review fand 2 Fehler** (Besuchsgrenze bei fehlendem Departure; Segmentverlust bei Modellwechsel mit anderer Tagesgrenze) → C7 in Arbeit.
+- **Nicht belegt**: Shortcuts auf echtem iPhone/Mac, Zeitleisten-Darstellung der neuen Seiten mit Echtdaten auf Mobilbreite/Dark Mode, Rate-Limit 429 der Automation, MariaDB-E2E.
+
 ## Offen / nicht belegt
 
 - **Linux amd64** (14.10., Lead): Image unter QEMU in Colima gebaut (≈55 min; SwiftPM braucht dort `taskset`-Workarounds), Container
