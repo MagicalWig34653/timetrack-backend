@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.6.0
+  version: 0.7.0
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -20,6 +20,7 @@ info:
     (4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form
     `<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.
     (6) No session listing endpoint in stage 1; only revoking other sessions.
+    v0.7.0: MCP/OAuth/persönliche Tokens (ADR-0009). Fehlercodes REST: reauth_required, insufficient_scope; OAuth-Endpunkte folgen RFC 6749/7009/7591/8414/9728 (Fehler als JSON `error`/`error_description`).
     v0.6.0: Berichtsheft (ADR-0008). Fehlercodes: stale_version (412), not_found; Quellen mit fileId benötigen eine eigene Datei (404 sonst).
     v0.5.1: Speicher: 503 storage_unavailable (Backend einer bestehenden Datei nicht konfiguriert), 500 storage_corrupt, 409 conflict bei mehr als 20 Anhängen je Abwesenheit; PUT /admin/storage ersetzt die gesamte Konfiguration (`s3: null` löscht S3-Konfiguration und Secret, `s3` ohne secretAccessKey behält das gespeicherte Secret). OIDC: für purpose=link führen Fehler nach `/settings/identities?oidc_error=<code>`; 'frische Sitzung nötig' ist 403 reauth_required; ungültiges inviteToken bei start = 404; pendingId gilt 10 Minuten (danach 404); der Passkey-Widerruf zählt externe Identitäten als Anmeldemethode.
     v0.5.0: OIDC (optional) siehe ADR-0007. Konfiguration: OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET (optional), OIDC_NAME, OIDC_SCOPES (Standard `openid email profile`). Kein Pflicht-Authentik; Registrierung weiter nur mit Einladung.
@@ -963,10 +964,104 @@ paths:
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '204': { description: gelöscht }, '404': { $ref: '#/components/responses/NotFound' } }
+  /.well-known/oauth-protected-resource:
+    get:
+      operationId: oauthProtectedResource
+      description: RFC 9728 Metadaten der MCP-Ressource.
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: object, required: [resource, authorization_servers], properties: { resource: { type: string }, authorization_servers: { type: array, items: { type: string } }, scopes_supported: { type: array, items: { type: string } }, bearer_methods_supported: { type: array, items: { type: string } } } } } } } }
+  /.well-known/oauth-authorization-server:
+    get:
+      operationId: oauthAuthorizationServer
+      description: RFC 8414 Metadaten (issuer = PUBLIC_BASE_URL, PKCE S256, public clients, code + refresh_token).
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: object } } } } }
+  /oauth/register:
+    post:
+      operationId: oauthRegister
+      description: Dynamic Client Registration (RFC 7591), nur öffentliche Clients.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [redirect_uris], properties: { client_name: { type: string, maxLength: 100 }, redirect_uris: { type: array, minItems: 1, maxItems: 5, items: { type: string, format: uri } }, grant_types: { type: array, items: { type: string } }, token_endpoint_auth_method: { type: string, enum: [none] } } } } } }
+      responses: { '201': { description: registriert, content: { application/json: { schema: { type: object, required: [client_id, redirect_uris], properties: { client_id: { type: string }, client_name: { type: string }, redirect_uris: { type: array, items: { type: string } }, token_endpoint_auth_method: { type: string } } } } } }, '400': { description: invalid_client_metadata } }
+  /oauth/authorize:
+    get:
+      operationId: oauthAuthorize
+      description: Autorisierungsendpunkt; leitet zur PWA-Seite /oauth/consent?request=<id> weiter (Login falls nötig). Fehler vor gültiger redirect_uri als HTML/JSON-Fehler, danach als Redirect mit error.
+      parameters:
+        - { name: response_type, in: query, required: true, schema: { type: string, enum: [code] } }
+        - { name: client_id, in: query, required: true, schema: { type: string } }
+        - { name: redirect_uri, in: query, required: true, schema: { type: string } }
+        - { name: code_challenge, in: query, required: true, schema: { type: string } }
+        - { name: code_challenge_method, in: query, required: true, schema: { type: string, enum: [S256] } }
+        - { name: scope, in: query, schema: { type: string } }
+        - { name: state, in: query, schema: { type: string } }
+        - { name: resource, in: query, required: true, schema: { type: string } }
+      responses: { '302': { description: Weiterleitung } }
+  /oauth/token:
+    post:
+      operationId: oauthToken
+      requestBody: { required: true, content: { application/x-www-form-urlencoded: { schema: { type: object, required: [grant_type], properties: { grant_type: { type: string, enum: [authorization_code, refresh_token] }, code: { type: string }, redirect_uri: { type: string }, client_id: { type: string }, code_verifier: { type: string }, refresh_token: { type: string }, resource: { type: string } } } } } }
+      responses: { '200': { description: Token, content: { application/json: { schema: { type: object, required: [access_token, token_type, expires_in], properties: { access_token: { type: string }, token_type: { type: string, const: Bearer }, expires_in: { type: integer }, refresh_token: { type: string }, scope: { type: string } } } } } }, '400': { description: invalid_grant / invalid_request / invalid_client } }
+  /oauth/revoke:
+    post:
+      operationId: oauthRevoke
+      requestBody: { required: true, content: { application/x-www-form-urlencoded: { schema: { type: object, required: [token], properties: { token: { type: string }, client_id: { type: string } } } } } }
+      responses: { '200': { description: immer 200 (RFC 7009) } }
+  /api/v1/oauth/requests/{id}:
+    get:
+      operationId: getOAuthRequest
+      description: Consent-Daten für die angemeldete Person (Client-Name, Redirect-Host, angefragte Scopes). Nur der angemeldete Konto-Browser sieht sie (an Sitzung gebunden), 10 min gültig.
+      security: [ { session: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/OAuthRequest' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/oauth/requests/{id}/decision:
+    post:
+      operationId: decideOAuthRequest
+      description: Genehmigt (mit gewählter Scope-Teilmenge) oder lehnt ab; einmalig. Antwort liefert die Redirect-URL (mit code/state bzw. error).
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [approve], properties: { approve: { type: boolean }, scopes: { type: array, items: { $ref: '#/components/schemas/McpScope' } } } } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: object, required: [redirectUrl], properties: { redirectUrl: { type: string, format: uri } } } } } }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/v1/me/oauth-grants:
+    get:
+      operationId: listOAuthGrants
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/OAuthGrant' } } } } } }
+  /api/v1/me/oauth-grants/{id}:
+    delete:
+      operationId: revokeOAuthGrant
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '204': { description: widerrufen }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/me/api-tokens:
+    get:
+      operationId: listApiTokens
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ApiToken' } } } } } }
+    post:
+      operationId: createApiToken
+      description: Persönliches MCP-Token; frische Sitzung nötig (403 reauth_required). Klartext nur in dieser Antwort.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name, scopes, expiresInDays], properties: { name: { type: string, maxLength: 80 }, scopes: { type: array, minItems: 1, items: { $ref: '#/components/schemas/McpScope' } }, expiresInDays: { type: integer, minimum: 1, maximum: 365 } } } } } }
+      responses: { '201': { description: erzeugt, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/ApiToken' }, { type: object, required: [token], properties: { token: { type: string } } } ] } } } } }
+  /api/v1/me/api-tokens/{id}:
+    delete:
+      operationId: revokeApiToken
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '204': { description: widerrufen }, '404': { $ref: '#/components/responses/NotFound' } }
+  /mcp:
+    post:
+      operationId: mcp
+      description: MCP Streamable HTTP (JSON-RPC 2.0), siehe ADR-0009 (initialize, ping, tools/list, tools/call). Auth per Authorization-Header mit Bearer-Token (tto_… oder ttp_…).
+      security: [ { bearer: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object } } } }
+      responses: { '200': { description: JSON-RPC Antwort }, '202': { description: Notification angenommen }, '401': { description: Token fehlt/ungültig (WWW-Authenticate mit resource_metadata) }, '403': { description: insufficient_scope } }
+    get:
+      operationId: mcpGet
+      responses: { '405': { description: kein SSE-Stream in v1 } }
 components:
   securitySchemes:
     session: { type: apiKey, in: cookie, name: tt_session }
     deviceToken: { type: http, scheme: bearer }
+    bearer: { type: http, scheme: bearer, description: OAuth-Access-Token (tto_) oder persönliches Token (ttp_) nur für /mcp }
     csrf: { type: apiKey, in: header, name: X-CSRF-Token }
   parameters:
     Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1469,3 +1564,34 @@ components:
         - type: object
           required: [id, createdAt]
           properties: { id: { type: string, format: uuid }, createdAt: { type: string, format: date-time }, file: { oneOf: [ { $ref: '#/components/schemas/FileMeta' }, { type: 'null' } ] } }
+    McpScope:
+      type: string
+      enum: [time:read, time:write, schedule:read, schedule:write, reports:read, reports:write, documents:read]
+    OAuthRequest:
+      type: object
+      required: [id, clientName, redirectHost, scopes, expiresAt]
+      properties:
+        id: { type: string, format: uuid }
+        clientName: { type: string }
+        redirectHost: { type: string }
+        scopes: { type: array, items: { $ref: '#/components/schemas/McpScope' } }
+        expiresAt: { type: string, format: date-time }
+    OAuthGrant:
+      type: object
+      required: [id, clientName, scopes, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        clientName: { type: string }
+        scopes: { type: array, items: { $ref: '#/components/schemas/McpScope' } }
+        createdAt: { type: string, format: date-time }
+        lastUsedAt: { type: [string, 'null'], format: date-time }
+    ApiToken:
+      type: object
+      required: [id, name, scopes, createdAt, expiresAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        scopes: { type: array, items: { $ref: '#/components/schemas/McpScope' } }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        lastUsedAt: { type: [string, 'null'], format: date-time }
