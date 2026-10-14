@@ -36,3 +36,7 @@ Nach Integration Paketstatus, Punktezählung und `STATUS.md` gemeinsam aktualisi
 
 Repo-Einrichtung durch Codex in dieser Vorbereitung; kein Claude-Plugin-Implementierungslauf.
 Diese Vorarbeit zählt nicht als abgeschlossene C1/C2/L1/L2-Punkte.
+
+14.10.2026: Sprachvorgabe in allen Agent-Einstiegen und im Startprompt dokumentiert.
+L1 übernimmt auch die Auslagerung der bisherigen PWA-Texte in Lokalisierungsressourcen;
+die native App folgt bei ihrem ersten Implementierungspaket. Kein aktiver Agent-Auftrag.

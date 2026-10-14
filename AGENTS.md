@@ -14,6 +14,12 @@ Vor jeder nichttrivialen Aufgabe:
 Claude-spezifischer Einstieg: `CLAUDE.md`. Lokaler Start: `EINRICHTUNG.md`.
 Fragen gesammelt im normalen Chat; keine interaktiven Frageformulare.
 
+## Sprache
+
+Code einschließlich Kommentaren, Tests und technischen Bezeichnern auf Englisch;
+nutzerseitige Texte auf Deutsch. Verbindliche Details: `docs/ENTWICKLUNGSABLAUF.md`,
+Abschnitt „Sprache von Code und Oberfläche“. Gilt auch für alle delegierten Agent-Aufträge.
+
 ## Arbeitsregeln
 
 - Claude koordiniert; ungefähr 50 % Umsetzung durch Codex über das Claude-Codex-Plugin.

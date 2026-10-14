@@ -23,6 +23,22 @@ Status ist eine Momentaufnahme, keine zweite Anforderungssammlung. Alte Details 
 beschlossenen Spezifikation vergleichen; eine Abweichung ist kein stiller Beschluss.
 Neue explizite Nutzerentscheidungen vor Umsetzung in der passenden Datei festhalten.
 
+## Sprache von Code und Oberfläche
+
+Verbindliche Nutzervorgabe vom 14.10.2026, gilt für alle drei Repositories:
+
+- Sämtlicher selbst geschriebener Code auf Englisch: Variablen, Funktionen, Typen, Module,
+  technische Dateinamen, Kommentare, Docstrings, Tests und Testbeschreibungen.
+- Datenbankschema, Migrationen, API-Pfade/-Felder, Fehlercodes, MCP-Toolnamen,
+  Konfigurationsschlüssel und interne Log-/Diagnosemeldungen ebenfalls auf Englisch.
+- Alles für Endnutzer Sichtbare auf Deutsch: Oberfläche, Hilfetexte, Validierungs- und
+  Fehlermeldungen, Benachrichtigungen, E-Mails sowie Beschriftungen in Exporten/Berichten.
+  Technische Fehlercodes bleiben Englisch; die Oberfläche zeigt verständliche deutsche Texte.
+- Nutzertexte von der Programmlogik trennen und über die jeweiligen Lokalisierungsressourcen
+  verwalten. Lokalisierungsschlüssel auf Englisch. Benutzereingaben nicht automatisch übersetzen.
+- Die deutschsprachigen Konzept-, Einrichtungs- und Agent-Dokumente sowie die Kommunikation
+  mit dem Nutzer bleiben auf Deutsch; die Codevorgabe erfordert keine Übersetzung dieser Dokumente.
+
 ## Beginn jeder Sitzung
 
 1. Agent-Einstieg, Status, Arbeitsplan, relevante ADRs und Fach-/Technikdokumente lesen.

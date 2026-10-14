@@ -50,6 +50,13 @@ im Repository sichern. Dokumentationspflege ist Teil jeder Implementierung und i
 - Native Apps SwiftUI/Liquid Glass/Apple HIG; Zielgeräte laut Nutzer auf OS 27.
 - Selbstständigenfunktionen später. Offline-Schreiben optional. iCloud darf bis zur nativen App warten.
 
+## Sprache
+
+Code, Kommentare, Tests und technische Bezeichner durchgängig auf Englisch;
+Oberfläche und andere nutzerseitige Texte auf Deutsch. Details und Lokalisierung:
+`docs/ENTWICKLUNGSABLAUF.md`, Abschnitt „Sprache von Code und Oberfläche“.
+Diese Regel bei jedem Agent-Auftrag mitgeben.
+
 ## Leitplanken
 
 - Tages-/Wochen-Soll, Schule, Fahrtzeiten, Pausen und Zeitkonto konfigurierbar.

@@ -49,3 +49,11 @@ Nächster Schritt: Claude im Backend-Hauptrepo starten, EINRICHTUNG.md und CLAUD
 verwenden. Zuerst Plugin/Colima prüfen, Fachverträge definieren und Pakete C1/L1/L2 konkret aufteilen.
 C1 konfiguriert DB-Auswahl und erste Migrationen; L2 stellt den lokalen Container-Durchstich her.
 Offene Produktdetails: KONZEPT.md Abschnitt 9. Keine bestätigten Grundentscheidungen neu aufrollen.
+
+## Nachtrag 14.10.2026 – Sprachvorgabe
+
+Code Englisch, nutzerseitige Texte Deutsch verbindlich im Entwicklungsablauf festgehalten.
+Backend-AGENTS.md, CLAUDE.md, Startprompt und beide Client-AGENTS.md verweisen darauf.
+Nur Dokumentation geändert; Diffs geprüft, Builds nicht erneut ausgeführt.
+Bestehende deutsche UI-Texte sind noch direkt eingebettet; beim nächsten Client-Schritt
+in Lokalisierungsressourcen überführen. Fachlicher Arbeitsplan ansonsten unverändert.

@@ -53,6 +53,12 @@ Arbeitsweise:
    Lies Diffs und Testergebnisse, behebe Befunde und integriere die Ergebnisse tatsächlich.
    Dokumentiere nicht geprüfte Dinge als offen statt erfolgreiche Tests zu behaupten.
 
+Sprache für sämtliche Repositories und Agent-Aufträge:
+- Code, Kommentare, Tests, API-/DB-Bezeichner und interne Logs auf Englisch.
+- Oberfläche, nutzerseitige Meldungen, Benachrichtigungen und Exportbeschriftungen auf Deutsch.
+- Nutzertexte in Lokalisierungsressourcen, deren Schlüssel auf Englisch; Details in
+  docs/ENTWICKLUNGSABLAUF.md. Konzeptdokumente und Kommunikation bleiben Deutsch.
+
 Verbindliche Architektur:
 - Backend: Swift, Vapor, Fluent; MariaDB empfohlen und SQLite unterstützt, kein PostgreSQL.
 - PWA: Svelte mit shadcn-svelte, statischer Produktionsbuild; Node nur Entwicklung/Build.
