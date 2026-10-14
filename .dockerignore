@@ -1,0 +1,11 @@
+.git
+.build
+.swiftpm
+.idea
+.env
+.env.*
+!.env.example
+docs
+deploy
+*.sqlite*
+.DS_Store
