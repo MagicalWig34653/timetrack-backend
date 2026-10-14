@@ -25,7 +25,7 @@ Sicherheitsrelevant und noch ungeprüft: siehe „Offen“.
   Automation-Endpunkt (`Bearer`, getrennt von Sitzungen). `swift test` → 61 Tests, 0 Fehler, inkl. MariaDB 12.3.3.
 - **L4/L5 (Claude)**: Heute/Zeit/Tag, Modelle, Orte, Zeitkonto, Vorschläge, Geräte; Playwright **29/29** gegen echtes Backend (ADR-Beispiel 7:15),
   101 Unit-Tests, 6 Mock-E2E; `docs/SHORTCUTS.md` (in PWA-Repo).
-- **Codex-Review fand 2 Fehler** (Besuchsgrenze bei fehlendem Departure; Segmentverlust bei Modellwechsel mit anderer Tagesgrenze) → C7 in Arbeit.
+- **Codex-Review fand 2 Fehler** (Besuchsgrenze bei fehlendem Departure; Segmentverlust bei Modellwechsel mit anderer Tagesgrenze) → behoben in C7 (64 Tests grün, ADR-0004-Ergänzung).
 - **Nicht belegt**: Shortcuts auf echtem iPhone/Mac, Zeitleisten-Darstellung der neuen Seiten mit Echtdaten auf Mobilbreite/Dark Mode, Rate-Limit 429 der Automation, MariaDB-E2E.
 
 ## Offen / nicht belegt
