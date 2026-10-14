@@ -1,23 +1,412 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.0.1
-  description: Initial liveness contract. No authentication or domain API implemented yet.
+  version: 0.1.0
+  description: |
+    Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
+    PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
+    Annahmen (ADR-0003): Basispfad /api/v1; Sitzung per HttpOnly-Cookie `tt_session`;
+    schreibende Requests mit Sitzung senden Header `X-CSRF-Token` (Wert aus GET /api/v1/auth/session).
+    WebAuthn-Optionen/-Antworten folgen den JSON-Formen der W3C-Spezifikation (base64url-Felder).
+    Fehler immer als application/json `{ "error": { "code": string, "message": string } }`.
+    Antworten verraten nie, ob eine Kontoadresse existiert.
+servers:
+  - url: /
 paths:
   /health:
     get:
       operationId: health
-      description: Process liveness only; does not verify database readiness.
+      description: Prozess-Liveness, ohne Datenbank.
       responses:
         '200':
-          description: Process is responding
+          description: Prozess antwortet
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Status' }
+  /ready:
+    get:
+      operationId: ready
+      description: Readiness inklusive Datenbankverbindung und angewendeter Migrationen.
+      responses:
+        '200': { description: bereit, content: { application/json: { schema: { $ref: '#/components/schemas/Status' } } } }
+        '503': { description: nicht bereit, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/v1/invitations/{token}:
+    get:
+      operationId: inspectInvitation
+      description: Prüft, ob ein Einladungstoken gültig ist (ohne Details zum Einladenden).
+      parameters: [ { name: token, in: path, required: true, schema: { type: string } } ]
+      responses:
+        '200':
+          description: gültig
           content:
             application/json:
               schema:
                 type: object
-                additionalProperties: false
-                required: [status]
+                required: [valid]
                 properties:
-                  status:
-                    type: string
-                    const: ok
+                  valid: { type: boolean, const: true }
+                  expiresAt: { type: string, format: date-time }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/auth/register/options:
+    post:
+      operationId: registerOptions
+      description: Startet Registrierung per Einladung; liefert WebAuthn-Creation-Options.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [inviteToken, handle, displayName]
+              properties:
+                inviteToken: { type: string }
+                handle: { type: string, pattern: '^[a-z0-9][a-z0-9._-]{2,31}$', description: eindeutige Kontokennung (Kleinbuchstaben); dient als Recovery-Identifier }
+                displayName: { type: string, minLength: 1, maxLength: 80 }
+                email: { type: string, format: email, description: optional; unverifiziert bis Bestätigung }
+      responses:
+        '200':
+          description: Challenge erzeugt
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreationOptions' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooMany' }
+  /api/v1/auth/register/verify:
+    post:
+      operationId: registerVerify
+      description: |
+        Prüft die Attestation und legt Konto, ersten Passkey und Sitzung atomar an; verbraucht die
+        Einladung genau einmal (paralleles Einlösen: genau ein Erfolg).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challengeId, credential]
+              properties:
+                challengeId: { type: string }
+                credential: { $ref: '#/components/schemas/RegistrationCredential' }
+                passkeyName: { type: string, maxLength: 80 }
+      responses:
+        '201':
+          description: Konto angelegt; Set-Cookie tt_session
+          content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/auth/login/options:
+    post:
+      operationId: loginOptions
+      description: Startet Anmeldung (discoverable credentials, keine Kontoangabe nötig).
+      responses:
+        '200':
+          description: Challenge erzeugt
+          content: { application/json: { schema: { $ref: '#/components/schemas/RequestOptions' } } }
+        '429': { $ref: '#/components/responses/TooMany' }
+  /api/v1/auth/login/verify:
+    post:
+      operationId: loginVerify
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challengeId, credential]
+              properties:
+                challengeId: { type: string }
+                credential: { $ref: '#/components/schemas/AuthenticationCredential' }
+      responses:
+        '200':
+          description: angemeldet; Set-Cookie tt_session
+          content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/auth/session:
+    get:
+      operationId: currentSession
+      description: Aktuelle Sitzung samt CSRF-Token und Konto.
+      security: [ { session: [] } ]
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      operationId: logout
+      security: [ { session: [], csrf: [] } ]
+      responses:
+        '204': { description: Sitzung beendet }
+  /api/v1/me/passkeys:
+    get:
+      operationId: listPasskeys
+      security: [ { session: [] } ]
+      responses:
+        '200':
+          description: Passkeys des eigenen Kontos
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Passkey' } }
+  /api/v1/me/passkeys/options:
+    post:
+      operationId: addPasskeyOptions
+      description: Weiteren Passkey hinzufügen; erfordert frische Authentisierung oder Recovery-Sitzung.
+      security: [ { session: [], csrf: [] } ]
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/CreationOptions' } } } }
+  /api/v1/me/passkeys/verify:
+    post:
+      operationId: addPasskeyVerify
+      security: [ { session: [], csrf: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challengeId, credential]
+              properties:
+                challengeId: { type: string }
+                credential: { $ref: '#/components/schemas/RegistrationCredential' }
+                passkeyName: { type: string, maxLength: 80 }
+      responses:
+        '201': { description: hinzugefügt, content: { application/json: { schema: { $ref: '#/components/schemas/Passkey' } } } }
+  /api/v1/me/passkeys/{id}:
+    patch:
+      operationId: renamePasskey
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string, maxLength: 80 } } } } }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Passkey' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      operationId: revokePasskey
+      description: Widerruft einen Passkey. Der letzte Passkey kann nur widerrufen werden, wenn eine Recovery-Methode aktiv ist.
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        '204': { description: widerrufen }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/me/recovery:
+    get:
+      operationId: recoveryStatus
+      security: [ { session: [] } ]
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/RecoveryStatus' } } } }
+  /api/v1/me/recovery/recovery-codes:
+    post:
+      operationId: generateRecoveryCodes
+      description: Erzeugt einen neuen Satz Recovery-Codes (invalidiert den alten). Klartext nur in dieser Antwort.
+      security: [ { session: [], csrf: [] } ]
+      responses:
+        '201':
+          description: Codes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [codes]
+                properties: { codes: { type: array, items: { type: string } } }
+    delete:
+      operationId: disableRecoveryCodes
+      security: [ { session: [], csrf: [] } ]
+      responses: { '204': { description: deaktiviert } }
+  /api/v1/me/recovery/fallback-password:
+    put:
+      operationId: setFallbackPassword
+      description: Setzt oder ersetzt das Rückfallpasswort (nur für Recovery, nie für normale Anmeldung).
+      security: [ { session: [], csrf: [] } ]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [password], properties: { password: { type: string, minLength: 12, maxLength: 256 } } } } }
+      responses: { '204': { description: gesetzt }, '400': { $ref: '#/components/responses/BadRequest' } }
+    delete:
+      operationId: removeFallbackPassword
+      security: [ { session: [], csrf: [] } ]
+      responses: { '204': { description: entfernt } }
+  /api/v1/me/recovery/email:
+    put:
+      operationId: enableEmailRecovery
+      description: Startet Verifikation der Adresse; 409/501 wenn Server ohne Mailversand konfiguriert ist.
+      security: [ { session: [], csrf: [] } ]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [email], properties: { email: { type: string, format: email } } } } }
+      responses: { '202': { description: Verifikationscode versendet }, '501': { $ref: '#/components/responses/NotImplemented' } }
+    delete:
+      operationId: disableEmailRecovery
+      security: [ { session: [], csrf: [] } ]
+      responses: { '204': { description: deaktiviert } }
+  /api/v1/me/recovery/email/verify:
+    post:
+      operationId: verifyRecoveryEmail
+      security: [ { session: [], csrf: [] } ]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [code], properties: { code: { type: string } } } } }
+      responses: { '204': { description: verifiziert und aktiv }, '400': { $ref: '#/components/responses/BadRequest' } }
+  /api/v1/auth/recovery/start:
+    post:
+      operationId: recoveryStart
+      description: |
+        Startet Wiederherstellung. Antwort ist für unbekannte Konten und gültige Konten gleich (202),
+        um Kontoexistenz nicht zu verraten. Methode `email` sendet einen Code (falls aktiv), `recovery-code`
+        und `fallback-password` erwarten Nachweis in /complete.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [method, identifier]
+              properties:
+                method: { type: string, enum: [email, recovery-code, fallback-password] }
+                identifier: { type: string, description: Konto-`handle` }
+      responses:
+        '202': { description: angenommen, content: { application/json: { schema: { type: object, required: [recoveryId], properties: { recoveryId: { type: string } } } } } }
+        '429': { $ref: '#/components/responses/TooMany' }
+  /api/v1/auth/recovery/complete:
+    post:
+      operationId: recoveryComplete
+      description: |
+        Prüft Nachweis (Code bzw. Passwort) atomar und einmalig; eröffnet eine kurzlebige Recovery-Sitzung
+        (Cookie tt_session mit Flag recovery=true), die nur das Einrichten eines neuen Passkeys und
+        Sitzungswiderruf erlaubt.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recoveryId, proof]
+              properties:
+                recoveryId: { type: string }
+                proof: { type: string }
+      responses:
+        '200': { description: Recovery-Sitzung, content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooMany' }
+  /api/v1/me/sessions:
+    delete:
+      operationId: revokeOtherSessions
+      description: Widerruft alle anderen Sitzungen des Kontos.
+      security: [ { session: [], csrf: [] } ]
+      responses: { '204': { description: widerrufen } }
+  /api/v1/admin/invitations:
+    get:
+      operationId: listInvitations
+      security: [ { session: [] } ]
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Invitation' } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: createInvitation
+      description: Erzeugt eine Einladung; Klartext-Token nur in dieser Antwort (Server speichert nur den Hash).
+      security: [ { session: [], csrf: [] } ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                expiresInHours: { type: integer, minimum: 1, maximum: 720, default: 72 }
+                note: { type: string, maxLength: 200 }
+      responses:
+        '201': { description: erzeugt, content: { application/json: { schema: { $ref: '#/components/schemas/InvitationCreated' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/admin/invitations/{id}:
+    delete:
+      operationId: revokeInvitation
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '204': { description: widerrufen }, '404': { $ref: '#/components/responses/NotFound' } }
+components:
+  securitySchemes:
+    session: { type: apiKey, in: cookie, name: tt_session }
+    csrf: { type: apiKey, in: header, name: X-CSRF-Token }
+  responses:
+    BadRequest: { description: ungültige Anfrage, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Unauthorized: { description: nicht angemeldet oder Nachweis ungültig, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Forbidden: { description: keine Berechtigung, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    NotFound: { description: nicht gefunden (auch bei fremden Objekten), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Conflict: { description: Konflikt, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    TooMany: { description: zu viele Versuche, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    NotImplemented: { description: auf diesem Server nicht konfiguriert, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  schemas:
+    Status:
+      type: object
+      required: [status]
+      properties: { status: { type: string, const: ok } }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties: { code: { type: string }, message: { type: string } }
+    CreationOptions:
+      type: object
+      required: [challengeId, publicKey]
+      properties:
+        challengeId: { type: string }
+        publicKey: { type: object, description: PublicKeyCredentialCreationOptionsJSON (W3C) }
+    RequestOptions:
+      type: object
+      required: [challengeId, publicKey]
+      properties:
+        challengeId: { type: string }
+        publicKey: { type: object, description: PublicKeyCredentialRequestOptionsJSON (W3C) }
+    RegistrationCredential:
+      type: object
+      description: RegistrationResponseJSON (W3C), base64url
+    AuthenticationCredential:
+      type: object
+      description: AuthenticationResponseJSON (W3C), base64url
+    Passkey:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        createdAt: { type: string, format: date-time }
+        lastUsedAt: { type: [string, 'null'], format: date-time }
+    Account:
+      type: object
+      required: [id, handle, displayName, role]
+      properties:
+        id: { type: string, format: uuid }
+        handle: { type: string }
+        displayName: { type: string }
+        role: { type: string, enum: [admin, member] }
+    Session:
+      type: object
+      required: [account, csrfToken, recovery]
+      properties:
+        account: { $ref: '#/components/schemas/Account' }
+        csrfToken: { type: string }
+        recovery: { type: boolean, description: true = eingeschränkte Recovery-Sitzung }
+        expiresAt: { type: string, format: date-time }
+    RecoveryStatus:
+      type: object
+      required: [recoveryCodes, fallbackPassword, email]
+      properties:
+        recoveryCodes: { type: object, required: [active], properties: { active: { type: boolean }, remaining: { type: integer } } }
+        fallbackPassword: { type: object, required: [active], properties: { active: { type: boolean } } }
+        email: { type: object, required: [available, active], properties: { available: { type: boolean, description: false wenn Server ohne Mailversand }, active: { type: boolean }, verified: { type: boolean } } }
+    Invitation:
+      type: object
+      required: [id, createdAt, expiresAt, status]
+      properties:
+        id: { type: string, format: uuid }
+        note: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        status: { type: string, enum: [open, used, expired, revoked] }
+    InvitationCreated:
+      allOf:
+        - $ref: '#/components/schemas/Invitation'
+        - type: object
+          required: [token]
+          properties: { token: { type: string } }

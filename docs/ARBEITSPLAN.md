@@ -1,16 +1,16 @@
 # Arbeitsplan und Agent-Übergabe
 
-Stand: 13.10.2026. Grundgerüste gemäß `REPOSITORIES.md` eingerichtet. Kein Agent besitzt aktuell einen Schreibbereich. Fachliche Implementierung folgt unter Claude-Leitung.
+Stand: 14.10.2026. Etappe 1 gestartet; Zuweisung gemäß ADR-0003.
 Gewichte unten sind ein Startvorschlag, vor Zuweisung nach technischem Durchstich anpassen.
 Abnahmebedingungen: `UMSETZUNG.md`. Vorgehen: `ENTWICKLUNGSABLAUF.md`.
 
-| ID | Paket | Geplante Verantwortung | Punkte | Status | Abhängigkeiten |
+| ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
 | --- | --- | --- | --- | --- | --- |
-| P0 | Voraussetzungen, Git, API-Verträge und tatsächliche Agent-Zuweisung | Claude-Lead | – | teilweise: Grundgerüste und Health-Vertrag vorhanden; Fachverträge/Zuweisung offen | keine |
-| C1 | Swift-Service, MariaDB/SQLite, erste Migrationen und DB-Tests | Codex | 5 | offen | P0 |
-| C2 | Einladung/Konten, WebAuthn-Verifikation und Recovery-Dienste mit Tests | Codex | 8 | offen | C1, API-Vertrag |
-| L1 | Svelte-Grundlage und Passkey-/Recovery-/Einladungsoberfläche | Claude-Agent | 8 | offen | P0, API-Vertrag; Integration nach C2 |
-| L2 | Compose, reproduzierbarer Build und Browserintegration mit Tests | Claude-Agent | 5 | offen | P0; Integration nach C1/L1/C2 |
+| P0 | Voraussetzungen, Git, API-Vertrag (`contracts/openapi.yaml`, ADR-0003), Zuweisung | Claude-Lead | – | integriert 14.10. | keine |
+| C1 | Swift-Konfiguration, MariaDB/SQLite, Migrationen, Modelle, /ready, DB-Testbasis | Codex | 5 | offen (Worktree `../timetrack-backend-wt/c1`) | P0 |
+| C2 | Einladung/Konten, Sitzung/CSRF, WebAuthn, Recovery-Dienste, Admin-Einladungs-API, Integrationstests | Codex | 8 | offen | C1 |
+| L1 | Svelte-Oberfläche Auth/Passkeys/Recovery/Einladungen (Repo timetrack-pwa) | Claude-Agent | 8 | offen | P0; Integration nach C2 |
+| L2 | Dockerfile, Compose dev/prod, MariaDB-Dev, amd64-Build, Browserdurchstich | Claude-Agent | 5 | offen | P0; Integration nach C1/C2/L1 |
 
 Vorgeschlagener Implementierungsumfang: Codex 13/26 Punkte, Claude 13/26 Punkte.
 Tatsächlich abgeschlossen: 0 Punkte; ein realer Codex-Anteil ist noch nicht messbar.
