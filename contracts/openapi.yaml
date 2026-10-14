@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.3.0
+  version: 0.3.1
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -20,7 +20,9 @@ info:
     (4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form
     `<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.
     (6) No session listing endpoint in stage 1; only revoking other sessions.
-    Stage 3 (v0.3.0): see docs/decisions/ADR-0005. Half days as integers (30 days = 60). Sick absences and documents are never part of shares.
+    Stage 3 (v0.3.0/0.3.1): see docs/decisions/ADR-0005 (Entscheidungen 0.3.1: GET vacation/settings liefert Standardwerte mit configured=false; Übertrag je Jahr; Abwesenheiten rejected/cancelled blockieren keine Überlappung
+    und haben countedHalfDays 0, countedHalfDays nur für kind=vacation; doppelte Freigabe 409 share_exists; Freigabe an sich selbst 400; Urlaubsansicht nur approved/taken; actual nur Tage mit Arbeitszeit;
+    maximale Zeiträume für absences/plan/shared view 366 Tage, time/days 93 Tage, sonst 400 range_too_large). Half days as integers (30 days = 60). Sick absences and documents are never part of shares.
     Stage 2 decisions (v0.2.1): a work model `validFrom` may lie in the past but must be later than the previous version's `validFrom` (else 409 model_overlap);
     days on or after it are then evaluated by the new version (explicit user act). Future days are never `provisional`; today and days with a running segment are.
     A second accept of a suggestion returns 409 `suggestion_resolved`. Further codes: timer_already_running, no_running_timer, segment_overlap, stale_version, model_overlap.
@@ -555,6 +557,20 @@ paths:
       security: [ { session: [] } ]
       parameters: [ { name: year, in: query, required: true, schema: { type: integer } } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/VacationBalance' } } } } }
+  /api/v1/vacation/entries:
+    get:
+      operationId: listVacationEntries
+      description: Stichtagsbestände und Korrekturen mit IDs.
+      security: [ { session: [] } ]
+      parameters: [ { name: year, in: query, required: true, schema: { type: integer } } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: object, required: [snapshots, adjustments], properties: { snapshots: { type: array, items: { type: object, required: [id, date, remainingHalfDays], properties: { id: { type: string, format: uuid }, date: { type: string, format: date }, remainingHalfDays: { type: integer } } } }, adjustments: { type: array, items: { type: object, required: [id, date, halfDays, reason], properties: { id: { type: string, format: uuid }, date: { type: string, format: date }, halfDays: { type: integer }, reason: { type: string } } } } } } } } } }
+  /api/v1/vacation/entries/{id}:
+    delete:
+      operationId: deleteVacationEntry
+      description: Löscht einen Stichtagsbestand oder eine Korrektur (eigene ID).
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '204': { description: gelöscht }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/v1/absences:
     get:
       operationId: listAbsences
@@ -570,6 +586,11 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AbsenceInput' } } } }
       responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/Absence' } } } }, '409': { $ref: '#/components/responses/Conflict' } }
   /api/v1/absences/{id}:
+    get:
+      operationId: getAbsence
+      security: [ { session: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Absence' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
     put:
       operationId: updateAbsence
       description: Ändert Zeitraum/Status; Statuswechsel zählt Tage nie doppelt (genehmigt→genommen). If-Match auf version.
@@ -910,9 +931,10 @@ components:
       type: object
       required: [region, annualEntitlementHalfDays]
       properties:
+        configured: { type: boolean, readOnly: true, description: false solange keine Einstellungen gespeichert sind; GET liefert dann die Standardwerte (200) }
         region: { type: string, default: DE-ST }
         annualEntitlementHalfDays: { type: integer, minimum: 0, default: 60, description: 30 Tage = 60 halbe Tage (ADR-0005) }
-        carryOverHalfDays: { type: integer, minimum: 0, default: 0, description: Übertrag aus dem Vorjahr, sofern kein Stichtagsbestand gilt }
+        carryOverByYear: { type: object, additionalProperties: { type: integer, minimum: 0 }, description: 'Übertrag je Urlaubsjahr in halben Tagen, z. B. {"2026": 8}; fehlend = 0, gilt nicht bei Stichtagsbestand im selben Jahr' }
         carryOverExpiry: { type: [string, 'null'], description: Verfall als MM-DD (z. B. 03-31) oder null }
     VacationBalance:
       type: object
@@ -920,6 +942,7 @@ components:
       properties:
         year: { type: integer }
         snapshotDate: { type: [string, 'null'], format: date }
+        snapshotRemainingHalfDays: { type: [integer, 'null'], description: Stichtagsbestand; bei Snapshot sind Anspruch und Übertrag des Jahres 0 }
         entitlementHalfDays: { type: integer }
         carryOverHalfDays: { type: integer }
         adjustmentHalfDays: { type: integer }
