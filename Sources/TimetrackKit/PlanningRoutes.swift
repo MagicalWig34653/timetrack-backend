@@ -54,7 +54,10 @@ func registerPlanningRoutes(_ app: Application, auth: AuthService) {
     }
     api.put("absences", ":id") { req async throws -> Response in
         let key = try id(req); let input = try timeDecode(AbsenceInputDTO.self, request: req)
-        let version = req.headers.first(name: .ifMatch).flatMap { Int($0.trimmingCharacters(in: CharacterSet(charactersIn: "\""))) }
+        guard let header = req.headers.first(name: .ifMatch) else { throw APIError.invalid }   // required by the contract
+        var token = header.trimmingCharacters(in: .whitespaces)
+        if token.hasPrefix("W/") { token.removeFirst(2) }
+        let version = Int(token.trimmingCharacters(in: CharacterSet(charactersIn: "\"")))
         return try await run(req) { try timeResponse(await $0.absences.update(key, input, version: version)) }
     }
     api.delete("absences", ":id") { req async throws -> Response in

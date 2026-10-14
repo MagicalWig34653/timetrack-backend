@@ -212,7 +212,7 @@ public struct DayEvaluationResult: Equatable, Encodable, Sendable {
     public let endAdjustSeconds: Int
     public let evaluatedWorkSeconds: Int
     public let creditSeconds: Int
-    public var deltaSeconds: Int { evaluatedWorkSeconds + creditSeconds - targetSeconds }
+    public var deltaSeconds: Int { saturatingAdd(saturatingAdd(evaluatedWorkSeconds, creditSeconds), saturatingNegate(targetSeconds)) }
     public let evaluatedStart: Date?
     public let evaluatedEnd: Date?
     public let provisional: Bool
