@@ -21,12 +21,14 @@ COPY Sources ./Sources
 # Tests/ must exist: SwiftPM validates declared test targets even when only building --product App.
 COPY Tests ./Tests
 # SwiftPM loads package manifests with massive thread parallelism, which crashes under QEMU user-mode
-# emulation (SIGILL, amd64 build on an arm64 host). Pinning this one step to a single CPU makes SwiftPM
-# load the manifests sequentially and fills the manifest cache; the build below then runs on all CPUs.
-# On native builds the extra step is cheap (a few seconds).
-RUN taskset -c 0 swift package describe > /dev/null
+# emulation (SIGILL, amd64 build on an arm64 host). QEMU_LIMIT=1 pins manifest loading and the build to
+# few CPUs and one job; native builds (default QEMU_LIMIT=0) use all CPUs. Example for emulated amd64:
+#   docker buildx build --platform linux/amd64 --build-arg QEMU_LIMIT=1 ...
+ARG QEMU_LIMIT=0
+RUN if [ "$QEMU_LIMIT" = "1" ]; then taskset -c 0 swift package describe > /dev/null; fi
 
-RUN taskset -c 0-1 swift build -c release --product App -j 2 \
+RUN if [ "$QEMU_LIMIT" = "1" ]; then LIMIT="taskset -c 0-1"; JOBS="-j 2"; else LIMIT=""; JOBS=""; fi; \
+    $LIMIT swift build -c release --product App $JOBS \
     && mkdir -p /staging \
     && cp "$(swift build -c release --show-bin-path)/App" /staging/App \
     && (find "$(swift build -c release --show-bin-path)" -maxdepth 1 -name '*.resources' -exec cp -R {} /staging/ \;)

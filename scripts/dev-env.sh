@@ -73,7 +73,8 @@ case "$cmd" in
   build-multiarch)
     # Multi-platform results cannot be loaded into the local daemon; write OCI archive to a tmp dir.
     out="$(mktemp -d)"
-    docker buildx build --platform linux/amd64,linux/arm64 \
+    # QEMU_LIMIT=1 keeps SwiftPM stable under emulation (needed on an arm64 host for amd64; harmless otherwise).
+    docker buildx build --platform linux/amd64,linux/arm64 --build-arg QEMU_LIMIT="${QEMU_LIMIT:-1}" \
       --output "type=oci,dest=$out/timetrack-backend.oci.tar" -t timetrack-dev-backend:multiarch .
     echo "OCI archive: $out/timetrack-backend.oci.tar (not pushed)" ;;
   test-db)
