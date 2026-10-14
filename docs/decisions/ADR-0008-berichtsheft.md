@@ -1,0 +1,11 @@
+# ADR-0008: Berichtsheft (Etappe 4a)
+
+Status: akzeptiert (Lead-Entscheidung 15.10.2026). Nutzerentscheidung 14.10.: kein IHK-Exportbeispiel vorhanden → **Standardformat**, später anpassbar (KONZEPT.md Abschnitt 9, Punkt 1 bleibt offen). Alles darunter sind Annahmen.
+
+- **Felder** (bestätigt): Lernfeld, Zeit, Notizen. Eintrag = Datum + Lernfeld (frei wählbarer Name aus der eigenen Lernfeldliste oder freier Text) + Dauer in Sekunden (optional, 0 erlaubt) + Notiz (Text, ≤ 4000 Zeichen). Mehrere Einträge pro Tag möglich. Wochen = ISO-Wochen (Montag–Sonntag), Zeitzone aus dem Arbeitsmodell des Tages (Standard Europe/Berlin).
+- **Lernfeldliste** je Konto frei pflegbar (Nummer optional, Name); keine vorgegebenen Inhalte erfunden. Einträge verweisen per Name-Snapshot (spätere Umbenennung ändert alte Einträge nicht).
+- **Wochenansicht**: Einträge nach Tag, Summe Berichtszeit je Woche und je Lernfeld, daneben die aus dem Zeittracking bekannte bewertete Arbeitszeit der Woche als Hinweis (kein Abgleichszwang, nichts wird automatisch befüllt oder erfunden). Wochenstatus `draft` | `done` (nur Markierung, keine Sperre; erledigte Wochen bleiben bearbeitbar, Änderung setzt wieder `draft` nicht automatisch).
+- **Kopierbare Ausgabe** (`GET /reports/weeks/{year}/{week}/text`): reiner Text für das IHK-Portal, pro Tag Zeilen `<Lernfeld> | <h:mm> h | <Notiz>`, Wochensumme; deutsche Beschriftung, UTF-8, ohne Formatierung; Reihenfolge Tag, dann Erfassungsreihenfolge. Format später anpassbar (separates Ausgabeprofil, hier nur `standard`).
+- **Quellen** (Texte/Bilder als Grundlage): Notizen und Dateien (über Dateispeicher C13) je Woche oder Tag, nur für den Eigentümer; Berichtsheft ohne KI vollständig nutzbar. KI-Entwürfe (Etappe 5/6) erzeugen später nur bearbeitbare Einträge, die als `draft: true`/`source: ai` gekennzeichnet sind und nichts erfinden.
+- **Rechte**: ausschließlich eigene Daten; keine Freigabe, auch nicht über Planfreigaben; MCP nur mit Scopes `reports:read` / `reports:write`. Änderungen mit `version`/If-Match (412 stale_version) und Löschen mit Bestätigung in der UI. Alte PDF-Berichtshefte: Archivdateien über Dateispeicher, strukturierte Übernahme offen (Etappe 6).
+- **Pakete**: C15 Backend (Persistenz, REST, Textausgabe), L13 PWA (Wochenansicht, Eingabe, Kopieren-Button, Lernfelder, Quellen). Danach MCP (ADR-0009).

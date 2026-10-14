@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.5.1
+  version: 0.6.0
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -20,6 +20,7 @@ info:
     (4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form
     `<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.
     (6) No session listing endpoint in stage 1; only revoking other sessions.
+    v0.6.0: Berichtsheft (ADR-0008). Fehlercodes: stale_version (412), not_found; Quellen mit fileId benötigen eine eigene Datei (404 sonst).
     v0.5.1: Speicher: 503 storage_unavailable (Backend einer bestehenden Datei nicht konfiguriert), 500 storage_corrupt, 409 conflict bei mehr als 20 Anhängen je Abwesenheit; PUT /admin/storage ersetzt die gesamte Konfiguration (`s3: null` löscht S3-Konfiguration und Secret, `s3` ohne secretAccessKey behält das gespeicherte Secret). OIDC: für purpose=link führen Fehler nach `/settings/identities?oidc_error=<code>`; 'frische Sitzung nötig' ist 403 reauth_required; ungültiges inviteToken bei start = 404; pendingId gilt 10 Minuten (danach 404); der Passkey-Widerruf zählt externe Identitäten als Anmeldemethode.
     v0.5.0: OIDC (optional) siehe ADR-0007. Konfiguration: OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET (optional), OIDC_NAME, OIDC_SCOPES (Standard `openid email profile`). Kein Pflicht-Authentik; Registrierung weiter nur mit Einladung.
     v0.4.1: Import-Ergänzungen (allowOvernight, errorCount, rolledBack, Fehlercodes unknown_kind/note_too_long/too_many_rows; rollback_conflict liefert conflicts auch oben; je Konto max. 20 offene Importe, 50 Vorlagen).
@@ -872,6 +873,96 @@ paths:
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '204': { description: entfernt }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/v1/reports/learning-fields:
+    get:
+      operationId: listLearningFields
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/LearningField' } } } } } }
+    post:
+      operationId: createLearningField
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LearningFieldInput' } } } }
+      responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/LearningField' } } } }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/v1/reports/learning-fields/{id}:
+    put:
+      operationId: updateLearningField
+      description: Benennt um oder sortiert; bestehende Einträge behalten ihren Namens-Snapshot.
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LearningFieldInput' } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/LearningField' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    delete:
+      operationId: deleteLearningField
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '204': { description: gelöscht }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/reports/entries:
+    post:
+      operationId: createReportEntry
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReportEntryInput' } } } }
+      responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/ReportEntry' } } } }, '400': { $ref: '#/components/responses/BadRequest' } }
+  /api/v1/reports/entries/{id}:
+    put:
+      operationId: updateReportEntry
+      description: If-Match mit version; sonst 412 stale_version.
+      security: [ { session: [], csrf: [] } ]
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: If-Match, in: header, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReportEntryInput' } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/ReportEntry' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '412': { description: veraltete Version, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } } }
+    delete:
+      operationId: deleteReportEntry
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '204': { description: gelöscht }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/reports/weeks/{year}/{week}:
+    get:
+      operationId: getReportWeek
+      description: ISO-Woche mit Einträgen, Summen, Status, Quellenanzahl und der bewerteten Arbeitszeit der Woche als Hinweis.
+      security: [ { session: [] } ]
+      parameters:
+        - { name: year, in: path, required: true, schema: { type: integer } }
+        - { name: week, in: path, required: true, schema: { type: integer, minimum: 1, maximum: 53 } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/ReportWeek' } } } }, '400': { $ref: '#/components/responses/BadRequest' } }
+    put:
+      operationId: putReportWeekStatus
+      security: [ { session: [], csrf: [] } ]
+      parameters:
+        - { name: year, in: path, required: true, schema: { type: integer } }
+        - { name: week, in: path, required: true, schema: { type: integer, minimum: 1, maximum: 53 } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [status], properties: { status: { type: string, enum: [draft, done] } } } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/ReportWeek' } } } } }
+  /api/v1/reports/weeks/{year}/{week}/text:
+    get:
+      operationId: getReportWeekText
+      description: Kopierbare Klartextausgabe im Standardformat (ADR-0008), text/plain; charset=utf-8.
+      security: [ { session: [] } ]
+      parameters:
+        - { name: year, in: path, required: true, schema: { type: integer } }
+        - { name: week, in: path, required: true, schema: { type: integer, minimum: 1, maximum: 53 } }
+      responses: { '200': { description: Text, content: { text/plain: { schema: { type: string } } } } }
+  /api/v1/reports/sources:
+    get:
+      operationId: listReportSources
+      security: [ { session: [] } ]
+      parameters:
+        - { name: year, in: query, required: true, schema: { type: integer } }
+        - { name: week, in: query, required: true, schema: { type: integer } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ReportSource' } } } } } }
+    post:
+      operationId: createReportSource
+      description: Textquelle (note) oder Dateiquelle (fileId aus POST /files).
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReportSourceInput' } } } }
+      responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/ReportSource' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/reports/sources/{id}:
+    delete:
+      operationId: deleteReportSource
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '204': { description: gelöscht }, '404': { $ref: '#/components/responses/NotFound' } }
 components:
   securitySchemes:
     session: { type: apiKey, in: cookie, name: tt_session }
@@ -1317,3 +1408,64 @@ components:
         emailHint: { type: [string, 'null'], description: Anzeige der E-Mail des Anbieters, nur Hinweis, nie Verknüpfungsgrundlage }
         linkedAt: { type: string, format: date-time }
         lastUsedAt: { type: [string, 'null'], format: date-time }
+    LearningFieldInput:
+      type: object
+      required: [name]
+      properties:
+        number: { type: [integer, 'null'], minimum: 0 }
+        name: { type: string, minLength: 1, maxLength: 120 }
+        sortOrder: { type: integer, default: 0 }
+    LearningField:
+      allOf:
+        - $ref: '#/components/schemas/LearningFieldInput'
+        - type: object
+          required: [id]
+          properties: { id: { type: string, format: uuid } }
+    ReportEntryInput:
+      type: object
+      required: [date, learningField]
+      properties:
+        date: { type: string, format: date }
+        learningFieldId: { type: [string, 'null'], format: uuid }
+        learningField: { type: string, minLength: 1, maxLength: 120, description: Name (Snapshot); bei learningFieldId wird der aktuelle Name übernommen }
+        durationSeconds: { type: integer, minimum: 0, maximum: 86400, default: 0 }
+        notes: { type: string, maxLength: 4000, default: '' }
+    ReportEntry:
+      allOf:
+        - $ref: '#/components/schemas/ReportEntryInput'
+        - type: object
+          required: [id, version, createdAt]
+          properties:
+            id: { type: string, format: uuid }
+            version: { type: integer }
+            createdAt: { type: string, format: date-time }
+            draft: { type: boolean, description: true bei später KI-erzeugten, noch nicht bestätigten Entwürfen }
+    ReportWeek:
+      type: object
+      required: [year, week, startDate, endDate, status, entries, totalSeconds, byLearningField, sourceCount]
+      properties:
+        year: { type: integer }
+        week: { type: integer }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        status: { type: string, enum: [draft, done] }
+        entries: { type: array, items: { $ref: '#/components/schemas/ReportEntry' } }
+        totalSeconds: { type: integer }
+        byLearningField: { type: array, items: { type: object, required: [learningField, seconds], properties: { learningField: { type: string }, seconds: { type: integer } } } }
+        trackedWorkSeconds: { type: integer, description: bewertete Arbeitszeit der Woche aus dem Zeittracking (nur Hinweis) }
+        sourceCount: { type: integer }
+    ReportSourceInput:
+      type: object
+      required: [year, week]
+      properties:
+        year: { type: integer }
+        week: { type: integer }
+        date: { type: [string, 'null'], format: date }
+        note: { type: [string, 'null'], maxLength: 4000 }
+        fileId: { type: [string, 'null'], format: uuid }
+    ReportSource:
+      allOf:
+        - $ref: '#/components/schemas/ReportSourceInput'
+        - type: object
+          required: [id, createdAt]
+          properties: { id: { type: string, format: uuid }, createdAt: { type: string, format: date-time }, file: { oneOf: [ { $ref: '#/components/schemas/FileMeta' }, { type: 'null' } ] } }
