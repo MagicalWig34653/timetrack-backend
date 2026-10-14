@@ -6,3 +6,4 @@
 .env.*
 !.env.example
 *.sqlite*
+deploy/pwa-static/

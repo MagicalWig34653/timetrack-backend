@@ -72,3 +72,17 @@ Backend hinter einem vorhandenen Reverse Proxy (Domain, TLS und Proxy werden hie
 
 - OIDC-Backend-Anbindung, Anmeldung per Dex gegen das Backend: noch nicht getestet.
 - SMTP mit TLS/AUTH, echte S3-Signaturen und Rechte: nicht abgedeckt.
+
+
+## Öffentliche Testadresse (eingerichtet 14.10.2026)
+
+Domain `test.example.org` → Reverse Proxy des Nutzers (TLS dort) → `192.0.2.10:18080` (dieser Mac). Nichts davon wird vom Projekt provisioniert.
+
+Lokale `.env` (nicht versioniert): `BACKEND_BIND_ADDR=0.0.0.0`, `PUBLIC_BASE_URL=https://test.example.org`, `WEBAUTHN_ORIGIN` identisch, `WEBAUTHN_RP_ID=test.example.org`,
+`PWA_STATIC_HOST_DIR=./deploy/pwa-static` (Kopie des PWA-Builds, ignoriert), `DATABASE_DRIVER=mariadb`, `AUTO_MIGRATE=true`; Start `scripts/dev-env.sh up-app`.
+
+Wichtig (Colima): Der Docker-Daemon läuft in einer VM, die die LAN-Adresse des Mac nicht kennt. `BACKEND_BIND_ADDR=192.0.2.10` scheitert deshalb mit „cannot assign requested address“; `0.0.0.0` funktioniert, Colima leitet den Port am Mac weiter (`*:18080`).
+Der Port ist damit im lokalen Netz offen – Zugriff nur über das eigene Netz/den Proxy zulassen. DB, Mailpit, S3Mock und Dex bleiben auf 127.0.0.1.
+
+Erster Admin: `docker compose --profile app run --rm -T backend bootstrap-admin` (Link `https://test.example.org/invite/<token>`, 72 h gültig, einmalig; nur Hash gespeichert).
+PWA aktualisieren: neuen Build nach `deploy/pwa-static/` kopieren (kein Neustart nötig); Backend aktualisieren: `scripts/dev-env.sh up-app` (baut das Image neu).
