@@ -24,7 +24,8 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
     if config.autoMigrate && !app.environment.arguments.contains("migrate") {
         try await app.autoMigrate()
     }
-    let service = AuthService(configuration: config, mailSender: mailSender)
+    let sender = try mailSender ?? config.smtp.map { try SMTPMailSender(configuration: $0, group: app.eventLoopGroup) }
+    let service = AuthService(configuration: config, mailSender: sender)
     // Replace Vapor's default error and URL logging middleware: invite URLs contain secrets.
     app.middleware = Middlewares()
     app.middleware.use(APIErrorMiddleware())

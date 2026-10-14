@@ -157,7 +157,7 @@ final class AuthTests: XCTestCase, @unchecked Sendable {
     }
     func testEmailVerificationExpiryAttemptsAndRecovery() async throws {
         let sender = RecordingMailSender()
-        try await withApp(environment: ["SMTP_HOST": "mail.test"], mail: sender) { app, service in
+        try await withApp(environment: ["SMTP_HOST": "mail.test", "SMTP_FROM": "sender@example.test"], mail: sender) { app, service in
             let (context, _) = try await registered(service, db: app.db)
             try await service.enableEmail("user@example.test", context: context, on: app.db)
             let verification = await sender.lastCode()
@@ -198,7 +198,7 @@ final class AuthTests: XCTestCase, @unchecked Sendable {
     }
     func exerciseConcurrency(environment: [String: String]) async throws {
         let mail = RecordingMailSender()
-        try await withApp(environment: environment.merging(["SMTP_HOST": "mail.test"]) { _, new in new }, mail: mail) { app, service in
+        try await withApp(environment: environment.merging(["SMTP_HOST": "mail.test", "SMTP_FROM": "sender@example.test"]) { _, new in new }, mail: mail) { app, service in
             let invite = try await service.createInvitation(.init(), context: nil, bootstrap: true, on: app.db)
             let connections = (0..<4).map { _ in app.databases.database(logger: app.logger, on: app.eventLoopGroup.next())! }
             let device = SoftwareAuthenticator()
