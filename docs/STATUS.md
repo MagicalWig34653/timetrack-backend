@@ -1,6 +1,6 @@
 # Aktueller Projektstand
 
-Stand: 14.10.2026. Etappe 0/1 (Grundlage und Konten) ist lokal lauffähig und getestet; `main` in beiden Repos.
+Stand: 14.10.2026. Etappe 0/1 (Grundlage und Konten) ist lokal lauffähig und getestet (arm64 nativ, amd64 emuliert); `main` in beiden Repos.
 Sicherheitsrelevant und noch ungeprüft: siehe „Offen“.
 
 ## Was läuft (vom Lead selbst ausgeführt)
@@ -20,9 +20,9 @@ Sicherheitsrelevant und noch ungeprüft: siehe „Offen“.
 
 ## Offen / nicht belegt
 
-- **Linux amd64**: Build unter QEMU in Colima läuft sehr langsam (SwiftPM stürzt ohne `taskset`-Workarounds ab; >35 min).
-  amd64-Image, Laufzeit (`/health`) und `build-multiarch` sind **nicht nachgewiesen**. Dockerfile nutzt `taskset` auch für native Builds
-  (unnötig, soll Build-Argument werden). Alternative: echter amd64-Host oder Rosetta-Colima.
+- **Linux amd64** (14.10., Lead): Image unter QEMU in Colima gebaut (≈55 min; SwiftPM braucht dort `taskset`-Workarounds), Container
+  `--platform linux/amd64` im SQLite-Modus: `uname -m` = x86_64, `/health` und `/ready` je 200. **Nicht belegt**: MariaDB-Modus unter amd64,
+  `build-multiarch`, echter amd64-Host (nur Emulation). Das Dockerfile wendet `taskset` auch bei nativen Builds an (soll Build-Argument werden).
 - Browserprüfung nur Headless-Chromium mit virtuellem Passkey; kein echter Plattform-Authenticator, kein Firefox/WebKit, kein Mobilbreite/Dark Mode.
 - E-Mail-Recovery nur gegen Fake-SMTP getestet (nicht gegen Mailpit/echten Server). MariaDB-Modus der E2E nicht umgesetzt.
 - Reverse-Proxy: Rate-Limit nutzt Peer-IP (kein `X-Forwarded-For`); globale `auth_lock`-Serialisierung begrenzt Durchsatz.
@@ -41,5 +41,5 @@ In Colima laufen fremde Projekte: nur `timetrack-dev-*` anfassen.
 
 Nächster Schritt: Etappe 2 (Zeittracking: Arbeitsmodelle, Abschnitte, Rundung, Konto) mit Vertrag zuerst; vorher amd64-Nachweis
 und Codex-Review von Docker/Compose. Worktrees `../timetrack-backend-wt/{c1,c2,c3,l2,l3a}` sind gemergt und können mit
-`git worktree remove` entfernt werden. Der amd64-Build (Agent L3a, Log `/private/tmp/claude-501/amd64-build.log`) kann noch laufen.
+`git worktree remove` entfernt werden.
 Keine Remotes, nichts veröffentlicht.
