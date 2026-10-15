@@ -17,14 +17,18 @@ referenzieren, nicht unabhängig duplizieren. Spätere Client-Vertragskopien mit
 Cross-Repo-Aufträge nennen Repos, Branches/Commits, erlaubte Dateien und Integrationsabnahme.
 Keine Hosting-URL erfinden. Schreibrechte müssen alle betroffenen Workspaces umfassen.
 
-## Einrichtung am 13.10.2026
+## Stand der Repositories (15.10.2026)
 
-Drei lokale Grundgerüste eingerichtet, Konzeptdokumente ins Backend übernommen.
-Backend: SwiftPM/Vapor, Fluent-Treiber als Abhängigkeiten; DB-Anbindung folgt.
-PWA: SvelteKit/TypeScript, Static Adapter, Tailwind und shadcn-svelte.
-Apple: reproduzierbares XcodeGen-Projekt mit macOS und iOS/iPadOS; watchOS folgt später.
-Keine Remotes, keine Veröffentlichung. Prüfstand steht ausschließlich in STATUS.md.
+Alle drei Repositories sind lokale Git-Repos ohne Remote; nichts ist veröffentlicht. Prüfstand ausschließlich in `STATUS.md`.
 
-Den Backend-Ordner in PhpStorm öffnen und Noctule verwenden; PWA separat in PhpStorm öffnen.
-Apple-Projekt: Timetrack.xcodeproj. IDE-Nutzerdateien werden nicht versioniert.
-Der Brainstorm-Ordner bleibt als historische Vorbereitung erhalten und ist nicht mehr kanonisch.
+| Repository | Inhalt und Stand |
+| --- | --- |
+| timetrack-backend | SwiftPM/Vapor/Fluent (MariaDB, SQLite), Pakete `TimetrackKit` und `App`; fachlich umgesetzt bis Etappe 4 (siehe `UMSETZUNG.md`). Führt `contracts/openapi.yaml`, `compose.yaml`, `Dockerfile`, `scripts/`, `deploy/` und alle globalen Dokumente. |
+| timetrack-pwa | SvelteKit (statischer Adapter), TypeScript, Tailwind, shadcn-svelte-Stil; alle Seiten der Etappen 1–4, Service Worker und Manifest; eigene Tests (Vitest, Playwright) und eigener Status im Repo. Wird als statischer Build vom Backend ausgeliefert. |
+| timetrack-apple | nur reproduzierbares XcodeGen-Projekt (`project.yml`, macOS und iOS/iPadOS); keine fachliche App, watchOS folgt später (Etappe 5). |
+
+Das Backend enthält die Konzeptdokumente; Vertragskopien in den Clients tragen Herkunft/Version. Den Backend-Ordner in
+PhpStorm mit Noctule öffnen, die PWA separat in PhpStorm; Apple-Projekt: `Timetrack.xcodeproj`. IDE-Nutzerdateien werden
+nicht versioniert. Der Brainstorm-Ordner bleibt als historische Vorbereitung erhalten und ist nicht mehr kanonisch.
+Parallele Schreiber arbeiten in eigenen Worktrees (`../timetrack-backend-wt/<paket>`, `../timetrack-pwa-wt/<paket>`),
+Regeln in `ENTWICKLUNGSABLAUF.md`.

@@ -14,8 +14,12 @@ Agent-Einstiege und Definition of Done; dessen Stack, Modellnamen und Skills wer
 | Tatsächlich implementiert, geprüft und noch fehlend | `STATUS.md` |
 | Aktive Pakete, Verantwortliche, nächste Schritte | `ARBEITSPLAN.md` |
 | Gesamte Implementierungsreihenfolge und Abnahme | `UMSETZUNG.md` |
-| Lokale Einrichtung und später echte Startbefehle | `../EINRICHTUNG.md` |
+| Lokale Einrichtung, Start-/Testbefehle, Konfiguration | `../EINRICHTUNG.md` |
 | Agent-Einstiege | `../AGENTS.md`, `../CLAUDE.md` |
+| Dokumentationslandkarte, ADR-Index | `README.md` |
+| Testdienste, Ports, Testdomain | `TESTUMGEBUNGEN.md` |
+| MCP-Anbindung und Tools | `MCP.md` |
+| Abhängigkeitslizenzen | `LIZENZEN.md` |
 
 Details nur in ihrer maßgeblichen Datei pflegen und von anderen Dateien darauf verweisen.
 Status ist eine Momentaufnahme, keine zweite Anforderungssammlung. Alte Details nicht nur anhängen:
@@ -105,5 +109,16 @@ Ersetzte ADRs bleiben als Historie erhalten und verweisen auf ihren Nachfolger.
 - Keine Secrets, privaten Daten oder maschinenspezifischen Zugangsdaten im Diff.
 - Ein frischer Agent kann den Stand und nächsten Schritt allein aus dem Repository rekonstruieren.
 
-Noch kein pauschales `make check`: Build-/Prüfbefehle erst mit der Anwendung anlegen und dokumentieren.
-Danach Worker gezielt testen lassen, Lead führt die vereinbarte Gesamtprüfung nach Integration aus.
+## Prüfbefehle
+
+Es gibt bewusst noch kein pauschales `make check` und kein `scripts/check-all.sh` (Backlog in `ARBEITSPLAN.md`).
+Der Lead führt vor jeder Übernahme selbst aus (Befehle und Voraussetzungen in `../EINRICHTUNG.md`):
+
+- Backend: `swift test --build-system native` (mit MariaDB-Variablen aus `scripts/dev-env.sh test-db` und eigener
+  `MARIADB_TEST_DB`, sonst werden MariaDB-Varianten übersprungen); bei größeren Änderungen `docker build --target build .`
+  bzw. `docker compose --profile app build backend` für den Linux-Compile.
+- PWA: `npm run check`, `npm test`, `npm run test:e2e:mock`, `npm run test:e2e` (echte Wegwerf-Backends), bei PWA-Änderungen `npm run test:e2e:pwa`.
+- Dokumentation: relative Links und genannte Dateipfade prüfen; Stand-Daten nur ändern, wenn der Inhalt verifiziert wurde.
+
+Worker testen gezielt ihren Bereich, der Lead führt nach der Integration die Gesamtprüfung aus und trägt Zahlen in `STATUS.md` ein.
+Nicht ausgeführte Prüfungen bleiben als offen markiert.
