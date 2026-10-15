@@ -14,7 +14,7 @@ struct McpToolContext: Sendable {
         try await auth.transaction(on: db) { tx in
             guard let account = try await Account.find(principal.accountId, on: tx), account.disabledAt == nil else { throw APIError.unauthorized }
             let id = try account.requireID()
-            let time = TimeServices(accountId: id, db: tx)
+            let time = TimeServices(accountId: id, db: tx, disabledModules: auth.configuration.disabledModules)
             return try await operation(McpToolContext(principal: principal, time: time,
                                                       reports: ReportService(accountId: id, db: tx, time: time), db: tx))
         }

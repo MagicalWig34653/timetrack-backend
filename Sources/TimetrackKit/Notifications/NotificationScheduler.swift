@@ -69,11 +69,11 @@ struct NotificationScheduler: Sendable {
         catch { logger.warning("notification scheduler: account lookup failed (\(type(of: error)))"); return }
         for account in accounts {
             guard await ownsLease() else { return }
-            do { try await auth.transaction(on: db) { tx in try await Self.remind(account, now: now, vapid: vapid != nil, on: tx); try await PushDispatcher.cap(account: account, on: tx) } }
+            do { try await auth.transaction(on: db) { tx in try await Self.remind(account, now: now, vapid: vapid != nil, on: tx, modules: auth.modules); try await PushDispatcher.cap(account: account, on: tx) } }
             catch { logger.warning("notification scheduler: reminders failed for one account (\(type(of: error)))") }
         }
         if let vapid {
-            do { try await PushDispatcher(db: db, sender: .init(vapid: vapid, transport: transport, policy: policy)).deliverDue(now: now, clockNow: { now.addingTimeInterval(Date().timeIntervalSince(started)) }, ownsLease: ownsLease) }
+            do { try await PushDispatcher(db: db, sender: .init(vapid: vapid, transport: transport, policy: policy), modules: auth.modules).deliverDue(now: now, clockNow: { now.addingTimeInterval(Date().timeIntervalSince(started)) }, ownsLease: ownsLease) }
             catch { logger.warning("notification scheduler: push delivery failed (\(type(of: error)))") }
         }
     }
@@ -84,11 +84,12 @@ struct NotificationScheduler: Sendable {
         let account: UUID, now: Date, clock: LocalClock, settings: NotificationSettingsDTO, pushAvailable: Bool, db: any Database
     }
 
-    static func remind(_ account: UUID, now: Date, vapid: Bool, on db: any Database) async throws {
+    static func remind(_ account: UUID, now: Date, vapid: Bool, on db: any Database, modules: ModuleRegistry = .init()) async throws {
         let settings = try await NotificationService.effectiveSettings(account, on: db)
         let context = Context(account: account, now: now, clock: try await LocalClock.resolve(account: account, now: now, on: db),
                               settings: settings, pushAvailable: vapid, db: db)
         for kind in NotificationKind.reminders {
+            if let key = ModuleKey.notification(kind), try await !modules.enabled(key, account: account, on: db) { continue }
             guard let category = settings.categories[kind], category.inApp || category.push else { continue }
             switch kind {
             case "running_timer": try await runningTimer(context, category)
@@ -178,6 +179,7 @@ struct PushDispatcher: Sendable {
     static let maxAttempts = 3
     let db: any Database
     let sender: PushSender
+    var modules = ModuleRegistry()
 
     static func retain(now: Date, on db: any Database) async throws {
         let old = try await PushOutboxRecord.query(on: db).filter(\.$status ~~ ["sent", "failed"])
@@ -229,6 +231,9 @@ struct PushDispatcher: Sendable {
             guard let account = try await Account.find(subscription.accountId, on: db), account.disabledAt == nil,
                   settings.categories[notification.kind]?.push ?? (notification.kind == "system") else {
                 try await finish("failed", error: "push_disabled"); continue
+            }
+            if let key = ModuleKey.notification(notification.kind), try await !modules.enabled(key, account: subscription.accountId, on: db) {
+                try await finish("failed", error: "module_disabled"); continue
             }
             let deliveryTime = currentTime()
             let clock = try await LocalClock.resolve(account: subscription.accountId, now: deliveryTime, on: db)

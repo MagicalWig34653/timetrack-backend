@@ -7,6 +7,7 @@ import Vapor
 struct TimeServices: Sendable {
     let accountId: UUID
     let db: any Database
+    var disabledModules: Set<ModuleKey> = []
     var models: WorkModelService { .init(scope: self) }
     var places: PlaceService { .init(scope: self) }
     var segments: SegmentService { .init(scope: self) }
@@ -27,7 +28,7 @@ struct TimeServices: Sendable {
         try await auth.transaction(on: db) { tx in
             let current = try await auth.authenticate(context.token, on: tx)
             try current.normal()
-            return try await operation(.init(accountId: current.account.requireID(), db: tx))
+            return try await operation(.init(accountId: current.account.requireID(), db: tx, disabledModules: auth.configuration.disabledModules))
         }
     }
 }

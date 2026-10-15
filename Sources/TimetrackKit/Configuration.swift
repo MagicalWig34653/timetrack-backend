@@ -27,6 +27,7 @@ public struct Configuration: Sendable {
     public let smtpHost: String?
     public let smtpPort: Int
     public let smtp: SMTPConfiguration?
+    public let disabledModules: Set<ModuleKey>
     public let oidc: OIDCConfiguration?
 
     public init(environment: [String: String] = ProcessInfo.processInfo.environment) throws {
@@ -59,6 +60,7 @@ public struct Configuration: Sendable {
         guard let driver = Driver(rawValue: environment["DATABASE_DRIVER"] ?? "sqlite") else {
             throw ConfigurationError(key: "DATABASE_DRIVER", reason: "expected mariadb or sqlite")
         }
+        disabledModules = try ModuleKey.parseDisabled(environment["MODULES_DISABLED"] ?? "")
         pwaStaticDirectory = environment["PWA_STATIC_DIR"] ?? "/srv/pwa"
         smtpHost = environment["SMTP_HOST"].flatMap { $0.isEmpty ? nil : $0 }
         smtpPort = try integer("SMTP_PORT", "587", 1...65535)

@@ -29,6 +29,7 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
     for migration in McpSchemaMigrations.migrations { app.migrations.add(migration) }
     for migration in OAuthSchema.migrations { app.migrations.add(migration) }
     for migration in NotificationSchema.migrations { app.migrations.add(migration) }
+    app.migrations.add(CreateModuleSettings())
     // Fluent installs the migrate command, including --revert and the global --yes flag.
     // Do not auto-apply migrations before explicit migrate/revert commands.
     if config.autoMigrate && !app.environment.arguments.contains("migrate") {
@@ -40,6 +41,7 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
     app.middleware = Middlewares()
     app.middleware.use(APIErrorMiddleware())
     app.middleware.use(TimeErrorMiddleware())
+    app.middleware.use(ModuleGuard(auth: service))
     app.middleware.use(DeviceScopeGuard())
     app.middleware.use(PWAStaticMiddleware(directory: config.pwaStaticDirectory))
     app.asyncCommands.use(BootstrapAdmin(service: service), as: "bootstrap-admin")

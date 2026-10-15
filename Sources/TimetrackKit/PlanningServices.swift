@@ -323,10 +323,12 @@ struct ShareService: Sendable {
         try await row.update(on: scope.db)
     }
     func incoming() async throws -> [IncomingShareDTO] {
+        guard try await scope.modules.enabled(.planning, account: scope.accountId, on: scope.db) else { return [] }
         let rows = try await ShareRecord.query(on: scope.db).filter(\.$recipientId == scope.accountId).filter(\.$revokedAt == nil).sort(\.$createdAt).all()
         var result: [IncomingShareDTO] = []
         for row in rows {
             guard let owner = try await Account.find(row.ownerId, on: scope.db), owner.disabledAt == nil else { continue }
+            guard try await scope.modules.enabled(.planning, account: row.ownerId, on: scope.db) else { continue }
             result.append(.init(id: try row.requireID(), ownerDisplayName: owner.displayName, scopes: row.scopes))
         }
         return result
@@ -338,7 +340,9 @@ struct ShareService: Sendable {
             throw APIError.missing
         }
         try LocalDate.checkedRange(from: from, to: to, maxDays: PlanningLimits.planningRangeDays)
-        let ownerScope = TimeServices(accountId: share.ownerId, db: scope.db)
+        try await scope.modules.require([.planning], account: scope.accountId, on: scope.db)
+        try await scope.modules.require([.planning], account: share.ownerId, on: scope.db)
+        let ownerScope = TimeServices(accountId: share.ownerId, db: scope.db, disabledModules: scope.disabledModules)
         var view = SharedViewDTO()
         if share.scopePlan {
             view.plan = try await ownerScope.plans.rows(from: from, to: to).map { .init(date: try LocalDate($0.date), mode: $0.mode) }

@@ -17,7 +17,7 @@ public struct McpPrincipal: Sendable {
 /// Resolves a `tto_` (OAuth access) or `ttp_` (personal) bearer token. Returns nil for unknown, malformed, expired, revoked
 /// or disabled-account credentials. These tokens are only valid for `/mcp` (audience is implicit); they are not session credentials.
 /// `last_used_at` is updated at most once per minute.
-public func authenticateMcpBearer(_ token: String, on db: any Database, now: Date = Date()) async throws -> McpPrincipal? {
+public func authenticateMcpBearer(_ token: String, on db: any Database, now: Date = Date(), disabledModules: Set<ModuleKey> = []) async throws -> McpPrincipal? {
     guard token.count == OAuthTokenFormat.length, token.utf8.allSatisfy({ $0 < 128 }) else { return nil }
     let hash = Secrets.hash(token)
     let stale = now.addingTimeInterval(-OAuthTokenFormat.lastUsedThrottle)
@@ -26,6 +26,7 @@ public func authenticateMcpBearer(_ token: String, on db: any Database, now: Dat
               record.revokedAt == nil, record.expiresAt > now,
               let grant = try await OAuthGrant.find(record.grantId, on: db), grant.revokedAt == nil,
               let account = try await Account.find(grant.accountId, on: db), account.disabledAt == nil else { return nil }
+        guard try await ModuleRegistry(locked: disabledModules).enabled(.mcp, account: grant.accountId, on: db) else { return nil }
         let id = try grant.requireID()
         if grant.lastUsedAt.map({ $0 < stale }) ?? true {
             try await OAuthGrant.query(on: db).filter(\.$id == id).set(\.$lastUsedAt, to: now).update()
@@ -38,6 +39,7 @@ public func authenticateMcpBearer(_ token: String, on db: any Database, now: Dat
         guard let record = try await ApiTokenRecord.query(on: db).filter(\.$tokenHash == hash).first(),
               record.revokedAt == nil, record.expiresAt > now,
               let account = try await Account.find(record.accountId, on: db), account.disabledAt == nil else { return nil }
+        guard try await ModuleRegistry(locked: disabledModules).enabled(.mcp, account: record.accountId, on: db) else { return nil }
         let id = try record.requireID()
         if record.lastUsedAt.map({ $0 < stale }) ?? true {
             try await ApiTokenRecord.query(on: db).filter(\.$id == id).set(\.$lastUsedAt, to: now).update()

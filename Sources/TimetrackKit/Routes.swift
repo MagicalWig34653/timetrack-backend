@@ -2,6 +2,7 @@ import Vapor
 import Fluent
 
 func registerRoutes(_ app: Application, service: AuthService) {
+    registerModuleRoutes(app, auth: service)
     registerTimeRoutes(app, auth: service)
     registerPlanningRoutes(app, auth: service)
     registerExportRoutes(app, auth: service)
@@ -9,7 +10,7 @@ func registerRoutes(_ app: Application, service: AuthService) {
     registerStorageRoutes(app, auth: service)
     registerReportRoutes(app, auth: service)
     registerOIDCRoutes(app, auth: service)
-    app.mcpAuthenticator = OAuthMcpAuthenticator()
+    app.mcpAuthenticator = OAuthMcpAuthenticator(disabledModules: service.configuration.disabledModules)
     registerMCPRoutes(app, auth: service)
     registerOAuthRoutes(app, auth: service)
     app.get("health") { _ in StatusResponse(status: "ok") }

@@ -107,8 +107,8 @@ func registerTimeRoutes(_ app: Application, auth: AuthService) {
         let input = try timeDecode(AutomationInput.self, request: req)
         guard let token = req.storage[DeviceContextKey.self] else { throw APIError.unauthorized }
         return try await auth.transaction(on: req.db) { tx in
-            let device = try await DeviceTokenService.authenticate(token, db: tx)
-            return try timeResponse(await TimeServices(accountId: device.accountId, db: tx).automation.process(input))
+            let device = try await DeviceTokenService.authenticate(token, db: tx, disabledModules: auth.configuration.disabledModules)
+            return try timeResponse(await TimeServices(accountId: device.accountId, db: tx, disabledModules: auth.configuration.disabledModules).automation.process(input))
         }
     }
 }
