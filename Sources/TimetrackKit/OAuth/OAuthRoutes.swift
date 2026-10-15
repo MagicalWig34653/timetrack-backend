@@ -3,6 +3,7 @@ import Fluent
 
 func registerOAuthRoutes(_ app: Application, auth: AuthService) {
     let oauth = OAuthService(auth: auth)
+    let tokenLimiter = OAuthTokenLimiter()
     let credentials = OAuthCredentialService(auth: auth, oauth: oauth)
     let api = app.grouped("api", "v1").grouped(SessionMiddleware(service: auth))
     @Sendable func ip(_ req: Request) -> String { req.remoteAddress?.ipAddress ?? "unknown" }
@@ -68,7 +69,9 @@ func registerOAuthRoutes(_ app: Application, auth: AuthService) {
 
     app.post("oauth", "token") { req in
         try await machine(req) {
+            try await tokenLimiter.admit(ip: ip(req))
             let form = try req.content.decode(TokenForm.self)
+            try await tokenLimiter.admit(ip: ip(req), client: String((form.client_id ?? "unknown").prefix(128)))
             return try json(await oauth.token(form, on: req.db), req)
         }
     }

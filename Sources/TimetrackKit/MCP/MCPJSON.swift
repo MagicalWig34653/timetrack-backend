@@ -79,7 +79,7 @@ indirect enum McpJSON: Sendable, Equatable, Codable {
         }
     }
     static func hm(_ seconds: Int) -> String {
-        let total = abs(seconds) / 60
+        let total = seconds.magnitude / 60
         return (seconds < 0 ? "-" : "") + "\(total / 60):" + String(format: "%02d", total % 60)
     }
 }

@@ -54,6 +54,7 @@ final class StoredFileRecord: Model, @unchecked Sendable {
     @Field(key: "size") var size: Int
     @Field(key: "sha256") var sha256: String
     @Field(key: "backend") var backend: String
+    @OptionalField(key: "storage_location") var storageLocation: String?
     @Field(key: "storage_key") var storageKey: String
     @Field(key: "state") var state: String
     @Field(key: "created_at") var createdAt: Date
@@ -84,7 +85,7 @@ final class AbsenceAttachmentRecord: Model, @unchecked Sendable {
 // MARK: Migration
 
 enum StorageSchema {
-    static let migrations: [any Migration] = [CreateStorageTables()]
+    static let migrations: [any Migration] = [CreateStorageTables(), BindStorageLocations()]
 }
 
 struct CreateStorageTables: AsyncMigration {
@@ -197,5 +198,30 @@ struct StorageSettingsDTO: Content, Equatable {
             .init(endpoint: $0, region: row.s3Region ?? "", bucket: row.s3Bucket ?? "", pathStyle: row.s3PathStyle, accessKeyId: row.s3AccessKeyId ?? "")
         }
         self.init(rules: row.rules, maxUploadBytes: row.maxUploadBytes, localPath: row.localPath, s3: s3, hasSecret: row.s3SecretCiphertext != nil)
+    }
+}
+
+/// Bind historical rows using the configuration present at migration time.
+struct BindStorageLocations: AsyncMigration {
+    func prepare(on db: any Database) async throws {
+        try await db.schema("stored_files").field("storage_location", .string).update()
+        let settings = try await StorageSettingsRecord.find(StorageSettingsRecord.rowId, on: db)
+        for kind in StorageBackendKind.allCases {
+            try await StoredFileRecord.query(on: db).filter(\.$backend == kind.rawValue)
+                .set(\.$storageLocation, to: StorageLocation.identity(kind, settings: settings)).update()
+        }
+    }
+    func revert(on db: any Database) async throws {
+        try await db.schema("stored_files").deleteField("storage_location").update()
+    }
+}
+
+enum StorageLocation {
+    static func identity(_ kind: StorageBackendKind, settings: StorageSettingsRecord?) -> String {
+        switch kind {
+        case .db: return "db"
+        case .local: return "local:" + (settings?.localPath.map { LocalFSBackend.realpath($0) ?? $0 } ?? "unavailable")
+        case .s3: return "s3:" + (settings?.s3Endpoint ?? "unavailable") + "\n" + (settings?.s3Bucket ?? "")
+        }
     }
 }

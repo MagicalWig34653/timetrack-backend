@@ -58,18 +58,22 @@ struct NotificationScheduler: Sendable {
     let db: any Database
     let vapid: VapidConfiguration?
     let transport: any PushTransport
+    var policy = PushEndpointPolicy()
     let logger: Logger
 
-    func runOnce(now: Date = Date()) async {
+    func runOnce(now: Date = Date(), ownsLease: @escaping @Sendable () async -> Bool = { true }) async {
+        let started = Date()
+        try? await PushDispatcher.retain(now: now, on: db)
         let accounts: [UUID]
         do { accounts = try await Account.query(on: db).filter(\.$disabledAt == nil).all().compactMap(\.id) }
         catch { logger.warning("notification scheduler: account lookup failed (\(type(of: error)))"); return }
         for account in accounts {
-            do { try await auth.transaction(on: db) { tx in try await Self.remind(account, now: now, vapid: vapid != nil, on: tx) } }
+            guard await ownsLease() else { return }
+            do { try await auth.transaction(on: db) { tx in try await Self.remind(account, now: now, vapid: vapid != nil, on: tx); try await PushDispatcher.cap(account: account, on: tx) } }
             catch { logger.warning("notification scheduler: reminders failed for one account (\(type(of: error)))") }
         }
         if let vapid {
-            do { try await PushDispatcher(db: db, sender: .init(vapid: vapid, transport: transport)).deliverDue(now: now) }
+            do { try await PushDispatcher(db: db, sender: .init(vapid: vapid, transport: transport, policy: policy)).deliverDue(now: now, clockNow: { now.addingTimeInterval(Date().timeIntervalSince(started)) }, ownsLease: ownsLease) }
             catch { logger.warning("notification scheduler: push delivery failed (\(type(of: error)))") }
         }
     }
@@ -165,6 +169,7 @@ struct NotificationScheduler: Sendable {
             item.status = deferUntil == nil ? "pending" : "deferred"; item.attempts = 0; item.nextAttemptAt = deferUntil ?? c.now; item.createdAt = c.now
             try await item.create(on: c.db)
         }
+        try await PushDispatcher.cap(account: c.account, on: c.db)
     }
 }
 
@@ -174,28 +179,84 @@ struct PushDispatcher: Sendable {
     let db: any Database
     let sender: PushSender
 
-    func deliverDue(now: Date) async throws {
+    static func retain(now: Date, on db: any Database) async throws {
+        let old = try await PushOutboxRecord.query(on: db).filter(\.$status ~~ ["sent", "failed"])
+            .filter(\.$completedAt < now.addingTimeInterval(-14 * 86400)).sort(\.$completedAt).limit(200).all()
+        let ids = old.compactMap(\.id)
+        if !ids.isEmpty { try await PushOutboxRecord.query(on: db).filter(\.$id ~~ ids).delete() }
+    }
+
+    static func cap(account: UUID, on db: any Database) async throws {
+        let subscriptions = try await PushSubscriptionRecord.query(on: db).filter(\.$accountId == account).all().compactMap(\.id)
+        guard !subscriptions.isEmpty else { return }
+        let pending = try await PushOutboxRecord.query(on: db).filter(\.$subscriptionId ~~ subscriptions)
+            .filter(\.$status ~~ ["pending", "deferred"]).sort(\.$createdAt, .descending).sort(\.$id).all()
+        let ids = pending.dropFirst(200).compactMap(\.id)
+        if !ids.isEmpty {
+            try await PushOutboxRecord.query(on: db).filter(\.$id ~~ ids).filter(\.$claimToken == nil).delete()
+        }
+    }
+
+    func deliverDue(now: Date, clockNow: (@Sendable () -> Date)? = nil, ownsLease: @escaping @Sendable () async -> Bool = { true }) async throws {
+        let started = Date()
+        // Preserve injected clocks while advancing time during slow deliveries.
+        @Sendable func currentTime() -> Date { clockNow?() ?? now.addingTimeInterval(Date().timeIntervalSince(started)) }
+        try await PushOutboxRecord.query(on: db).filter(\.$claimedAt < now.addingTimeInterval(-300))
+            .set(\.$claimToken, to: nil).set(\.$claimedAt, to: nil).update()
         let due = try await PushOutboxRecord.query(on: db).filter(\.$status ~~ ["pending", "deferred"]).filter(\.$nextAttemptAt <= now)
-            .sort(\.$nextAttemptAt).limit(100).all()
+            .filter(\.$claimToken == nil).sort(\.$nextAttemptAt).limit(100).all()
         for item in due {
+            guard await ownsLease() else { return }
+            let token = UUID().uuidString, id = try item.requireID()
+            let claimed = try await conditionalWrite(on: db) { connection in
+                try await PushOutboxRecord.query(on: connection).filter(\.$id == id)
+                    .filter(\.$status ~~ ["pending", "deferred"]).filter(\.$claimToken == nil)
+                    .set(\.$claimToken, to: token).set(\.$claimedAt, to: currentTime()).update()
+            }
+            guard claimed else { continue }
+            func finish(_ status: String, error: String? = nil, next: Date? = nil, attempts: Int? = nil) async throws {
+                try await PushOutboxRecord.query(on: db).filter(\.$id == id).filter(\.$claimToken == token)
+                    .set(\.$status, to: status).set(\.$errorCode, to: error)
+                    .set(\.$attempts, to: attempts ?? item.attempts).set(\.$nextAttemptAt, to: next ?? item.nextAttemptAt)
+                    .set(\.$completedAt, to: ["sent", "failed"].contains(status) ? currentTime() : nil)
+                    .set(\.$claimToken, to: nil).set(\.$claimedAt, to: nil).update()
+            }
             guard let subscription = try await PushSubscriptionRecord.find(item.subscriptionId, on: db),
                   let notification = try await NotificationRecord.find(item.notificationId, on: db) else {
-                item.status = "failed"; item.errorCode = "subscription_removed"; try await item.update(on: db); continue
+                try await finish("failed", error: "subscription_removed"); continue
             }
+            let settings = try await NotificationService.effectiveSettings(subscription.accountId, on: db)
+            guard let account = try await Account.find(subscription.accountId, on: db), account.disabledAt == nil,
+                  settings.categories[notification.kind]?.push ?? (notification.kind == "system") else {
+                try await finish("failed", error: "push_disabled"); continue
+            }
+            let deliveryTime = currentTime()
+            let clock = try await LocalClock.resolve(account: subscription.accountId, now: deliveryTime, on: db)
+            if clock.inQuietHours(deliveryTime, start: settings.quietStart, end: settings.quietEnd), let end = settings.quietEnd {
+                try await finish("deferred", next: clock.quietEnd(after: deliveryTime, end: end)); continue
+            }
+            guard await ownsLease() else { try await finish(item.status); return }
             let message = PushMessage(kind: notification.kind, url: notification.url ?? "/", tag: notification.dedupKey)
-            let outcome = await sender.deliver(message, endpoint: subscription.endpoint, p256dh: subscription.p256dh, auth: subscription.auth, now: now)
-            item.attempts += 1
-            switch outcome {
-            case .delivered: item.status = "sent"; item.errorCode = nil
-            case .gone: item.status = "failed"; item.errorCode = "gone"
-            case .failed(let code): item.status = "failed"; item.errorCode = code
-            case .retry(let code):
-                item.errorCode = code
-                if item.attempts >= Self.maxAttempts { item.status = "failed" }
-                else { item.status = "pending"; item.nextAttemptAt = now.addingTimeInterval(60 * pow(5, Double(item.attempts - 1))) }
+            let heartbeat = Task {
+                while !Task.isCancelled {
+                    do { try await Task.sleep(nanoseconds: 30_000_000_000) } catch { return }
+                    guard await ownsLease() else { return }
+                    try? await PushOutboxRecord.query(on: db).filter(\.$id == id).filter(\.$claimToken == token)
+                        .set(\.$claimedAt, to: currentTime()).update()
+                }
             }
-            if outcome != .gone { try await item.update(on: db) }
-            try await Self.record(outcome, subscription: subscription.requireID(), now: now, on: db)
+            let outcome = await sender.deliver(message, endpoint: subscription.endpoint, p256dh: subscription.p256dh, auth: subscription.auth, now: deliveryTime)
+            heartbeat.cancel()
+            let attempts = item.attempts + 1
+            switch outcome {
+            case .delivered: try await finish("sent", attempts: attempts)
+            case .gone: try await finish("failed", error: "gone", attempts: attempts)
+            case .failed(let code): try await finish("failed", error: code, attempts: attempts)
+            case .retry(let code):
+                try await finish(attempts >= Self.maxAttempts ? "failed" : "pending", error: code,
+                                 next: now.addingTimeInterval(60 * pow(5, Double(attempts - 1))), attempts: attempts)
+            }
+            try await Self.record(outcome, subscription: subscription.requireID(), now: deliveryTime, on: db)
         }
     }
 

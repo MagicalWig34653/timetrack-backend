@@ -219,18 +219,20 @@ extension AuthTests {
         let oldLarge = try await download(app, admin, largeId); XCTAssertEqual(Data(oldLarge.body.readableBytesView), large)
         let oldSmall = try await download(app, admin, smallId); XCTAssertEqual(Data(oldSmall.body.readableBytesView), small)
 
-        // The local backend becomes unconfigured: existing local file -> 503, no silent fallback, no silent loss.
+        // The original local root becomes unavailable: preserve metadata until it returns.
+        try FileManager.default.moveItem(atPath: directory, toPath: directory + "-offline")
         try await api(app, admin, .PUT, "admin/storage", ["rules": [rule(nil, "db")], "localPath": NSNull()])
         let unavailable = try await download(app, admin, largeId, .serviceUnavailable)
         try await eq(errorCode(unavailable), "storage_unavailable")
         let stillThere = try await download(app, admin, smallId); XCTAssertEqual(Data(stillThere.body.readableBytesView), small)
-        try await eq(diskFiles(directory).count, 1)
+        try await eq(diskFiles(directory + "-offline").count, 1)
         // Deleting while unavailable hides the file but keeps the retry marker; cleanup finishes after repair.
-        try await api(app, admin, .DELETE, "files/" + largeId, nil, .noContent)
+        try await api(app, admin, .DELETE, "files/" + largeId, nil, .serviceUnavailable)
         _ = try await download(app, admin, largeId, .notFound)
         let pendingRow = try await StoredFileRecord.find(UUID(uuidString: largeId), on: app.db)
         let pending = try XCTUnwrap(pendingRow)
         try await eq(pending.state, "deleting"); try await yes(pending.cleanupAttempts >= 1)
+        try FileManager.default.moveItem(atPath: directory + "-offline", toPath: directory)
         try await api(app, admin, .PUT, "admin/storage", ["rules": [rule(nil, "db")], "localPath": directory])
         let purged = try await storageService(app, auth).cleanup(); try await eq(purged, 1)
         try await eq(diskFiles(directory), [])
@@ -316,12 +318,12 @@ extension AuthTests {
         try await eq(await storageService(app, auth).cleanup(), 2)
         try await eq(await StoredFileRecord.query(on: app.db).count(), 0)
 
-        // c) object removal fails: DELETE succeeds for the user, the row stays `deleting` with a retry marker.
+        // c) object removal fails: DELETE reports 503; the retry marker remains.
         try await api(app, admin, .PUT, "admin/storage", ["rules": [rule(nil, "local")], "localPath": directory])
         let id = try fileID(await fileUpload(app, admin, "c.txt", AuthTests.txt))
         try await eq(diskFiles(directory).count, 1)
         flags["delete"] = true
-        try await api(app, admin, .DELETE, "files/" + id, nil, .noContent)
+        try await api(app, admin, .DELETE, "files/" + id, nil, .serviceUnavailable)
         _ = try await download(app, admin, id, .notFound)
         let markerRow = try await StoredFileRecord.find(UUID(uuidString: id), on: app.db)
         let marker = try XCTUnwrap(markerRow)

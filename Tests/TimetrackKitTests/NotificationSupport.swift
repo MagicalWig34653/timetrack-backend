@@ -64,7 +64,9 @@ extension AuthTests {
         app.logger.logLevel = .critical
         let config = try Configuration(environment: ["SQLITE_PATH": ":memory:"].merging(database) { _, new in new })
         do {
-            try await configure(app, configuration: config, notifications: NotificationOptions(environment: env, transport: transport, interval: interval))
+            var options = NotificationOptions(environment: env, transport: transport, interval: interval)
+            options.pushAllowInsecureLoopback = true
+            try await configure(app, configuration: config, notifications: options)
             try await app.autoMigrate()
             try await run(app, AuthService(configuration: config, mailSender: nil), try XCTUnwrap(app.notificationRuntime))
             try await app.autoRevert()

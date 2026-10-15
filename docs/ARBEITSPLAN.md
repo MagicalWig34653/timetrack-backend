@@ -98,3 +98,15 @@ Gegenseitiges Review: C9 soll nach Rückkehr des Kontingents (ab 20.10.) von Cod
 | C18 | Hinweise, Erinnerungs-Scheduler, Web-Push-Sender (ADR-0010, Vertrag v0.8.0) | Claude-Agent (Codex-Limit) | 8 | integriert (Merge); 177 Tests inkl. MariaDB (Lead nachgelaufen); Web-Push-Verschlüsselung gegen RFC-8291-Vektor, Zustellung nur gegen Fake-Dienst | Vertrag v0.8.0 |
 | L16 | PWA: Manifest/Icons, Service Worker, Offline-Hinweis, Hinweiszentrum, Push-Einstellungen | Claude-Agent | 8 | **nicht gestartet**: Agent-Start vom Berechtigungsprüfer abgelehnt; Worktree `../timetrack-pwa-wt/l16` bereit | Vertrag v0.8.0 |
 | X2 | E2E mit Fake-Push-Dienst, Gesamtabgleich | Claude-Agent | 3 | offen | C18, L16 |
+
+## C19 – Review-Härtung (15.10.2026)
+
+Codex, alleiniger Schreiber auf `c19-review-fixes` im Backend-Hauptverzeichnis. Umfang: alle zwölf Befunde
+in `reviews/2026-10-15-codex-review.md`, Zahlen-/Datums-Sweep, Regressionstests und angehängte Migrationen.
+Vertrag v0.8.0 unverändert. Entscheidungen: `decisions/ADR-0011-c19-review-haertung.md`.
+Stand: umgesetzt, in Review, uncommitted. 14 C19-Tests bestanden; 2 MariaDB-Varianten übersprungen.
+Alle zwölf Fehler-Reinjektionen sowie Formatierungs-/ZIP64-Gegenproben schlagen erwartungsgemäß fehl.
+Gesamtlauf: 193 Tests, 15 übersprungen, 33 Socket-blockierte Tests (35 Meldungen); Build erfolgreich.
+MariaDB-Vorbereitung und TCP-Verbindung sind gesperrt, keine DB angelegt. Keine laufenden Jobs.
+Nächster Schritt: Lead prüft komplette Suite mit erlaubten Sockets und eigener MariaDB, danach Commit/Integration.
+Details: `handoffs/C19.md`.

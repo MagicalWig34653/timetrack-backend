@@ -339,7 +339,8 @@ struct ImportInterpreter: Sendable {
             if style == .time || style == .dateTime {
                 let day = Double(truncating: NSDecimalNumber(decimal: value))
                 let fraction = day - day.rounded(.down)
-                let total = Int((fraction * 86_400).rounded()) % 86_400
+                guard let rounded = Int(exactly: (fraction * 86_400).rounded()) else { return raw }
+                let total = rounded % 86_400
                 parts.append(String(format: "%02d:%02d", total / 3600, total % 3600 / 60) + (total % 60 != 0 ? String(format: ":%02d", total % 60) : ""))
             }
             return parts.isEmpty ? raw : parts.joined(separator: " ")

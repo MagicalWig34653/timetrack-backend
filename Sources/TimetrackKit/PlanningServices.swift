@@ -14,7 +14,7 @@ extension LocalDate {
     /// Inclusive span check shared by all range endpoints: `to >= from`, at most `maxDays` days.
     static func checkedRange(from: LocalDate, to: LocalDate, maxDays: Int) throws {
         guard to >= from else { throw APIError.invalid }
-        guard to <= from.addingDays(maxDays - 1) else { throw APIError(.badRequest, "range_too_large") }
+        guard from.distance(to: to) < maxDays else { throw APIError(.badRequest, "range_too_large") }
     }
 }
 
@@ -94,7 +94,7 @@ struct VacationService: Sendable {
     }
     func createAdjustment(_ input: VacationAdjustmentInput) async throws -> VacationBalanceDTO {
         try validateReason(input.reason)
-        guard (1990...2100).contains(input.date.year), abs(input.halfDays) <= 10_000 else { throw APIError.invalid }
+        guard (1990...2100).contains(input.date.year), (-10_000...10_000).contains(input.halfDays) else { throw APIError.invalid }
         let row = VacationAdjustmentRecord(); row.id = UUID(); row.accountId = scope.accountId
         row.date = input.date.description; row.halfDays = input.halfDays; row.reason = input.reason; row.createdAt = Date()
         try await row.create(on: scope.db)
@@ -181,7 +181,7 @@ struct AbsenceService: Sendable {
         return try rows.map { try $0.dto(counted: counter.lenientCount($0.engine())) }
     }
     private func validate(_ input: AbsenceInputDTO) throws {
-        guard input.startDate <= input.endDate, input.endDate <= input.startDate.addingDays(PlanningLimits.absenceDays - 1),
+        guard input.startDate <= input.endDate, input.startDate.distance(to: input.endDate) < PlanningLimits.absenceDays,
               input.note?.fitsColumn(500) ?? true, ["not_needed", "pending", "submitted"].contains(input.documentStatus ?? "not_needed") else { throw APIError.invalid }
         if let start = input.documentReferenceStart, let end = input.documentReferenceEnd, start > end { throw APIError.invalid }
     }
@@ -240,7 +240,7 @@ struct CalendarService: Sendable {
     func createCustom(_ input: CustomDayInput) async throws -> CalendarDayDTO {
         let name = input.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, name.fitsColumn(80), input.startDate <= input.endDate,
-              input.endDate <= input.startDate.addingDays(PlanningLimits.absenceDays - 1) else { throw APIError.invalid }
+              input.startDate.distance(to: input.endDate) < PlanningLimits.absenceDays else { throw APIError.invalid }
         let row = CustomCalendarDayRecord(); row.id = UUID(); row.accountId = scope.accountId; row.kind = input.kind.rawValue
         row.startDate = input.startDate.description; row.endDate = input.endDate.description; row.name = name
         try await row.create(on: scope.db)

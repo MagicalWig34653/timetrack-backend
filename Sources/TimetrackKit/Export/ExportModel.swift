@@ -54,11 +54,11 @@ enum ExportFormat {
         return String(format: "%02d:%02d", minutes / 60, minutes % 60)
     }
     static func duration(_ seconds: Int) -> String {
-        let minutes = abs(seconds) / 60
+        let minutes = seconds.magnitude / 60
         return (seconds < 0 ? "-" : "") + "\(minutes / 60):" + String(format: "%02d", minutes % 60)
     }
     static func signed(_ seconds: Int) -> String {
-        let minutes = abs(seconds) / 60
+        let minutes = seconds.magnitude / 60
         return (minutes == 0 ? "" : seconds < 0 ? "-" : "+") + "\(minutes / 60):" + String(format: "%02d", minutes % 60)
     }
     static func timestamp(_ value: Date) -> String {
