@@ -56,6 +56,9 @@ services:
       SMTP_PORT: ${SMTP_PORT:-1025}
       SMTP_TLS: ${SMTP_TLS:-off}
       SMTP_FROM: ${SMTP_FROM:-noreply@example.test}
+      NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-true}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
     volumes:
       - ${PWA_STATIC_HOST_DIR:-./deploy/pwa-empty}:/srv/pwa:ro
     ports:
