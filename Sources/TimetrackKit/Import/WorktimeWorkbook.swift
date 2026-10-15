@@ -27,10 +27,14 @@ struct WorktimeOptions: Codable, Sendable, Equatable {
     var pauseMinutes: Int? = nil
     var pauseStart: String? = nil
     var roundToMinutes: Bool? = nil
+    var holidayTimes: String? = nil
+    var partialCredit: String? = nil
     var rules: [WorktimeRemarkRule]? = nil
     var effectiveRules: [WorktimeRemarkRule] { rules ?? WorktimeRemarkRule.defaults }
     func validate() throws {
         guard pauseMode == nil || ["split", "none"].contains(pauseMode!),
+              holidayTimes == nil || ["discard", "keep"].contains(holidayTimes!),
+              partialCredit == nil || ["work", "absence"].contains(partialCredit!),
               pauseMinutes.map({ (0...240).contains($0) }) ?? true,
               rules.map({ $0.count <= 100 && $0.allSatisfy { !$0.pattern.isEmpty && $0.pattern.fitsColumn(80) } }) ?? true else { throw APIError.invalid }
         if let pauseStart {
@@ -49,6 +53,9 @@ struct WorktimePreview: Codable, Sendable {
     var lastDate: String?
     var dateSystem: String
     var sheetBalanceSeconds: Int?
+    var sheetBalanceUpToTodaySeconds: Int?
+    var sheetBalanceFutureSeconds: Int?
+    var firstContentDate: String?
     var unmappedRemarks: [Remark] = []
     var byAction: [String: Int] = [:]
 }
@@ -68,6 +75,9 @@ struct WorktimeParsed: Sendable {
     var errors: [ImportRowError]
     var date1904: Bool
     var balance: Int?
+    var balanceRows: [(date: LocalDate, seconds: Double)]
+    var dailyTargetSeconds: Int?
+    var firstContentDate: LocalDate?
 }
 
 enum WorktimeWorkbook {
@@ -106,10 +116,17 @@ enum WorktimeWorkbook {
         guard workbook.kind == "xlsx" else { throw APIError.invalid }
         var days: [LocalDate: WorktimeDay] = [:], conflicts = Set<LocalDate>()
         var errors: [ImportRowError] = [], offset = 0, system = false, balance = 0.0, hasBalance = false
+        var balanceRows: [(date: LocalDate, seconds: Double)] = []
+        var dailyTargetSeconds: Int?
+        var firstContentDate: LocalDate?
         for name in workbook.sheetNames {
             let sheet = try workbook.sheet(name); system = sheet.date1904
             let pauseCell = sheet.rows.first.map { cell($0, 7) } ?? .empty
             let pause = options.pauseMinutes.map { $0 * 60 } ?? ((try? seconds(pauseCell, roundMinutes: true)) ?? 0)
+            if dailyTargetSeconds == nil, let first = sheet.rows.first,
+               case .number(let raw, _) = cell(first, 1), let weekly = Double(raw), weekly.isFinite, weekly >= 0 {
+                dailyTargetSeconds = Int((weekly * 86400 / 5).rounded())
+            }
             guard (0...14400).contains(pause) else { throw APIError.invalid }
             var remaining = 0
             for (index, row) in sheet.rows.enumerated() {
@@ -120,8 +137,12 @@ enum WorktimeWorkbook {
                 guard let date = date(cell(row, 0), system: system) else {
                     errors.append(.init(row: number, code: "date_invalid")); continue
                 }
+                if cell(row, 1) != .empty || cell(row, 2) != .empty || cell(row, 5) != .empty {
+                    firstContentDate = min(firstContentDate ?? date, date)
+                }
                 if case .number(let raw, _) = cell(row, 4), let value = Double(raw), value.isFinite, abs(value) < 1e6 {
                     balance += value * 86400; hasBalance = true
+                    balanceRows.append((date, value * 86400))
                 }
                 if cell(row, 5) == .formulaWithoutValue {
                     errors.append(.init(row: number, code: "formula_without_value")); conflicts.insert(date); continue
@@ -147,7 +168,8 @@ enum WorktimeWorkbook {
             guard offset <= ImportLimits.maxRows else { throw ImportErrors.tooManyRows }
         }
         return .init(days: days.values.filter { !conflicts.contains($0.date) }.sorted { $0.date < $1.date }, errors: errors,
-                     date1904: system, balance: hasBalance ? Int(balance.rounded()) : nil)
+                     date1904: system, balance: hasBalance ? Int(balance.rounded()) : nil,
+                     balanceRows: balanceRows, dailyTargetSeconds: dailyTargetSeconds, firstContentDate: firstContentDate)
     }
     static func segments(_ day: WorktimeDay, action: WorktimeAction, mapping: ImportMapping) throws -> ([ImportCandidate], Bool) {
         guard let start = day.start, let end = day.end else { throw APIError(.badRequest, "missing_value") }

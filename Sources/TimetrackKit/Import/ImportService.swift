@@ -209,7 +209,7 @@ struct ImportService: Sendable {
         row.status = "committed"; row.committedAt = Date(); try await row.update(on: db)
         // The uploaded bytes are no longer needed: the batch and the job keep the hash and the counts.
         try await ImportFileRecord.query(on: db).filter(\.$jobId == id).delete()
-        return .init(absencesCreated: evaluation.absences.count, customDaysCreated: evaluation.customDays.count, batchId: batch.id!, created: batch.createdCount, skipped: batch.skippedCount, conflicts: nil, rolledBack: nil)
+        return .init(warnings: evaluation.preview.warnings, absencesCreated: evaluation.absences.count, customDaysCreated: evaluation.customDays.count, batchId: batch.id!, created: batch.createdCount, skipped: batch.skippedCount, conflicts: nil, rolledBack: nil)
     }
 
     func rollback(_ id: UUID) async throws -> ImportResultDTO {

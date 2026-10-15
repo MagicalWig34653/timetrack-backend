@@ -135,6 +135,157 @@ final class WorktimeEngineTests: XCTestCase {
 }
 
 extension AuthTests {
+    func scenarioC23PartialCreditSeparatesAbsenceRanges(_ app: Application, _ auth: AuthService) async throws {
+        let (owner, _) = try await registered(auth, db: app.db)
+        var model = modelBody("2026-05-04"); model["roundingEnabled"] = false; model["fixedBreaks"] = []
+        try await api(app, owner, .POST, "work-models", model, .created)
+        let data = try SyntheticWorktime.build([
+            .init(date: "2026-05-04", remark: "Urlaub"),
+            .init(date: "2026-05-05", end: 10 * 3600 + 33 * 60, remark: "Urlaub"),
+            .init(date: "2026-05-06", remark: "Urlaub")
+        ])
+        let id = try await worktimeUpload(app, owner, data)
+        let defaults = try object(await api(app, owner, .PUT, "imports/\(id)/mapping", SyntheticWorktime.mapping()))
+        try await eq((defaults["worktime"] as? [String: Any])?["absences"] as? Int, 2)
+        try await eq((defaults["worktime"] as? [String: Any])?["segments"] as? Int, 2)
+        let legacy = try object(await api(app, owner, .PUT, "imports/\(id)/mapping", SyntheticWorktime.mapping(options: ["partialCredit": "absence"])))
+        try await eq((legacy["worktime"] as? [String: Any])?["absences"] as? Int, 1)
+        try await eq((legacy["worktime"] as? [String: Any])?["segments"] as? Int, 0)
+    }
+    func testC23PartialCreditSeparatesAbsenceRangesSQLite() async throws { try await withApp(scenarioC23PartialCreditSeparatesAbsenceRanges) }
+    func testC23PartialCreditSeparatesAbsenceRangesMariaDB() async throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let host = env["MARIADB_TEST_HOST"] else { throw XCTSkip("MARIADB_TEST_HOST not set") }
+        let environment = ["DATABASE_DRIVER": "mariadb", "DB_HOST": host, "DB_PORT": env["MARIADB_TEST_PORT"] ?? "13306",
+            "DB_USER": env["MARIADB_TEST_USER"] ?? "timetrack", "DB_PASSWORD": env["MARIADB_TEST_PASSWORD"] ?? "",
+            "DB_NAME": env["MARIADB_TEST_DB"] ?? "timetrack_test_c23", "DB_TLS": "off"]
+        try await withApp(environment: environment, scenarioC23PartialCreditSeparatesAbsenceRanges)
+    }
+    func scenarioC23BuiltinHolidayTimesDiscardVsKeep(_ app: Application, _ auth: AuthService) async throws {
+        let (owner, _) = try await registered(auth, db: app.db)
+        var model = modelBody("2026-01-01"); model["roundingEnabled"] = false; model["fixedBreaks"] = []
+        try await api(app, owner, .POST, "work-models", model, .created)
+        let data = try SyntheticWorktime.build([
+            .init(date: "2026-01-01", remark: "Berufsschule"),
+            .init(date: "2026-05-01", end: 15 * 3600 + 45 * 60, remark: "Work on holiday")
+        ])
+        let id = try await worktimeUpload(app, owner, data)
+        let discarded = try object(await api(app, owner, .PUT, "imports/\(id)/mapping", SyntheticWorktime.mapping()))
+        try await eq((discarded["worktime"] as? [String: Any])?["segments"] as? Int, 0)
+        let warnings = try XCTUnwrap(discarded["warnings"] as? [[String: Any]])
+        try await eq(warnings.first { $0["code"] as? String == "school_on_holiday" }?["count"] as? Int, 1)
+        try await eq(warnings.first { $0["code"] as? String == "holiday_times_discarded" }?["count"] as? Int, 1)
+        let kept = try object(await api(app, owner, .PUT, "imports/\(id)/mapping", SyntheticWorktime.mapping(options: ["holidayTimes": "keep"])))
+        try await eq((kept["worktime"] as? [String: Any])?["segments"] as? Int, 4)
+        let result = try object(await api(app, owner, .POST, "imports/\(id)/commit"))
+        try await eq(result["created"] as? Int, 4)
+        let school = try object(await api(app, owner, .GET, "time/days/2026-01-01"))
+        let work = try object(await api(app, owner, .GET, "time/days/2026-05-01"))
+        try await eq(school["deltaSeconds"] as? Int, 38 * 3600 / 5 + 30 * 60 / 5)
+        try await eq(work["deltaSeconds"] as? Int, (15 * 3600 + 45 * 60) - 8 * 3600 - 30 * 60)
+        try await api(app, owner, .POST, "imports/\(id)/rollback")
+    }
+    func testC23BuiltinHolidayTimesDiscardVsKeepSQLite() async throws { try await withApp(scenarioC23BuiltinHolidayTimesDiscardVsKeep) }
+    func testC23BuiltinHolidayTimesDiscardVsKeepMariaDB() async throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let host = env["MARIADB_TEST_HOST"] else { throw XCTSkip("MARIADB_TEST_HOST not set") }
+        let environment = ["DATABASE_DRIVER": "mariadb", "DB_HOST": host, "DB_PORT": env["MARIADB_TEST_PORT"] ?? "13306",
+            "DB_USER": env["MARIADB_TEST_USER"] ?? "timetrack", "DB_PASSWORD": env["MARIADB_TEST_PASSWORD"] ?? "",
+            "DB_NAME": env["MARIADB_TEST_DB"] ?? "timetrack_test_c23", "DB_TLS": "off"]
+        try await withApp(environment: environment, scenarioC23BuiltinHolidayTimesDiscardVsKeep)
+    }
+    func scenarioC23OptionsAndThreshold(_ app: Application, _ auth: AuthService) async throws {
+        let (owner, _) = try await registered(auth, db: app.db)
+        app.storage[WorktimeClockKey.self] = { ImportInterpreter.instant(try! LocalDate("2026-05-10"), seconds: 20 * 3600, zone: .gmt)! }
+        let data = try SyntheticWorktime.build([
+            .init(date: "2026-05-01", end: 15 * 3600 + 45 * 60, remark: "Manual work"),
+            .init(date: "2026-05-04", end: 10 * 3600 + 33 * 60, remark: "Urlaub"),
+            .init(date: "2026-05-05", end: 10 * 3600 + 33 * 60, remark: "Krank"),
+            .init(date: "2026-05-06", end: 16 * 3600 + 17 * 60, remark: "Freigestellt"),
+            .init(date: "2026-05-07", end: 16 * 3600 + 18 * 60, remark: "Freigestellt")
+        ])
+        let id = try await worktimeUpload(app, owner, data)
+        let defaults = try object(await api(app, owner, .PUT, "imports/\(id)/mapping", SyntheticWorktime.mapping()))
+        let details = try XCTUnwrap(defaults["worktime"] as? [String: Any])
+        try await eq(details["segments"] as? Int, 6)
+        try await eq(details["absences"] as? Int, 1)
+        let warnings = try XCTUnwrap(defaults["warnings"] as? [[String: Any]])
+        try await eq(warnings.first { $0["code"] as? String == "credit_partial_as_work" }?["count"] as? Int, 3)
+        try await eq(warnings.first { $0["code"] as? String == "holiday_times_discarded" }?["count"] as? Int, 1)
+        let legacy = try object(await api(app, owner, .PUT, "imports/\(id)/mapping", SyntheticWorktime.mapping(options: ["holidayTimes": "keep", "partialCredit": "absence"])))
+        let legacyDetails = try XCTUnwrap(legacy["worktime"] as? [String: Any])
+        try await eq(legacyDetails["segments"] as? Int, 2)
+        try await eq(legacyDetails["absences"] as? Int, 3)
+        try await eq((legacy["warnings"] as? [[String: Any]])?.count, 0)
+        try await api(app, owner, .PUT, "imports/\(id)/mapping", SyntheticWorktime.mapping(options: ["holidayTimes": "bad"]), .badRequest)
+        try await api(app, owner, .PUT, "imports/\(id)/mapping", SyntheticWorktime.mapping(options: ["partialCredit": "bad"]), .badRequest)
+    }
+    func testC23OptionsAndThresholdSQLite() async throws { try await withApp(scenarioC23OptionsAndThreshold) }
+    func testC23OptionsAndThresholdMariaDB() async throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let host = env["MARIADB_TEST_HOST"] else { throw XCTSkip("MARIADB_TEST_HOST not set") }
+        let environment = ["DATABASE_DRIVER": "mariadb", "DB_HOST": host, "DB_PORT": env["MARIADB_TEST_PORT"] ?? "13306",
+            "DB_USER": env["MARIADB_TEST_USER"] ?? "timetrack", "DB_PASSWORD": env["MARIADB_TEST_PASSWORD"] ?? "",
+            "DB_NAME": env["MARIADB_TEST_DB"] ?? "timetrack_test_c23", "DB_TLS": "off"]
+        try await withApp(environment: environment, scenarioC23OptionsAndThreshold)
+    }
+    func scenarioC23HolidayAndPartialCredit(_ app: Application, _ auth: AuthService) async throws {
+        let (owner, _) = try await registered(auth, db: app.db)
+        var model = modelBody("2026-04-30"); model["roundingEnabled"] = false; model["fixedBreaks"] = []
+        try await api(app, owner, .POST, "work-models", model, .created)
+        try await api(app, owner, .POST, "calendar/custom-days", ["kind": "holiday", "startDate": "2026-05-07", "endDate": "2026-05-07", "name": "Synthetic custom holiday"], .created)
+        app.storage[WorktimeClockKey.self] = { ImportInterpreter.instant(try! LocalDate("2026-05-05"), seconds: 20 * 3600, zone: .gmt)! }
+        let data = try SyntheticWorktime.build([
+            .init(date: "2026-04-30", difference: 0),
+            .init(date: "2026-05-01", remark: "Berufsschule", difference: 0),
+            .init(date: "2026-05-04", end: 10 * 3600 + 33 * 60, remark: "Freigestellt", difference: -20340),
+            .init(date: "2026-05-05", remark: "Freigestellt", difference: 0),
+            .init(date: "2026-05-06", end: 16 * 3600 + 42 * 60, difference: 1800),
+            .init(date: "2026-05-07", end: 15 * 3600 + 45 * 60, remark: "Synthetic work", difference: 0)
+        ])
+        let id = try await worktimeUpload(app, owner, data)
+        let preview = try object(await api(app, owner, .PUT, "imports/\(id)/mapping", SyntheticWorktime.mapping()))
+        let details = try XCTUnwrap(preview["worktime"] as? [String: Any])
+        try await eq(details["firstContentDate"] as? String, "2026-04-30")
+        try await eq(details["sheetBalanceSeconds"] as? Int, -18540)
+        try await eq(details["sheetBalanceUpToTodaySeconds"] as? Int, -20340)
+        try await eq(details["sheetBalanceFutureSeconds"] as? Int, 1800)
+        try await eq(details["segments"] as? Int, 6)
+        try await eq(details["absences"] as? Int, 1)
+        let warnings = try XCTUnwrap(preview["warnings"] as? [[String: Any]])
+        try await eq(warnings.first { $0["code"] as? String == "school_on_holiday" }?["count"] as? Int, 1)
+        try await eq(warnings.first { $0["code"] as? String == "holiday_times_discarded" }?["count"] as? Int, 1)
+        try await eq(warnings.first { $0["code"] as? String == "credit_partial_as_work" }?["count"] as? Int, 1)
+        let committed = try object(await api(app, owner, .POST, "imports/\(id)/commit"))
+        try await eq((committed["warnings"] as? [[String: Any]])?.count, 3)
+        let holiday = try object(await api(app, owner, .GET, "time/days/2026-05-01"))
+        try await eq(holiday["deltaSeconds"] as? Int, 0)
+        let account = try object(await api(app, owner, .GET, "time/account?asOf=2026-05-05"))
+        let actual = try XCTUnwrap(account["balanceSeconds"] as? Int)
+        let partialNet = (10 * 3600 + 33 * 60) - 8 * 3600 - 30 * 60
+        let dailyTarget = (38 * 3600 + 30 * 60) / 5
+        let expectedThroughToday = partialNet - dailyTarget
+        XCTAssertEqual(expectedThroughToday, -20340)
+        try await eq(details["sheetBalanceUpToTodaySeconds"] as? Int, expectedThroughToday)
+        XCTAssertLessThanOrEqual(abs(actual - expectedThroughToday), 4 * 60)
+        let segments = try list(await api(app, owner, .GET, "time/segments?from=2026-04-30T00:00:00Z&to=2026-05-08T00:00:00Z"))
+        try await eq(segments.filter { $0["note"] as? String == "Freigestellt" }.count, 2)
+        let again = try await worktimeUpload(app, owner, data)
+        let repeated = try object(await api(app, owner, .PUT, "imports/\(again)/mapping", SyntheticWorktime.mapping()))
+        try await eq(repeated["valid"] as? Int, 0)
+        try await api(app, owner, .POST, "imports/\(id)/rollback")
+        try await eq(try await SegmentRecord.query(on: app.db).filter(\.$voidedAt == nil).count(), 0)
+        try await eq(try await AbsenceRecord.query(on: app.db).count(), 0)
+    }
+    func testC23DefaultSheetAndAccountParityThroughTodayWithinOneMinutePerDaySQLite() async throws { try await withApp(scenarioC23HolidayAndPartialCredit) }
+    func testC23DefaultSheetAndAccountParityThroughTodayWithinOneMinutePerDayMariaDB() async throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let host = env["MARIADB_TEST_HOST"] else { throw XCTSkip("MARIADB_TEST_HOST not set") }
+        let environment = ["DATABASE_DRIVER": "mariadb", "DB_HOST": host, "DB_PORT": env["MARIADB_TEST_PORT"] ?? "13306",
+            "DB_USER": env["MARIADB_TEST_USER"] ?? "timetrack", "DB_PASSWORD": env["MARIADB_TEST_PASSWORD"] ?? "",
+            "DB_NAME": env["MARIADB_TEST_DB"] ?? "timetrack_test_c23", "DB_TLS": "off"]
+        try await withApp(environment: environment, scenarioC23HolidayAndPartialCredit)
+    }
     func worktimeUpload(_ app: Application, _ context: AuthContext, _ data: Data) async throws -> String {
         let job = try object(await importUpload(app, context, "synthetic.xlsx", data))
         try await eq(job["detectedProfile"] as? String, "worktime_workbook")
