@@ -6,7 +6,14 @@ import Vapor
 enum JobLease {
     static let ttl: TimeInterval = 90
 
-    static func acquire(_ name: String, holder: String, now: Date, on db: any Database) async throws -> Bool {
+    static func renew(_ name: String, holder: String, now: Date, ttl: TimeInterval = ttl, on db: any Database) async throws -> Bool {
+        try await conditionalWrite(on: db) { connection in
+            try await JobLeaseRecord.query(on: connection).filter(\.$name == name).filter(\.$holder == holder)
+                .filter(\.$expiresAt > now).set(\.$expiresAt, to: now.addingTimeInterval(ttl)).update()
+        }
+    }
+
+    static func acquire(_ name: String, holder: String, now: Date, ttl: TimeInterval = ttl, on db: any Database) async throws -> Bool {
         let expiry = now.addingTimeInterval(ttl)
         let updated = try await conditionalWrite(on: db) { connection in
             try await JobLeaseRecord.query(on: connection).filter(\.$name == name)
@@ -28,6 +35,7 @@ enum JobLease {
 /// Settings of the notification subsystem; `environment` defaults to the process environment.
 public struct NotificationOptions: Sendable {
     public var environment: [String: String]
+    var pushAllowInsecureLoopback = false
     /// Test hook: replaces the HTTP delivery to push services.
     var transport: (any PushTransport)?
     /// Test hook: overrides the tick interval (default 60 s).
@@ -52,6 +60,7 @@ final class NotificationRuntime: @unchecked Sendable {
     let service: NotificationService
     let holder = UUID().uuidString
     let interval: TimeInterval
+    var leaseDuration: TimeInterval = JobLease.ttl
     private let transport: any PushTransport
     private let lock = NSLock()
     private var task: Task<Void, Never>?
@@ -64,8 +73,21 @@ final class NotificationRuntime: @unchecked Sendable {
     @discardableResult
     func tick(now: Date = Date()) async -> Bool {
         do {
-            guard try await JobLease.acquire(Self.leaseName, holder: holder, now: now, on: scheduler.db) else { return false }
-            await scheduler.runOnce(now: now)
+            guard try await JobLease.acquire(Self.leaseName, holder: holder, now: now, ttl: leaseDuration, on: scheduler.db) else { return false }
+            let started = Date()
+            let heartbeat = Task {
+                while !Task.isCancelled {
+                    do { try await Task.sleep(nanoseconds: UInt64(max(0.01, leaseDuration / 3) * 1_000_000_000)) } catch { return }
+                    let clock = now.addingTimeInterval(Date().timeIntervalSince(started))
+                    guard (try? await JobLease.renew(Self.leaseName, holder: holder, now: clock, ttl: leaseDuration, on: scheduler.db)) == true else { return }
+                }
+            }
+            defer { heartbeat.cancel() }
+            await scheduler.runOnce(now: now) {
+                let clock = now.addingTimeInterval(Date().timeIntervalSince(started))
+                return (try? await JobLeaseRecord.query(on: self.scheduler.db).filter(\.$name == Self.leaseName)
+                    .filter(\.$holder == self.holder).filter(\.$expiresAt > clock).count()) == 1
+            }
             return true
         } catch {
             scheduler.logger.warning("notification runner tick failed (\(type(of: error)))")
@@ -115,9 +137,14 @@ extension Application {
         if vapid == nil, options.environment["VAPID_PRIVATE_KEY"] != nil || options.environment["VAPID_SUBJECT"] != nil {
             logger.warning("VAPID_PRIVATE_KEY/VAPID_SUBJECT are invalid or incomplete: Web Push stays unavailable")
         }
+        var policy = PushEndpointPolicy()
+        policy.pushAllowInsecureLoopback = options.pushAllowInsecureLoopback
+        if let hosts = options.environment["PUSH_ALLOWED_HOSTS"] {
+            policy.allowedHosts = hosts.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        }
         let transport = options.transport ?? HTTPPushTransport(group: eventLoopGroup)
-        let service = NotificationService(auth: auth, vapid: vapid, transport: transport)
-        let scheduler = NotificationScheduler(auth: auth, db: db, vapid: vapid, transport: transport, logger: logger)
+        let service = NotificationService(auth: auth, vapid: vapid, transport: transport, policy: policy)
+        let scheduler = NotificationScheduler(auth: auth, db: db, vapid: vapid, transport: transport, policy: policy, logger: logger)
         let runtime = NotificationRuntime(scheduler: scheduler, service: service, transport: transport, interval: options.interval)
         notificationRuntime = runtime
         lifecycle.use(NotificationLifecycle(runtime: runtime, start: options.runnerEnabled(testing: environment == .testing)))

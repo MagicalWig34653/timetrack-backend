@@ -232,19 +232,21 @@ struct OAuthService: Sendable {
         }
         guard OAuthText.isVerifier(verifier) else { throw OAuthError("invalid_grant", "Invalid code_verifier.") }
         let hash = Secrets.hash(code), invalid = OAuthError("invalid_grant", "The authorization code is invalid, expired or already used.")
+        guard OAuthText.isBase64URL(code, count: 43...43),
+              try await OAuthCode.query(on: db).filter(\.$codeHash == hash).first() != nil else { throw invalid }
         return try await auth.transaction(on: db) { tx in
             let now = Date()
             guard let record = try await OAuthCode.query(on: tx).filter(\.$codeHash == hash).first() else { return .failed(invalid) }
+            guard record.expiresAt > now, record.clientId == clientID, record.redirectURI == redirectURI,
+                  record.resource == resource else { return .failed(invalid) }
+            let challenge = Data(SHA256.hash(data: Data(verifier.utf8))).base64URL
+            guard Secrets.equal(challenge, record.codeChallenge) else { return .failed(invalid) }
             if record.consumedAt != nil { try await revokeGrant(record.grantId, on: tx); return .failed(invalid) }
-            guard record.expiresAt > now else { return .failed(invalid) }
             let consumed = try await conditionalWrite(on: tx) {
                 try await OAuthCode.query(on: $0).filter(\.$id == record.requireID()).filter(\.$consumedAt == nil).filter(\.$expiresAt > now)
                     .set(\.$consumedAt, to: now).update()
             }
             guard consumed else { try await revokeGrant(record.grantId, on: tx); return .failed(invalid) }
-            let challenge = Data(SHA256.hash(data: Data(verifier.utf8))).base64URL
-            guard record.clientId == clientID, record.redirectURI == redirectURI, Secrets.equal(challenge, record.codeChallenge) else { return .failed(invalid) }
-            guard record.resource == resource else { return .failed(OAuthError("invalid_target", "resource mismatch.")) }
             guard let grant = try await activeGrant(record.grantId, on: tx), grant.clientId == clientID else { return .failed(invalid) }
             try await OAuthClient.query(on: tx).filter(\.$id == clientID).set(\.$lastUsedAt, to: now).update()
             return .issued(try await issue(grant: grant, scopes: record.scopes, parent: nil, now: now, on: tx))
@@ -254,6 +256,8 @@ struct OAuthService: Sendable {
     private func refresh(_ form: TokenForm, clientID: UUID, on db: any Database) async throws -> Outcome {
         guard let presented = form.refresh_token else { throw OAuthError("invalid_request", "refresh_token is required.") }
         let hash = Secrets.hash(presented), invalid = OAuthError("invalid_grant", "The refresh token is invalid, expired or revoked.")
+        guard presented.count == OAuthTokenFormat.length, presented.hasPrefix(OAuthTokenFormat.refreshPrefix),
+              try await OAuthToken.query(on: db).filter(\.$tokenHash == hash).first() != nil else { throw invalid }
         let narrowed = form.scope.map { OAuthText.parseScopes($0) }
         return try await auth.transaction(on: db) { tx in
             let now = Date()

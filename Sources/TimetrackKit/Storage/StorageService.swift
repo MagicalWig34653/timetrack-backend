@@ -147,6 +147,19 @@ struct StorageService: Sendable {
         return env.decorate(adapter)
     }
 
+    func backend(for file: StoredFileRecord, settings: StorageSettingsRecord?) throws -> any StorageBackend {
+        guard let kind = StorageBackendKind(rawValue: file.backend), let location = file.storageLocation else {
+            throw StorageErrors.unavailable
+        }
+        if kind == .local, location.hasPrefix("local:") {
+            let root = String(location.dropFirst(6))
+            guard LocalFSBackend.realpath(root) == root else { throw StorageErrors.unavailable }
+            return env.decorate(LocalFSBackend(root: root))
+        }
+        guard location == StorageLocation.identity(kind, settings: settings) else { throw StorageErrors.unavailable }
+        return try backend(kind, settings: settings)
+    }
+
     // MARK: Upload
 
     func uploadLimit(_ context: AuthContext) async throws -> Int {
@@ -168,6 +181,7 @@ struct StorageService: Sendable {
             let adapter = try self.backend(chosen, settings: settings)
             let row = StoredFileRecord()
             row.id = id; row.accountId = account; row.name = name; row.contentType = kind.mime; row.size = size; row.sha256 = sha
+            row.storageLocation = StorageLocation.identity(chosen, settings: settings)
             row.backend = chosen.rawValue; row.storageKey = StorageKeys.make(for: id, kind: chosen); row.state = FileState.pending.rawValue
             row.createdAt = Date(); row.cleanupAttempts = 0
             try await row.create(on: tx)
@@ -221,9 +235,9 @@ struct StorageService: Sendable {
     func download(_ context: AuthContext, id: UUID) async throws -> (file: StoredFileRecord, data: Data) {
         let (row, backend) = try await session(context) { tx, account -> (StoredFileRecord, any StorageBackend) in
             let row = try await ownedFile(tx, account, id)
-            guard let kind = StorageBackendKind(rawValue: row.backend) else { throw StorageErrors.corrupt }
+            guard StorageBackendKind(rawValue: row.backend) != nil else { throw StorageErrors.corrupt }
             // The file is always read through the backend it was written to, never through a fallback.
-            return (row, try self.backend(kind, settings: try await settingsRow(tx)))
+            return (row, try self.backend(for: row, settings: try await settingsRow(tx)))
         }
         let data: Data
         do { data = try await backend.get(key: row.storageKey, db: db) } catch { throw StorageErrors.unavailable }
@@ -241,7 +255,7 @@ struct StorageService: Sendable {
             try await AbsenceAttachmentRecord.query(on: tx).filter(\.$fileId == id).delete()
             return row
         }
-        _ = await purge(row)
+        guard await purge(row) else { throw StorageErrors.unavailable }
         _ = try? await cleanup(limit: 5)
     }
 
@@ -251,7 +265,7 @@ struct StorageService: Sendable {
         guard let id = row.id, let kind = StorageBackendKind(rawValue: row.backend) else { return false }
         do {
             let settings = try await settingsRow(db)
-            let adapter = try backend(kind, settings: settings)
+            let adapter = try backend(for: row, settings: settings)
             let key = row.storageKey
             try await auth.transaction(on: db) { tx in
                 try await adapter.delete(key: key, db: kind == .db ? tx : db)

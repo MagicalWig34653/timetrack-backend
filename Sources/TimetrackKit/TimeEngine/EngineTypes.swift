@@ -45,16 +45,34 @@ public struct LocalDate: Hashable, Comparable, Codable, Sendable, CustomStringCo
         try container.encode(description)
     }
 
-    func addingDays(_ days: Int) -> LocalDate {
+    private init(uncheckedYear: Int, month: Int, day: Int) {
+        self.year = uncheckedYear; self.month = month; self.day = day
+    }
+
+    private static var utc: Calendar {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-        let start = calendar.date(from: DateComponents(year: year, month: month, day: day))!
-        return Self.local(calendar.date(byAdding: .day, value: days, to: start)!, calendar: calendar)
+        calendar.timeZone = .gmt
+        return calendar
+    }
+    private var instant: Date {
+        Self.utc.date(from: DateComponents(year: year, month: month, day: day)) ?? .distantPast
+    }
+    func distance(to other: LocalDate) -> Int {
+        Self.utc.dateComponents([.day], from: instant, to: other.instant).day ?? 0
+    }
+    /// Internal arithmetic can produce boundary sentinels (year 0/10000), never decoded input.
+    /// This lets inclusive iteration terminate without trapping at the last supported date.
+    func addingDays(_ days: Int) -> LocalDate {
+        guard let next = Self.utc.date(byAdding: .day, value: days, to: instant) else { return self }
+        return Self.local(next, calendar: Self.utc)
     }
     static func local(_ instant: Date, calendar: Calendar) -> LocalDate {
-        let parts = calendar.dateComponents([.year, .month, .day], from: instant)
-        return try! LocalDate(year: parts.year!, month: parts.month!, day: parts.day!)
+        let parts = calendar.dateComponents([.era, .year, .month, .day], from: instant)
+        let year = parts.year ?? 1
+        return LocalDate(uncheckedYear: parts.era == 0 ? 1 - year : year,
+                         month: parts.month ?? 1, day: parts.day ?? 1)
     }
+
 }
 
 public struct LocalTime: Hashable, Sendable {

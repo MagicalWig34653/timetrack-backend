@@ -124,7 +124,7 @@ struct AccountService: Sendable {
     }
     func adjust(_ input: AdjustmentInput) async throws -> TimeAccountResult {
         try validateReason(input.reason)
-        guard ["opening", "correction"].contains(input.kind), abs(input.seconds) <= 1_000_000_000 else { throw APIError.invalid }
+        guard ["opening", "correction"].contains(input.kind), (-1_000_000_000...1_000_000_000).contains(input.seconds) else { throw APIError.invalid }
         if input.kind == "opening", try await AdjustmentRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).filter(\.$opening == 1).first() != nil {
             throw APIError(.conflict, "conflict")
         }

@@ -152,6 +152,7 @@ func validateReason(_ reason: String) throws {
 }
 
 func timeInstant(_ value: String) -> Date? {
+    guard value.count >= 20, (try? LocalDate(String(value.prefix(10)))) != nil else { return nil }
     let formatter = ISO8601DateFormatter()
     if let date = formatter.date(from: value) { return date }
     formatter.formatOptions.insert(.withFractionalSeconds)

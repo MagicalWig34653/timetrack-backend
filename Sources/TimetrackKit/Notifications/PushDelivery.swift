@@ -8,6 +8,7 @@ struct PushHTTPRequest: Sendable {
     let url: String
     let headers: [String: String]
     let body: Data
+    var policy = PushEndpointPolicy()
 }
 
 /// Abstraction over the HTTP call so tests can observe or fail deliveries. Implementations must never log URLs or bodies.
@@ -18,22 +19,28 @@ protocol PushTransport: Sendable {
 }
 
 final class HTTPPushTransport: PushTransport, @unchecked Sendable {
-    private let client: HTTPClient
-    init(group: any EventLoopGroup) {
+    private let group: any EventLoopGroup
+    init(group: any EventLoopGroup) { self.group = group }
+    func send(_ request: PushHTTPRequest) async throws -> Int {
+        guard let endpoint = request.policy.endpoint(request.url) else { throw APIError.invalid }
+        let address = try await request.policy.resolve(endpoint.host)
         var configuration = HTTPClient.Configuration(redirectConfiguration: .disallow, timeout: .init(connect: .seconds(5), read: .seconds(10)))
         configuration.decompression = .disabled
-        client = HTTPClient(eventLoopGroupProvider: .shared(group), configuration: configuration)
+        configuration.dnsOverride = [endpoint.host: address]
+        let client = HTTPClient(eventLoopGroupProvider: .shared(group), configuration: configuration)
+        do {
+            var outgoing = HTTPClientRequest(url: request.url)
+            outgoing.method = .POST
+            for (name, value) in request.headers { outgoing.headers.add(name: name, value: value) }
+            outgoing.body = .bytes(ByteBuffer(data: request.body))
+            let response = try await client.execute(outgoing, timeout: .seconds(15))
+            _ = try? await response.body.collect(upTo: 4096)
+            try? await client.shutdown()
+            return Int(response.status.code)
+        } catch { try? await client.shutdown(); throw error }
     }
-    func send(_ request: PushHTTPRequest) async throws -> Int {
-        var outgoing = HTTPClientRequest(url: request.url)
-        outgoing.method = .POST
-        for (name, value) in request.headers { outgoing.headers.add(name: name, value: value) }
-        outgoing.body = .bytes(ByteBuffer(data: request.body))
-        let response = try await client.execute(outgoing, timeout: .seconds(15))
-        _ = try? await response.body.collect(upTo: 4096)
-        return Int(response.status.code)
-    }
-    func shutdown() async { try? await client.shutdown() }
+    func shutdown() async {}
+
 }
 
 enum PushOutcome: Equatable, Sendable {
@@ -61,15 +68,16 @@ struct PushMessage: Sendable {
 struct PushSender: Sendable {
     let vapid: VapidConfiguration
     let transport: any PushTransport
+    var policy = PushEndpointPolicy()
 
     func deliver(_ message: PushMessage, endpoint: String, p256dh: String, auth: String, now: Date) async -> PushOutcome {
-        guard let key = Data(base64URL: p256dh), let secret = Data(base64URL: auth), let origin = VapidConfiguration.origin(of: endpoint),
+        guard policy.endpoint(endpoint) != nil, let key = Data(base64URL: p256dh), let secret = Data(base64URL: auth), let origin = VapidConfiguration.origin(of: endpoint),
               let body = try? WebPushCrypto.encrypt(message.payload, userAgentPublicKey: key, authSecret: secret, paddedLength: 128),
               let authorization = try? vapid.authorization(audience: origin, now: now) else { return .failed("invalid_subscription") }
         let request = PushHTTPRequest(url: endpoint, headers: [
             "Authorization": authorization, "Content-Encoding": "aes128gcm", "Content-Type": "application/octet-stream",
             "TTL": "86400", "Urgency": "normal", "Topic": message.topic,
-        ], body: body)
+        ], body: body, policy: policy)
         do {
             let status = try await transport.send(request)
             switch status {
@@ -84,13 +92,7 @@ struct PushSender: Sendable {
 
 enum PushSubscriptionValidation {
     static func endpoint(_ raw: String) -> (url: String, host: String)? {
-        guard raw.count <= 2048, raw.utf8.allSatisfy({ $0 > 32 && $0 < 127 }), let parts = URLComponents(string: raw),
-              let scheme = parts.scheme?.lowercased(), let host = parts.host, !host.isEmpty,
-              parts.user == nil, parts.password == nil, parts.fragment == nil,
-              parts.port.map({ (1...65535).contains($0) }) ?? true else { return nil }
-        let loopback = ["localhost", "127.0.0.1", "::1", "[::1]"].contains(host.lowercased())
-        guard scheme == "https" || (scheme == "http" && loopback) else { return nil }
-        return (raw, host)
+        PushEndpointPolicy().endpoint(raw)
     }
     static func keys(p256dh: String, auth: String) -> Bool {
         let keyText = p256dh.replacingOccurrences(of: "=", with: ""), authText = auth.replacingOccurrences(of: "=", with: "")

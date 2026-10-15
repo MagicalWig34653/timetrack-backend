@@ -141,11 +141,11 @@ extension AuthTests {
         let client = try await oaRegister(app, redirects: [Self.oaRedirect, "https://client.example/other"])
         let other = try await oaRegister(app, name: "Other")
         func fresh() async throws -> OAuthFlow { try await oaFlow(app, context, client: client) }
-        // Wrong verifier burns the code.
+        // Wrong verifier leaves the code available to its legitimate client.
         var flow = try await fresh()
         var result = try await oaToken(app, oaCodeForm(flow, verifier: Secrets.token(bytes: 32)))
         try await eq(result.status, .badRequest); try await eq(oaOAuthError(result), "invalid_grant")
-        result = try await oaToken(app, oaCodeForm(flow)); try await eq(oaOAuthError(result), "invalid_grant")
+        result = try await oaToken(app, oaCodeForm(flow)); try await eq(result.status, .ok)
         // Wrong redirect_uri (even another registered one), wrong client, malformed verifier.
         flow = try await fresh()
         try await eq(oaOAuthError(try await oaToken(app, oaCodeForm(flow, redirect: "https://client.example/other"))), "invalid_grant")
@@ -174,8 +174,8 @@ extension AuthTests {
         try await eq(record.expiresAt.timeIntervalSince(record.createdAt), 60)
         record.expiresAt = Date().addingTimeInterval(-1); try await record.update(on: app.db)
         try await eq(oaOAuthError(try await oaToken(app, oaCodeForm(flow))), "invalid_grant")
-        // None of the failures produced a token.
-        try await eq(try await OAuthToken.query(on: app.db).count(), 0)
+        // Only the legitimate exchange after the wrong verifier produced tokens.
+        try await eq(try await OAuthToken.query(on: app.db).count(), 2)
         // Happy path still works afterwards.
         flow = try await fresh(); _ = try await oaExchange(app, flow)
     }

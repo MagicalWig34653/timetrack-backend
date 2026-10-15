@@ -136,7 +136,7 @@ extension AuthTests {
             keys(nil, ""), variant { $0["userAgent"] = String(repeating: "u", count: 201) }, ["endpoint": fake.endpoint()],
         ]
         for body in badBodies { try await timeRequest(app, a, .POST, "me/push-subscriptions", body, status: .badRequest) }
-        _ = try await api(app, a, .POST, "me/push-subscriptions", variant { $0["endpoint"] = "https://push.example.test/ok" }, .created)
+        _ = try await api(app, a, .POST, "me/push-subscriptions", variant { $0["endpoint"] = "https://fcm.googleapis.com/ok" }, .created)
         // Listing and isolation by direct id.
         try await eq(try list(await api(app, a, .GET, "me/push-subscriptions")).count, 2)
         try await eq(try list(await api(app, b, .GET, "me/push-subscriptions")).count, 1)

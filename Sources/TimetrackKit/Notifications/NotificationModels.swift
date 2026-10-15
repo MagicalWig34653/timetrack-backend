@@ -48,6 +48,9 @@ final class PushOutboxRecord: Model, @unchecked Sendable {
     @ID(key: .id) var id: UUID?
     @Field(key: "notification_id") var notificationId: UUID
     @Field(key: "subscription_id") var subscriptionId: UUID
+    @OptionalField(key: "claim_token") var claimToken: String?
+    @OptionalField(key: "claimed_at") var claimedAt: Date?
+    @OptionalField(key: "completed_at") var completedAt: Date?
     /// pending | sent | failed | deferred
     @Field(key: "status") var status: String
     @Field(key: "attempts") var attempts: Int
@@ -68,7 +71,7 @@ final class JobLeaseRecord: Model, @unchecked Sendable {
 
 public enum NotificationSchema {
     public static let migrations: [any Migration] = [
-        CreateNotifications(), CreateNotificationSettings(), CreatePushSubscriptions(), CreatePushOutbox(), CreateJobLeases(),
+        CreateNotifications(), CreateNotificationSettings(), CreatePushSubscriptions(), CreatePushOutbox(), CreateJobLeases(), HardenPushOutbox(),
     ]
 }
 
@@ -163,4 +166,18 @@ struct CreateJobLeases: AsyncMigration {
         try await binaryCollation(database, "job_leases")
     }
     func revert(on database: any Database) async throws { try await database.schema("job_leases").delete() }
+}
+
+struct HardenPushOutbox: AsyncMigration {
+    func prepare(on db: any Database) async throws {
+        try await db.schema("push_outbox").field("claim_token", .string).update()
+        try await db.schema("push_outbox").field("claimed_at", .datetime).update()
+        try await db.schema("push_outbox").field("completed_at", .datetime).update()
+        try await requireSQL(db).raw("UPDATE push_outbox SET completed_at = created_at WHERE status IN ('sent', 'failed')").run()
+    }
+    func revert(on db: any Database) async throws {
+        for field in ["claim_token", "claimed_at", "completed_at"] {
+            try await db.schema("push_outbox").deleteField(FieldKey(stringLiteral: field)).update()
+        }
+    }
 }

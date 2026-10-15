@@ -311,12 +311,12 @@ final class ImportEngineTests: XCTestCase {
         try TestXLSX.add(archive, "xl/worksheets/sheet1.xml", Data(bigSheet.utf8))
         let rowsOpen = try ImportWorkbook.open(data: archive.data!, filename: "a.xlsx")
         XCTAssertThrowsError(try rowsOpen.sheet("S")) { XCTAssertEqual(($0 as? APIError)?.code, "too_many_rows") }
-        // 20 000 rows exactly is fine; rows that are only formatted (no cell values) beyond the limit are ignored.
+        // Row attributes beyond the limit are rejected even without cells.
         let edge = "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"20000\"><c r=\"A20000\" t=\"inlineStr\"><is><t>x</t></is></c></row><row r=\"1048576\" s=\"1\"/></sheetData></worksheet>"
         let archive2 = try Archive(data: tall, accessMode: .update)
         try archive2.remove(try XCTUnwrap(archive2["xl/worksheets/sheet1.xml"]))
         try TestXLSX.add(archive2, "xl/worksheets/sheet1.xml", Data(edge.utf8))
-        XCTAssertEqual(try ImportWorkbook.open(data: archive2.data!, filename: "a.xlsx").sheet("S").rows.count, 20_000)
+        XCTAssertThrowsError(try ImportWorkbook.open(data: archive2.data!, filename: "a.xlsx").sheet("S")) { XCTAssertEqual(($0 as? APIError)?.code, "too_many_rows") }
         // DTD / entity declarations are refused (no entity expansion).
         let xxe = "<?xml version=\"1.0\"?><!DOCTYPE x [<!ENTITY a \"aaaa\">]><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData/></worksheet>"
         let archive3 = try Archive(data: tall, accessMode: .update)

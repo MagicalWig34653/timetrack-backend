@@ -84,11 +84,11 @@ enum CSVReader {
     }
 
     static func detectDelimiter(_ bytes: [UInt8]) -> UInt8 {
-        var sample = Array(bytes.prefix(64 * 1024))
-        if bytes.count > sample.count, let lastBreak = sample.lastIndex(of: 0x0A) { sample = Array(sample[...lastBreak]) }
+        // Parsing stops at a complete record, including quoted multiline fields.
+        let sample = bytes
         var best: (score: Int, delimiter: UInt8) = (0, UInt8(ascii: ","))
         for delimiter in [UInt8(ascii: ";"), 0x09, UInt8(ascii: ",")] {
-            guard let rows = try? parse(sample, delimiter: delimiter, maxRows: 40) else { continue }
+            guard let rows = try? parse(sample, delimiter: delimiter, maxRows: 40, sampleOnly: true) else { continue }
             let counts = rows.filter { !($0.count == 1 && $0[0].isEmpty) }.map(\.count)
             let histogram = Dictionary(counts.map { ($0, 1) }, uniquingKeysWith: +)
             guard let modal = histogram.max(by: { $0.value == $1.value ? $0.key < $1.key : $0.value < $1.value }), modal.key >= 2 else { continue }
@@ -98,7 +98,7 @@ enum CSVReader {
     }
 
     /// RFC 4180 with CR, LF and CRLF line ends. Works on UTF-8 bytes because all structural characters are ASCII.
-    static func parse(_ bytes: [UInt8], delimiter: UInt8, maxRows: Int = ImportLimits.maxRows) throws -> [[String]] {
+    static func parse(_ bytes: [UInt8], delimiter: UInt8, maxRows: Int = ImportLimits.maxRows, sampleOnly: Bool = false) throws -> [[String]] {
         let quote = UInt8(ascii: "\""), cr: UInt8 = 0x0D, lf: UInt8 = 0x0A
         var rows: [[String]] = [], row: [String] = [], field: [UInt8] = []
         var inQuotes = false, quoted = false
@@ -124,6 +124,7 @@ enum CSVReader {
                 try endField()
             } else if byte == cr || byte == lf {
                 try endRow()
+                if sampleOnly && rows.count == maxRows { return rows }
                 if byte == cr, index + 1 < bytes.count, bytes[index + 1] == lf { index += 1 }
             } else { field.append(byte) }
             index += 1
@@ -155,8 +156,8 @@ final class XLSXPackage {
             guard count <= ImportLimits.maxZipEntries else { throw ImportErrors.tooLarge }
             try Self.validate(path: entry.path)
             guard entry.type != .symlink else { throw ImportErrors.unsupported }
+            guard entry.uncompressedSize <= UInt64(ImportLimits.maxUncompressedBytes) - total else { throw ImportErrors.tooLarge }
             total += entry.uncompressedSize
-            guard total <= UInt64(ImportLimits.maxUncompressedBytes) else { throw ImportErrors.tooLarge }
             entries[entry.path] = entry
         }
         guard entries["xl/workbook.xml"] != nil else { throw ImportErrors.unsupported }
@@ -353,7 +354,14 @@ private final class SheetDelegate: NSObject, XMLParserDelegate, AbortingDelegate
         let attributes = XMLRun.attributes(raw)
         switch name {
         case "row":
-            rowNumber = attributes["r"].flatMap(Int.init) ?? nextRow; nextRow = rowNumber + 1; nextColumn = 0
+            if let raw = attributes["r"] {
+                guard let number = Int(raw), (1...ImportLimits.maxRows).contains(number) else {
+                    tooManyRows = true; parser.abortParsing(); return
+                }
+                rowNumber = number
+            } else { rowNumber = nextRow }
+            guard rowNumber <= ImportLimits.maxRows else { tooManyRows = true; parser.abortParsing(); return }
+            nextRow = rowNumber + 1; nextColumn = 0
         case "c":
             column = attributes["r"].flatMap(Self.columnIndex) ?? nextColumn; nextColumn = column + 1
             type = attributes["t"] ?? ""

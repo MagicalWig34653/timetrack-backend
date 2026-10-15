@@ -58,6 +58,7 @@ struct NotificationService: Sendable {
     let auth: AuthService
     let vapid: VapidConfiguration?
     let transport: any PushTransport
+    var policy = PushEndpointPolicy()
 
     // MARK: Notifications
 
@@ -122,7 +123,7 @@ struct NotificationService: Sendable {
     }
     func subscribe(_ accountId: UUID, _ input: PushSubscriptionInput, on db: any Database) async throws -> PushSubscriptionDTO {
         guard vapid != nil else { throw APIError(.notImplemented, "push_unavailable") }
-        guard let endpoint = PushSubscriptionValidation.endpoint(input.endpoint),
+        guard let endpoint = policy.endpoint(input.endpoint),
               PushSubscriptionValidation.keys(p256dh: input.keys.p256dh, auth: input.keys.auth) else { throw APIError.invalid }
         let agent = input.userAgent.map { String($0.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }) }.flatMap { $0.isEmpty ? nil : $0 }
         guard agent.map({ $0.fitsColumn(200) }) ?? true else { throw APIError.invalid }
@@ -166,7 +167,7 @@ struct NotificationService: Sendable {
             try await RateLimitEvent(key: key, occurredAt: now).create(on: tx)
             return row
         }
-        let outcome = await PushSender(vapid: vapid, transport: transport)
+        let outcome = await PushSender(vapid: vapid, transport: transport, policy: policy)
             .deliver(.init(kind: "system", url: "/settings/notifications", tag: "test"), endpoint: subscription.endpoint, p256dh: subscription.p256dh, auth: subscription.auth, now: now)
         try await PushDispatcher.record(outcome, subscription: subscription.requireID(), now: now, on: db)
         guard outcome == .delivered else { throw APIError(.badGateway, "push_failed") }

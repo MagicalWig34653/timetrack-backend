@@ -14,7 +14,7 @@ public enum TimeEngine {
     /// Subtracts the boundary in wall-clock minutes, not elapsed seconds across DST transitions.
     public static func assignedDate(for start: Date, model: EngineWorkModel) throws -> LocalDate {
         try model.validate()
-        guard start.timeIntervalSince1970.isFinite else { throw TimeEngineError.invalidSegment }
+        guard validInstant(start) else { throw TimeEngineError.invalidSegment }
         let calendar = model.calendar
         let date = LocalDate.local(start, calendar: calendar)
         let minutes = calendar.component(.hour, from: start) * 60 + calendar.component(.minute, from: start)
@@ -23,7 +23,7 @@ public enum TimeEngine {
 
     /// Version starts are local midnights; adjacent versions share the successor's start instant.
     static func assignment(for start: Date, models: [EngineWorkModel]) throws -> (model: EngineWorkModel, date: LocalDate)? {
-        guard start.timeIntervalSince1970.isFinite else { throw TimeEngineError.invalidSegment }
+        guard validInstant(start) else { throw TimeEngineError.invalidSegment }
         let sorted = models.sorted { $0.validFrom < $1.validFrom }
         _ = try selectModel(for: LocalDate("2000-01-01"), models: sorted)
         func midnight(_ date: LocalDate, _ model: EngineWorkModel) -> Date {
@@ -54,7 +54,7 @@ public enum TimeEngine {
                                     preferences: DayPreferences, now: Date, preassigned: Bool = true) throws -> DayEvaluationResult {
         try model.validate()
         guard model.contains(date) else { throw TimeEngineError.modelNotEffective }
-        guard now.timeIntervalSince1970.isFinite else { throw TimeEngineError.invalidSegment }
+        guard validInstant(now) else { throw TimeEngineError.invalidSegment }
         guard preferences.creditSeconds.map({ $0 >= 0 }) ?? true else { throw TimeEngineError.invalidPreferences }
         guard preferences.targetOverrideSeconds.map({ $0 >= 0 }) ?? true else { throw TimeEngineError.invalidPreferences }
         let calendar = model.calendar
@@ -153,7 +153,7 @@ public enum TimeEngine {
                                       models: [EngineWorkModel], segments: [EngineSegment],
                                       preferences: [LocalDate: DayPreferences] = [:], now: Date,
                                       openingSeconds: Int = 0, adjustments: [AccountAdjustment] = []) throws -> TimeAccountResult {
-        guard let zone = TimeZone(identifier: timezone), now.timeIntervalSince1970.isFinite else {
+        guard let zone = TimeZone(identifier: timezone), validInstant(now) else {
             throw TimeEngineError.invalidModel
         }
         var calendar = Calendar(identifier: .gregorian)
@@ -181,9 +181,12 @@ public enum TimeEngine {
         guard model.workdays.contains(weekday) else { return 0 }
         return model.dailyTargetSeconds[weekday] ?? (model.weeklyTargetSeconds / model.workdays.count)
     }
+    private static func validInstant(_ date: Date) -> Bool {
+        (-62_135_769_600...253_402_387_200).contains(date.timeIntervalSince1970)
+    }
     private static func validate(_ segment: EngineSegment) throws {
-        guard segment.startedAt.timeIntervalSince1970.isFinite,
-              segment.endedAt.map({ $0.timeIntervalSince1970.isFinite && $0 > segment.startedAt }) ?? true else {
+        guard validInstant(segment.startedAt),
+              segment.endedAt.map({ validInstant($0) && $0 > segment.startedAt }) ?? true else {
             throw TimeEngineError.invalidSegment
         }
     }
@@ -239,7 +242,7 @@ public enum TimeEngine {
                 }
             }
         }
-        return best!
+        return best ?? value
     }
     private static func hints(_ intervals: [Span]) -> [BreakHint] {
         guard let first = intervals.first else { return [] }
