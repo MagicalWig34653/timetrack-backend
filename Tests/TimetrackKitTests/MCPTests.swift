@@ -265,6 +265,7 @@ extension AuthTests {
         try await mcpFails(app, "A", "create_absence", ["kind": "vacation", "startDate": "2026-10-19", "endDate": "2026-10-19", "status": "taken"], "invalid_arguments")
         try await mcpFails(app, "A", "create_absence", ["kind": "vacation", "startDate": "2026-10-19", "endDate": "2026-10-19", "status": "planned"], "absence_overlap")
         try await mcpFails(app, "A", "create_absence", ["kind": "vacation", "startDate": "2026-10-19", "endDate": "2026-10-19", "status": "planned", "documentStatus": "submitted"], "invalid_arguments")
+        try await mcpFails(app, "A", "create_absence", ["kind": "excused", "startDate": "2026-10-26", "endDate": "2026-10-26", "status": "planned"], "invalid_arguments")
         let sick = try await mcpOK(app, "A", "create_absence", ["kind": "sick", "startDate": "2026-10-26", "endDate": "2026-10-26", "status": "requested"])
         XCTAssertEqual(sick["kind"] as? String, "sick")
         let absences = try await mcpOK(app, "A", "list_absences", ["from": "2026-10-01", "to": "2026-10-31"])

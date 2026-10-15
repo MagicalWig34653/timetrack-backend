@@ -57,6 +57,7 @@ struct ExportService: Sendable {
         case .holiday: parts.append("Feiertag")
         case .vacation: parts.append(day.markSource == .absence && day.targetOverrideSeconds != nil ? "Urlaub (halber Tag)" : "Urlaub")
         case .sick: parts.append("Krank")
+        case .excused: parts.append("Freigestellt")
         case .schoolCredit: parts.append("Berufsschule (Gutschrift)")
         }
         if day.provisional { parts.append("vorläufig") }

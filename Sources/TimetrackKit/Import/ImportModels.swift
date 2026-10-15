@@ -28,6 +28,7 @@ final class ImportJobRecord: Model, @unchecked Sendable {
     @Field(key: "status") var status: String
     @Field(key: "sheets") var sheets: [String]
     @Field(key: "created_at") var createdAt: Date
+    @OptionalField(key: "detected_profile") var detectedProfile: String?
     @OptionalField(key: "committed_at") var committedAt: Date?
     init() {}
 }
@@ -171,6 +172,8 @@ struct ImportMapping: Codable, Sendable, Equatable {
         var place: Int?
         var note: Int?
     }
+    var profile: String? = nil
+    var worktime: WorktimeOptions? = nil
     var sheet: String
     var headerRow: Int
     var timezone: String?
@@ -186,6 +189,11 @@ struct ImportMapping: Codable, Sendable, Equatable {
     var skipsSummary: Bool { skipSummaryRows ?? true }
 
     func validate() throws {
+        guard profile == nil || ["generic", "worktime_workbook"].contains(profile!) else { throw APIError.invalid }
+        if profile == "worktime_workbook" {
+            guard TimeZone(identifier: timezone ?? "Europe/Berlin") != nil else { throw APIError.invalid }
+            try (worktime ?? WorktimeOptions()).validate(); return
+        }
         guard !sheet.isEmpty, sheet.unicodeScalars.count <= 255, (0...ImportLimits.maxRows).contains(headerRow),
               TimeZone(identifier: timezone ?? "Europe/Berlin") != nil else { throw APIError.invalid }
         let indices = [columns.date] + [columns.start, columns.end, columns.duration, columns.kind, columns.place, columns.note].compactMap { $0 }
@@ -203,15 +211,19 @@ struct ImportJobDTO: Codable, Sendable {
     var sheets: [String]
     var sha256: String
     var createdAt: Date
+    var detectedProfile: String
     init(_ row: ImportJobRecord) throws {
         id = try row.requireID(); filename = row.filename; kind = row.kind; status = row.status
-        sheets = row.sheets; sha256 = row.sha256; createdAt = row.createdAt
+        sheets = row.sheets; sha256 = row.sha256; createdAt = row.createdAt; detectedProfile = row.detectedProfile ?? "generic"
     }
 }
 
 struct ImportRowError: Codable, Sendable, Equatable { var row: Int; var code: String }
 struct ImportSample: Codable, Sendable { var date: String; var startedAt: Date; var endedAt: Date; var kind: EngineSegmentKind }
 struct ImportPreviewDTO: Codable, Sendable {
+    var profile: String? = nil
+    var worktime: WorktimePreview? = nil
+    var warnings: [ImportRowError]? = nil
     var rows: Int
     var valid: Int
     var duplicates: Int
@@ -223,6 +235,8 @@ struct ImportPreviewDTO: Codable, Sendable {
     var errorCount: Int
 }
 struct ImportResultDTO: Codable, Sendable {
+    var absencesCreated: Int = 0
+    var customDaysCreated: Int = 0
     var batchId: UUID
     var created: Int
     var skipped: Int
@@ -237,4 +251,5 @@ struct ImportTemplateDTO: Codable, Sendable {
 }
 
 /// 409 with the list of segments that block a rollback.
-struct ImportConflictError: Error, Sendable { let code: String; let conflicts: [UUID] }
+struct ImportTypedConflict: Codable, Sendable { var type: String; var id: UUID }
+struct ImportConflictError: Error, Sendable { let code: String; let conflicts: [UUID]; var items: [ImportTypedConflict] = [] }

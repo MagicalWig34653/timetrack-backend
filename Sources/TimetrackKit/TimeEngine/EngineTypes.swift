@@ -189,7 +189,7 @@ public struct EngineSegment: Equatable, Codable, Sendable {
 }
 
 public enum DayMarkKind: String, Codable, Sendable {
-    case none, holiday, vacation, sick
+    case none, holiday, vacation, sick, excused
     case schoolCredit = "school_credit"
 }
 /// Origin of the effective day mark (contract v0.3.2).

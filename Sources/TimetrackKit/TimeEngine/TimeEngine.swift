@@ -81,7 +81,7 @@ public enum TimeEngine {
             $0 + max(0, seconds(wholeSecond($1.endedAt ?? now), since: wholeSecond($1.startedAt)))
         }
         let baseTarget = target(for: date, model: model)
-        let absence = [.holiday, .vacation, .sick].contains(preferences.mark)
+        let absence = [.holiday, .vacation, .sick, .excused].contains(preferences.mark)
         let target = preferences.targetOverrideSeconds ?? (absence ? 0 : baseTarget)
         // Explicit marks win over automatic school credit; absence without credit still allows actual work.
         let automaticSchool = preferences.mark == .none && selected.contains { $0.kind == .school }

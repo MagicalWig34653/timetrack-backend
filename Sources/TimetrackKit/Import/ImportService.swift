@@ -14,6 +14,8 @@ struct ImportEvaluation: Sendable {
     var accepted: [ImportCandidate]
     var duplicates: Int
     var errorRows: Int
+    var absences: [WorktimeAbsence] = []
+    var customDays: [WorktimeHoliday] = []
 }
 
 private struct SegmentKey: Hashable { let start: Date; let end: Date; let kind: String }
@@ -52,6 +54,7 @@ private struct DisjointIndex {
 
 struct ImportService: Sendable {
     let scope: TimeServices
+    var now: @Sendable () -> Date = { Date() }
     private var db: any Database { scope.db }
     private var accountId: UUID { scope.accountId }
     static let notReady = APIError(.conflict, "import_not_ready")
@@ -70,6 +73,7 @@ struct ImportService: Sendable {
         let job = ImportJobRecord()
         job.id = UUID(); job.accountId = accountId; job.filename = Self.sanitize(filename: rawName); job.kind = workbook.kind
         job.sha256 = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        job.detectedProfile = try WorktimeWorkbook.detects(workbook) ? "worktime_workbook" : "generic"
         job.status = "uploaded"; job.sheets = workbook.sheetNames; job.createdAt = Date()
         try await job.create(on: db)
         let file = ImportFileRecord()
@@ -128,6 +132,7 @@ struct ImportService: Sendable {
 
     func evaluate(data: Data, filename: String, mapping: ImportMapping) async throws -> ImportEvaluation {
         let workbook = try ImportWorkbook.open(data: data, filename: filename)
+        if mapping.profile == "worktime_workbook" { return try await evaluateWorktime(workbook, mapping: mapping) }
         let sheet = try workbook.sheet(mapping.sheet)
         var places: [String: UUID] = [:]
         for place in try await PlaceRecord.query(on: db).filter(\.$accountId == accountId).all()
@@ -200,10 +205,11 @@ struct ImportService: Sendable {
         }
         for chunk in links.chunks(of: 50) { try await chunk.create(on: db) }
 
+        try await createWorktimeItems(evaluation, batch: batch.id!)
         row.status = "committed"; row.committedAt = Date(); try await row.update(on: db)
         // The uploaded bytes are no longer needed: the batch and the job keep the hash and the counts.
         try await ImportFileRecord.query(on: db).filter(\.$jobId == id).delete()
-        return .init(batchId: batch.id!, created: batch.createdCount, skipped: batch.skippedCount, conflicts: nil, rolledBack: nil)
+        return .init(absencesCreated: evaluation.absences.count, customDaysCreated: evaluation.customDays.count, batchId: batch.id!, created: batch.createdCount, skipped: batch.skippedCount, conflicts: nil, rolledBack: nil)
     }
 
     func rollback(_ id: UUID) async throws -> ImportResultDTO {
@@ -220,7 +226,9 @@ struct ImportService: Sendable {
         // Only segments that are still exactly as imported may be withdrawn; anything else blocks the rollback.
         let conflicts = segments.filter { $0.version != versions[$0.id ?? UUID()] || $0.voidedAt != nil }.compactMap(\.id)
             + links.map(\.segmentId).filter { id in !segments.contains { $0.id == id } }
-        guard conflicts.isEmpty else { throw ImportConflictError(code: "rollback_conflict", conflicts: conflicts.sorted { $0.uuidString < $1.uuidString }) }
+        let typed = try await rollbackWorktimeItems(batch: batch.id!, remove: false) + conflicts.map { ImportTypedConflict(type: "segment", id: $0) }
+        guard typed.isEmpty else { throw ImportConflictError(code: "rollback_conflict", conflicts: typed.map(\.id).sorted { $0.uuidString < $1.uuidString }, items: typed) }
+        _ = try await rollbackWorktimeItems(batch: batch.id!, remove: true)
 
         let now = Date()
         var revisions: [RevisionRecord] = []

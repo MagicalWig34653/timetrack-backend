@@ -140,5 +140,5 @@ Nutzerwunsch 15.10.: Das Tabellenformat der Beispiel-Arbeitszeittabelle (Jahresb
 | D1 | Dokumentationsabgleich Backend (README, KONZEPT, ARCHITEKTUR, UMSETZUNG, EINRICHTUNG, ADR-Index) | Claude-Agent | 3 | integriert (Merge `1308de8`) | – |
 | C21 | `excused` durchgängig + Import-Profil `worktime_workbook` (Erkennung, Parser, Regeln, Absenzen, Rollback) | Codex | 10 | in Arbeit (Hauptordner, Branch `c21-worktime-import`) | ADR-0013 |
 | C22 | Export-Profil `worktime-xlsx` (Formelschreiber mit Cache-Werten, Jahresblätter) + Round-trip-Tests | Codex | 8 | offen (nach C21) | C21 |
-| L18 | PWA: excused, Import-Assistent-Zweig (Regeltabelle, nicht zugeordnete Bemerkungen), Export-Option; Modul-Echt-E2E | Claude-Agent | 8 | in Arbeit (PWA-Worktree `../timetrack-pwa-wt/l18`) | Vertrag v0.10.0 |
+| L18 | PWA: excused, Import-Assistent-Zweig (Regeltabelle, nicht zugeordnete Bemerkungen), Export-Option; Modul-Echt-E2E | Claude-Agent | 8 | integriert (PWA `0ad2229`); 488 Unit, 63 Mock-E2E, 6 PWA-Build-Specs, 138 Echt-E2E (Lead); Tabellen-Import/Export bisher nur gegen Mock | Vertrag v0.10.0 |
 | L19 | Echt-E2E Import/Export Tabelle (synthetische Mappe; lokale Prüfung gegen Nutzerdatei ohne Ablage) | Claude-Agent | 4 | offen | C21, C22, L18 |

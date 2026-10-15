@@ -15,7 +15,10 @@ public enum AbsenceDayEffects {
         let holiday = model.map { $0.workdays.contains(HolidayCalendar.weekday(date)) } == true
             && HolidayCalendar.isHoliday(date, days: calendarDays)
         if let absence = absences.first(where: { $0.contains(date) && $0.status.isBooked && $0.kind != .other }) {
-            result.mark = absence.kind == .sick ? .sick : .vacation
+            // Excused follows the current holiday precedence even for direct engine callers.
+            // Existing vacation/sick callers retain the C8 behavior; REST applies the shared precedence.
+            result.mark = absence.kind == .excused ? (holiday ? .holiday : .excused)
+                : absence.kind == .sick ? .sick : .vacation
             result.creditSeconds = nil
             result.targetOverrideSeconds = nil
             if absence.kind == .vacation && absence.isHalfDay(date) {
