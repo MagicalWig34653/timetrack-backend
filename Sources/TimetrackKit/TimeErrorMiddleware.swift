@@ -14,7 +14,7 @@ struct TimeErrorMiddleware: AsyncMiddleware {
             else if let abort = error as? any AbortError { failure = .init(abort.status, abort.status == .notFound ? "not_found" : "bad_request") }
             else { throw error }
             struct Envelope: Encodable { struct Detail: Encodable { var code: String; var message: String }; var error: Detail }
-            return try timeResponse(Envelope(error: .init(code: failure.code, message: TimeMessages.german[failure.code] ?? "Die Anfrage konnte nicht verarbeitet werden.")), status: failure.status)
+            return try timeResponse(Envelope(error: .init(code: failure.code, message: ModuleMessages.message(failure.code) ?? TimeMessages.german[failure.code] ?? "Die Anfrage konnte nicht verarbeitet werden.")), status: failure.status)
         }
     }
 }

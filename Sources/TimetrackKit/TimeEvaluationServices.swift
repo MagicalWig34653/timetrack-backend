@@ -7,10 +7,12 @@ struct TimeEvaluationSnapshot: Sendable {
     let preferences: [String: DayPreferences]
     var absences: [EngineAbsence] = []
     var customDays: [CustomCalendarDay] = []
+    var planningEnabled = true
     var region = "DE-ST"
     /// Precedence (ADR-0005, contract v0.3.2): explicit mark > holiday on a model workday > approved/taken absence.
     private func effective(_ date: LocalDate, explicit: DayPreferences) throws -> (DayPreferences, DayMarkSource) {
         if explicit.mark != .none { return (explicit, .explicit) }
+        guard planningEnabled else { return (explicit, .none) }
         // Years outside the built-in catalogue simply have no built-in holidays.
         let builtin = (try? HolidayCalendar.holidays(year: date.year, region: region)) ?? []
         let days = builtin + customDays
@@ -59,6 +61,9 @@ struct DayService: Sendable {
             (row.date, DayPreferences(mark: DayMarkKind(rawValue: row.mark) ?? .none,
                 creditSeconds: row.creditSeconds, skipFixedBreaks: row.skipFixedBreaks, note: row.note))
         })
+        guard try await scope.modules.enabled(.planning, account: scope.accountId, on: scope.db) else {
+            return .init(models: models, segments: segments, preferences: preferences, planningEnabled: false)
+        }
         return .init(models: models, segments: segments, preferences: preferences,
                      absences: try await scope.vacation.engineAbsences(), customDays: try await scope.vacation.customDays(),
                      region: try await scope.vacation.settings().region)

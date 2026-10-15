@@ -19,7 +19,7 @@ struct ReportService: Sendable {
             let current = try await auth.authenticate(context.token, on: tx)
             try current.normal()
             let account = try current.account.requireID()
-            return try await operation(ReportService(accountId: account, db: tx, time: .init(accountId: account, db: tx)))
+            return try await operation(ReportService(accountId: account, db: tx, time: .init(accountId: account, db: tx, disabledModules: auth.configuration.disabledModules)))
         }
     }
 

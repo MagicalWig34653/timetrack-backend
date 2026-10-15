@@ -241,6 +241,8 @@ struct OAuthService: Sendable {
                   record.resource == resource else { return .failed(invalid) }
             let challenge = Data(SHA256.hash(data: Data(verifier.utf8))).base64URL
             guard Secrets.equal(challenge, record.codeChallenge) else { return .failed(invalid) }
+            guard let active = try await OAuthGrant.find(record.grantId, on: tx),
+                  try await auth.modules.enabled(.mcp, account: active.accountId, on: tx) else { return .failed(invalid) }
             if record.consumedAt != nil { try await revokeGrant(record.grantId, on: tx); return .failed(invalid) }
             let consumed = try await conditionalWrite(on: tx) {
                 try await OAuthCode.query(on: $0).filter(\.$id == record.requireID()).filter(\.$consumedAt == nil).filter(\.$expiresAt > now)
@@ -263,6 +265,7 @@ struct OAuthService: Sendable {
             let now = Date()
             guard presented.hasPrefix(OAuthTokenFormat.refreshPrefix), let record = try await OAuthToken.query(on: tx).filter(\.$tokenHash == hash).first(),
                   record.kind == "refresh", let grant = try await OAuthGrant.find(record.grantId, on: tx), grant.clientId == clientID else { return .failed(invalid) }
+            guard try await auth.modules.enabled(.mcp, account: grant.accountId, on: tx) else { return .failed(invalid) }
             if record.usedAt != nil { try await revokeGrant(record.grantId, on: tx); return .failed(invalid) }
             guard record.revokedAt == nil, record.expiresAt > now, try await activeGrant(record.grantId, on: tx) != nil else { return .failed(invalid) }
             var scopes = Array(Set(record.scopes).intersection(grant.scopes)).sorted()
@@ -282,6 +285,7 @@ struct OAuthService: Sendable {
     private func activeGrant(_ id: UUID, on db: any Database) async throws -> OAuthGrant? {
         guard let grant = try await OAuthGrant.find(id, on: db), grant.revokedAt == nil,
               let account = try await Account.find(grant.accountId, on: db), account.disabledAt == nil else { return nil }
+        guard try await auth.modules.enabled(.mcp, account: grant.accountId, on: db) else { return nil }
         return grant
     }
 

@@ -27,7 +27,7 @@ struct APIErrorMiddleware: AsyncMiddleware {
                 failure = APIError(abort.status, abort.status == .notFound ? "not_found" : "bad_request")
             } else { failure = APIError(.internalServerError, "not_ready") }
             struct Envelope: Content { struct Detail: Content { let code: String; let message: String }; let error: Detail }
-            let response = try await Envelope(error: .init(code: failure.code, message: failure.code.replacingOccurrences(of: "_", with: " ") + "."))
+            let response = try await Envelope(error: .init(code: failure.code, message: ModuleMessages.message(failure.code) ?? (failure.code.replacingOccurrences(of: "_", with: " ") + ".")))
                 .encodeResponse(status: failure.status, for: request)
             response.headers.replaceOrAdd(name: .cacheControl, value: "no-store")
             return response

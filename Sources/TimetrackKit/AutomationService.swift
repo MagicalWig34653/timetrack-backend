@@ -22,10 +22,11 @@ struct DeviceTokenService: Sendable {
         guard let row = try await DeviceTokenRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).filter(\.$id == id).first() else { throw APIError.missing }
         row.revokedAt = Date(); try await row.update(on: scope.db)
     }
-    static func authenticate(_ token: String, db: any Database, now: Date = Date()) async throws -> DeviceTokenRecord {
+    static func authenticate(_ token: String, db: any Database, now: Date = Date(), disabledModules: Set<ModuleKey> = []) async throws -> DeviceTokenRecord {
         guard token.count == 43, let row = try await DeviceTokenRecord.query(on: db).filter(\.$tokenHash == Secrets.hash(token)).first(),
               row.scope == "automation", row.revokedAt == nil, row.expiresAt.map({ $0 > now }) ?? true,
               let account = try await Account.find(row.accountId, on: db), account.disabledAt == nil else { throw APIError.unauthorized }
+        guard try await ModuleRegistry(locked: disabledModules).enabled(.automation, account: row.accountId, on: db) else { throw APIError.unauthorized }
         return row
     }
 }
@@ -35,7 +36,7 @@ struct DeviceTokenMiddleware: AsyncMiddleware {
     func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         guard request.cookies["tt_session"] == nil, let token = request.headers.bearerAuthorization?.token else { throw APIError.unauthorized }
         let allowed = try await auth.transaction(on: request.db) { tx in
-            let row = try await DeviceTokenService.authenticate(token, db: tx)
+            let row = try await DeviceTokenService.authenticate(token, db: tx, disabledModules: auth.configuration.disabledModules)
             let key = "device:" + (try row.requireID().uuidString)
             let now = Date()
             if try await RateLimitEvent.query(on: tx).filter(\.$key == key).filter(\.$occurredAt > now.addingTimeInterval(-300)).count() >= 120 { return false }

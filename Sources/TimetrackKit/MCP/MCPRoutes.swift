@@ -45,6 +45,7 @@ struct McpEndpoint: Sendable {
               let account = try await Account.find(principal.accountId, on: req.db), account.disabledAt == nil else {
             return unauthorized(tokenPresent: true)
         }
+        guard try await auth.modules.enabled(.mcp, account: principal.accountId, on: req.db) else { return unauthorized(tokenPresent: true) }
         let budget = req.application.storage[McpRateLimitKey.self] ?? McpRateLimit.limit
         guard try await McpRateLimit.allow(principal, auth: auth, db: req.db, limit: budget) else {
             let response = plain(.tooManyRequests, code: "too_many_requests")
@@ -140,7 +141,12 @@ struct McpEndpoint: Sendable {
         case "ping":
             return rpc(result: [:], id: id)
         case "tools/list":
-            let tools = McpTools.all.filter { principal.scopes.contains($0.scope) }.map(\.definition)
+            let status: [ModuleStatus]
+            do { status = try await auth.modules.statuses(account: principal.accountId, on: req.db) }
+            catch { return rpc(error: id, -32603, "Internal error") }
+            let tools = McpTools.all.filter { tool in
+                principal.scopes.contains(tool.scope) && ModuleKey.tool(tool.name).allSatisfy { key in status.contains { $0.key == key && $0.effective } }
+            }.map(\.definition)
             return rpc(result: ["tools": .array(tools)], id: id)
         case "tools/call":
             guard case .string(let name)? = params["name"] else { return rpc(error: id, McpRPCCode.invalidParams, "name is required") }
@@ -161,13 +167,22 @@ struct McpEndpoint: Sendable {
     private func call(_ tool: McpTool, arguments: McpJSON, principal: McpAuthPrincipal, req: Request) async -> McpJSON {
         let started = Date()
         let outcome: McpJSON
+        do { try await auth.modules.require(ModuleKey.tool(tool.name), account: principal.accountId, on: req.db) }
+        catch {
+            let failure = Self.failure(error)
+            try? await McpAuditRecord(credential: principal, tool: tool.name, ok: false, durationMs: 0).create(on: req.db)
+            return failure
+        }
         if !principal.scopes.contains(tool.scope) {
             outcome = Self.failure("insufficient_scope", "This credential lacks the scope '\(tool.scope)' required by this tool.")
         } else if let problem = McpSchemaValidator.validate(arguments, against: tool.inputSchema) {
             outcome = Self.failure("invalid_arguments", problem)
         } else {
             do {
-                let value = try await McpToolContext.session(principal, auth: auth, db: req.db) { try await tool.run($0, arguments) }
+                let value = try await McpToolContext.session(principal, auth: auth, db: req.db) { context in
+                    try await auth.modules.require(ModuleKey.tool(tool.name), account: principal.accountId, on: context.db)
+                    return try await tool.run(context, arguments)
+                }
                 outcome = Self.success(tool.addsDurations ? value.addingDurationStrings() : value)
             } catch {
                 outcome = Self.failure(error)
@@ -191,7 +206,7 @@ struct McpEndpoint: Sendable {
         switch error {
         case let known as APIError:
             let code = known.code == "bad_request" ? "invalid_arguments" : known.code
-            return failure(code, code.replacingOccurrences(of: "_", with: " ") + ".")
+            return failure(code, ModuleMessages.message(code) ?? (code.replacingOccurrences(of: "_", with: " ") + "."))
         case is DecodingError, is TimeEngineError:
             return failure("invalid_arguments", "The arguments were rejected by the business rules.")
         default:
