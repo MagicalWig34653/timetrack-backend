@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.9.0
+  version: 0.10.0
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -20,6 +20,7 @@ info:
     (4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form
     `<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.
     (6) No session listing endpoint in stage 1; only revoking other sessions.
+    v0.10.0: Arbeitszeit-Tabelle als Import-/Exportprofil und Typ excused (ADR-0013).
     v0.9.0: Modulschalter (ADR-0012). Abgeschaltete Module antworten 404 mit Code module_disabled, Änderungen an gesperrten Modulen 409 module_locked. Betreiber-Override per Umgebung MODULES_DISABLED.
     v0.8.1: C19-Review-Fixes: DELETE /files/{id} → 503 storage_unavailable, wenn das Objekt nicht entfernt werden konnte (Datensatz bleibt mit Retry-Marker); POST /oauth/token → 429 temporarily_unavailable bei Überschreitung des Limits; Push-Endpunkte nur https:443 auf erlaubten Push-Diensten (Apple/Google/Mozilla/Microsoft), sonst 400 bad_request; Datums- und Zahlenbereiche strikt validiert (Int.min/Int.max → 400).
     v0.8.0: Hinweise/Web Push (ADR-0010). Push-Nutzlast ohne Details, Ruhezeiten stellen Push zurück; REST-Fehlercodes: push_unavailable (501), too_many_subscriptions (409).
@@ -708,7 +709,11 @@ paths:
       parameters:
         - { name: from, in: query, required: true, schema: { type: string, format: date } }
         - { name: to, in: query, required: true, schema: { type: string, format: date } }
-        - { name: format, in: query, required: true, schema: { type: string, enum: [xlsx, pdf, csv] } }
+        - { name: format, in: query, required: true, schema: { type: string, enum: [xlsx, pdf, csv, worktime-xlsx] }, description: worktime-xlsx = Arbeitszeit-Tabelle im Jahresblatt-Format (ADR-0013) }
+        - { name: times, in: query, schema: { type: string, enum: [evaluated, actual], default: evaluated }, description: nur worktime-xlsx }
+        - { name: pauseMinutes, in: query, schema: { type: integer, minimum: 0, maximum: 240 }, description: nur worktime-xlsx }
+        - { name: standardStart, in: query, schema: { type: string, pattern: '^[0-2][0-9]:[0-5][0-9]$', default: '08:00' }, description: nur worktime-xlsx }
+        - { name: dateSystem, in: query, schema: { type: string, enum: ['1900', '1904'], default: '1900' }, description: nur worktime-xlsx }
       responses:
         '200': { description: Datei, content: { application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: { schema: { type: string, format: binary } }, application/pdf: { schema: { type: string, format: binary } }, text/csv: { schema: { type: string } } } }
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -1146,6 +1151,12 @@ paths:
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [modules], properties: { modules: { type: object, additionalProperties: { type: boolean } } } } } } }
       responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ServerModule' } } } } }, '403': { $ref: '#/components/responses/Forbidden' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/v1/import-profiles/worktime/default-rules:
+    get:
+      operationId: worktimeDefaultRules
+      description: Standard-Bemerkungsregeln des Import-Profils worktime_workbook (ADR-0013).
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/WorktimeRemarkRule' } } } } } }
 components:
   securitySchemes:
     session: { type: apiKey, in: cookie, name: tt_session }
@@ -1240,7 +1251,7 @@ components:
           required: [token]
           properties: { token: { type: string } }
     SegmentKind: { type: string, enum: [work, travel, school] }
-    DayMarkKind: { type: string, enum: [none, holiday, vacation, sick, school_credit] }
+    DayMarkKind: { type: string, enum: [none, holiday, vacation, sick, excused, school_credit] }
     WorkModelInput:
       type: object
       required: [validFrom, weeklyTargetSeconds, workdays]
@@ -1413,7 +1424,7 @@ components:
       type: object
       required: [kind, startDate, endDate, status]
       properties:
-        kind: { type: string, enum: [vacation, sick, other] }
+        kind: { type: string, enum: [vacation, sick, excused, other], description: excused = bezahlt frei ohne Urlaubsverbrauch (ADR-0013) }
         startDate: { type: string, format: date }
         endDate: { type: string, format: date }
         halfDayStart: { type: boolean, default: false, description: erster Tag nur halber Tag }
@@ -1489,12 +1500,15 @@ components:
         kind: { type: string, enum: [csv, xlsx] }
         status: { type: string, enum: [uploaded, mapped, committed, rolled_back] }
         sheets: { type: array, items: { type: string } }
+        detectedProfile: { type: string, enum: [generic, worktime_workbook], description: worktime_workbook bei erkannter Arbeitszeit-Tabelle }
         sha256: { type: string }
         createdAt: { type: string, format: date-time }
     ImportMapping:
       type: object
       required: [sheet, headerRow, columns, dateFormat, timeFormat]
       properties:
+        profile: { type: string, enum: [generic, worktime_workbook], default: generic, description: Bei worktime_workbook sind sheet/headerRow/columns/Formate ohne Bedeutung (Platzhalter erlaubt) und worktime wird ausgewertet }
+        worktime: { $ref: '#/components/schemas/WorktimeOptions' }
         sheet: { type: string }
         headerRow: { type: integer, minimum: 0, description: 0 = keine Kopfzeile }
         timezone: { type: string, default: Europe/Berlin }
@@ -1521,15 +1535,19 @@ components:
         rows: { type: integer }
         errorCount: { type: integer, description: Gesamtzahl der Fehler; errors ist auf 1000 begrenzt }
         skippedSummaryRows: { type: integer }
+        profile: { type: string, enum: [generic, worktime_workbook] }
+        worktime: { $ref: '#/components/schemas/WorktimePreview' }
         valid: { type: integer }
         duplicates: { type: integer }
-        errors: { type: array, items: { type: object, required: [row, code], properties: { row: { type: integer }, code: { type: string, enum: [date_invalid, time_invalid, end_before_start, missing_value, overlap, formula_without_value, summary_row, unknown_place, unknown_kind, note_too_long] } } } }
+        errors: { type: array, items: { type: object, required: [row, code], properties: { row: { type: integer }, code: { type: string, enum: [date_invalid, time_invalid, end_before_start, missing_value, overlap, formula_without_value, summary_row, unknown_place, unknown_kind, note_too_long, duplicate_date_conflict, pause_exceeds_day] } } } }
         sample: { type: array, items: { type: object, properties: { date: { type: string, format: date }, startedAt: { type: string, format: date-time }, endedAt: { type: string, format: date-time }, kind: { $ref: '#/components/schemas/SegmentKind' } } } }
     ImportResult:
       type: object
       required: [batchId, created, skipped]
       properties:
         rolledBack: { type: integer, description: bei Rollback die Zahl stornierter Segmente }
+        absencesCreated: { type: integer }
+        customDaysCreated: { type: integer }
         batchId: { type: string, format: uuid }
         created: { type: integer }
         skipped: { type: integer }
@@ -1744,3 +1762,34 @@ components:
         key: { $ref: '#/components/schemas/ModuleKey' }
         enabled: { type: boolean }
         lockedByOperator: { type: boolean }
+    WorktimeAction:
+      type: string
+      enum: [work, school, vacation, sick, excused, holiday, skip]
+    WorktimeRemarkRule:
+      type: object
+      required: [pattern, action]
+      properties:
+        pattern: { type: string, maxLength: 80, description: Teilstring (ohne Groß/Kleinschreibung); mit ^ und $ als exakter Text }
+        action: { $ref: '#/components/schemas/WorktimeAction' }
+    WorktimeOptions:
+      type: object
+      properties:
+        pauseMode: { type: string, enum: [split, none], default: split }
+        pauseMinutes: { type: [integer, 'null'], minimum: 0, maximum: 240, description: null = Wert aus der Tabelle (H1) }
+        pauseStart: { type: string, pattern: '^[0-2][0-9]:[0-5][0-9]$', default: '12:00' }
+        roundToMinutes: { type: boolean, default: true }
+        rules: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/WorktimeRemarkRule' }, description: leer/fehlend = Standardregeln }
+    WorktimePreview:
+      type: object
+      properties:
+        days: { type: integer }
+        segments: { type: integer }
+        absences: { type: integer }
+        customDays: { type: integer }
+        skippedHolidays: { type: integer }
+        firstDate: { type: [string, 'null'], format: date }
+        lastDate: { type: [string, 'null'], format: date }
+        dateSystem: { type: string, enum: ['1900', '1904'] }
+        sheetBalanceSeconds: { type: [integer, 'null'], description: Summe der zwischengespeicherten Differenzen der Tabelle (nur Hinweis) }
+        unmappedRemarks: { type: array, items: { type: object, required: [text, count], properties: { text: { type: string }, count: { type: integer } } } }
+        byAction: { type: object, additionalProperties: { type: integer } }
