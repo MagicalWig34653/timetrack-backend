@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.10.0
+  version: 0.10.1
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -20,6 +20,7 @@ info:
     (4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form
     `<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.
     (6) No session listing endpoint in stage 1; only revoking other sessions.
+    v0.10.1: Klarstellungen C21: rules leer = keine Regeln; Vorschau-warnings (pause_exceeds_day); Zeilenfehler planning_disabled (Abwesenheits-/Feiertagsaktionen bei ausgeschaltetem Modul planning, Arbeit/Schule bleiben importierbar); ImportResult.conflictItems; Notizen über 500 bzw. Feiertagsnamen über 80 Zeichen → note_too_long (keine stille Kürzung). Export worktime-xlsx ist kein verlustfreies Sicherungsformat (siehe docs/handoffs/C22.md).
     v0.10.0: Arbeitszeit-Tabelle als Import-/Exportprofil und Typ excused (ADR-0013).
     v0.9.0: Modulschalter (ADR-0012). Abgeschaltete Module antworten 404 mit Code module_disabled, Änderungen an gesperrten Modulen 409 module_locked. Betreiber-Override per Umgebung MODULES_DISABLED.
     v0.8.1: C19-Review-Fixes: DELETE /files/{id} → 503 storage_unavailable, wenn das Objekt nicht entfernt werden konnte (Datensatz bleibt mit Retry-Marker); POST /oauth/token → 429 temporarily_unavailable bei Überschreitung des Limits; Push-Endpunkte nur https:443 auf erlaubten Push-Diensten (Apple/Google/Mozilla/Microsoft), sonst 400 bad_request; Datums- und Zahlenbereiche strikt validiert (Int.min/Int.max → 400).
@@ -1536,10 +1537,11 @@ components:
         errorCount: { type: integer, description: Gesamtzahl der Fehler; errors ist auf 1000 begrenzt }
         skippedSummaryRows: { type: integer }
         profile: { type: string, enum: [generic, worktime_workbook] }
+        warnings: { type: array, items: { type: object, required: [code], properties: { code: { type: string, enum: [pause_exceeds_day] }, row: { type: integer } } }, description: Hinweise ohne Commit-Hindernis }
         worktime: { $ref: '#/components/schemas/WorktimePreview' }
         valid: { type: integer }
         duplicates: { type: integer }
-        errors: { type: array, items: { type: object, required: [row, code], properties: { row: { type: integer }, code: { type: string, enum: [date_invalid, time_invalid, end_before_start, missing_value, overlap, formula_without_value, summary_row, unknown_place, unknown_kind, note_too_long, duplicate_date_conflict, pause_exceeds_day] } } } }
+        errors: { type: array, items: { type: object, required: [row, code], properties: { row: { type: integer }, code: { type: string, enum: [date_invalid, time_invalid, end_before_start, missing_value, overlap, formula_without_value, summary_row, unknown_place, unknown_kind, note_too_long, duplicate_date_conflict, planning_disabled] } } } }
         sample: { type: array, items: { type: object, properties: { date: { type: string, format: date }, startedAt: { type: string, format: date-time }, endedAt: { type: string, format: date-time }, kind: { $ref: '#/components/schemas/SegmentKind' } } } }
     ImportResult:
       type: object
@@ -1552,6 +1554,7 @@ components:
         created: { type: integer }
         skipped: { type: integer }
         conflicts: { type: array, items: { type: string, format: uuid } }
+        conflictItems: { type: array, items: { type: object, required: [type, id], properties: { type: { type: string, enum: [segment, absence, custom_day] }, id: { type: string, format: uuid } } }, description: typisierte Konfliktliste (zusätzlich zu conflicts), auch im Fehlerobjekt rollback_conflict }
     ImportTemplate:
       type: object
       required: [id, name, mapping]
@@ -1778,7 +1781,7 @@ components:
         pauseMinutes: { type: [integer, 'null'], minimum: 0, maximum: 240, description: null = Wert aus der Tabelle (H1) }
         pauseStart: { type: string, pattern: '^[0-2][0-9]:[0-5][0-9]$', default: '12:00' }
         roundToMinutes: { type: boolean, default: true }
-        rules: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/WorktimeRemarkRule' }, description: leer/fehlend = Standardregeln }
+        rules: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/WorktimeRemarkRule' }, description: fehlend/null = Standardregeln; eine leere Liste ersetzt sie durch keine Regeln (alles wird Arbeit) }
     WorktimePreview:
       type: object
       properties:

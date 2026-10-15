@@ -35,3 +35,9 @@ Abwesenheitsart und Tagesmarkierung. Wirkung wie `sick`/`vacation` auf die Tages
 ## Pakete
 
 C21 (Codex): `excused`-Typ durchgängig + Import-Profil. C22 (Codex, nach C21): Export-Profil inkl. XLSX-Formelschreiber und Round-trip-Tests. L18 (Claude): PWA (excused-Darstellung, Import-Assistent-Zweig für das Profil mit Regeltabelle, Export-Option), Modul-E2E gegen echtes Backend. L19: Echt-E2E für Import/Export mit synthetischer Mappe.
+
+## Ergänzung nach Umsetzung (15.10.2026)
+
+- **Export ist kein Sicherungsformat.** Das Tabellenformat kennt pro Tag einen Abschnitt, eine globale Pause, keinen Ort und keine Halbtags-Kennzeichen; Abwesenheit und Arbeit am selben Tag sind nicht gemeinsam darstellbar. Round-trip ist daher für Standardfälle belegt (C22-Tests), nicht für beliebige Daten (Details `docs/handoffs/C22.md`). Für verlustfreie Sicherung bräuchte es ein eigenes Metadatenformat (Backlog).
+- **Regel-Risiko beim Re-Import des eigenen Exports:** Substring-Regeln können Arbeitsnotizen mit „krank“/„urlaub“ als Abwesenheit deuten. Die Vorschau zeigt Aktionszahlen und nicht zugeordnete Texte, vor dem Commit prüfen; eigene Regeln (auch „^…$“) schützen.
+- Abweichungen vom ADR-Text sind im Vertrag v0.10.1 festgehalten (leere Regelliste, Warnungen, typisierte Konflikte, `planning_disabled`, `note_too_long`).
