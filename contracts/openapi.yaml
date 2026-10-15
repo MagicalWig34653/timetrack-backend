@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.8.0
+  version: 0.8.1
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -20,6 +20,7 @@ info:
     (4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form
     `<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.
     (6) No session listing endpoint in stage 1; only revoking other sessions.
+    v0.8.1: C19-Review-Fixes: DELETE /files/{id} → 503 storage_unavailable, wenn das Objekt nicht entfernt werden konnte (Datensatz bleibt mit Retry-Marker); POST /oauth/token → 429 temporarily_unavailable bei Überschreitung des Limits; Push-Endpunkte nur https:443 auf erlaubten Push-Diensten (Apple/Google/Mozilla/Microsoft), sonst 400 bad_request; Datums- und Zahlenbereiche strikt validiert (Int.min/Int.max → 400).
     v0.8.0: Hinweise/Web Push (ADR-0010). Push-Nutzlast ohne Details, Ruhezeiten stellen Push zurück; REST-Fehlercodes: push_unavailable (501), too_many_subscriptions (409).
     v0.7.0: MCP/OAuth/persönliche Tokens (ADR-0009). Fehlercodes REST: reauth_required, insufficient_scope; OAuth-Endpunkte folgen RFC 6749/7009/7591/8414/9728 (Fehler als JSON `error`/`error_description`).
     v0.6.0: Berichtsheft (ADR-0008). Fehlercodes: stale_version (412), not_found; Quellen mit fileId benötigen eine eigene Datei (404 sonst).

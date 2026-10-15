@@ -110,3 +110,5 @@ Gesamtlauf: 193 Tests, 15 übersprungen, 33 Socket-blockierte Tests (35 Meldunge
 MariaDB-Vorbereitung und TCP-Verbindung sind gesperrt, keine DB angelegt. Keine laufenden Jobs.
 Nächster Schritt: Lead prüft komplette Suite mit erlaubten Sockets und eigener MariaDB, danach Commit/Integration.
 Details: `handoffs/C19.md`.
+| C19 | Codex-Review-Fixes (12 Befunde C9–C18, Sweep nach Absturzmustern) | **Codex** | 8 | integriert (Merge); 193 Tests inkl. MariaDB vom Lead nachgelaufen | Review 15.10. |
+| R1 | Codex-Adversarial-Reviews C9–C18 (3 Blöcke) | Codex (Review, nicht als Umsetzung gezählt) | – | abgeschlossen; Befunde in `docs/reviews/2026-10-15-codex-review.md` | – |
