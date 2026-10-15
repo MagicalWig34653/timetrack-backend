@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.10.1
+  version: 0.10.2
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -20,6 +20,7 @@ info:
     (4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form
     `<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.
     (6) No session listing endpoint in stage 1; only revoking other sessions.
+    v0.10.2: Import-Profil: holidayTimes/partialCredit, Warnungen holiday_times_discarded/credit_partial_as_work (zusammengefasst mit count), Vorschau sheetBalanceUpToTodaySeconds/sheetBalanceFutureSeconds/firstContentDate (Befund L20: Abweichung Tabelle/App erklärt sich aus Feiertagszeilen, Teilgutschriften, Modellbeginn und Zeilen nach heute).
     v0.10.1: Klarstellungen C21: rules leer = keine Regeln; Vorschau-warnings (pause_exceeds_day); Zeilenfehler planning_disabled (Abwesenheits-/Feiertagsaktionen bei ausgeschaltetem Modul planning, Arbeit/Schule bleiben importierbar); ImportResult.conflictItems; Notizen über 500 bzw. Feiertagsnamen über 80 Zeichen → note_too_long (keine stille Kürzung). Export worktime-xlsx ist kein verlustfreies Sicherungsformat (siehe docs/handoffs/C22.md).
     v0.10.0: Arbeitszeit-Tabelle als Import-/Exportprofil und Typ excused (ADR-0013).
     v0.9.0: Modulschalter (ADR-0012). Abgeschaltete Module antworten 404 mit Code module_disabled, Änderungen an gesperrten Modulen 409 module_locked. Betreiber-Override per Umgebung MODULES_DISABLED.
@@ -1537,7 +1538,7 @@ components:
         errorCount: { type: integer, description: Gesamtzahl der Fehler; errors ist auf 1000 begrenzt }
         skippedSummaryRows: { type: integer }
         profile: { type: string, enum: [generic, worktime_workbook] }
-        warnings: { type: array, items: { type: object, required: [code], properties: { code: { type: string, enum: [pause_exceeds_day] }, row: { type: integer } } }, description: Hinweise ohne Commit-Hindernis }
+        warnings: { type: array, items: { type: object, required: [code], properties: { code: { type: string, enum: [pause_exceeds_day, holiday_times_discarded, credit_partial_as_work, school_on_holiday] }, row: { type: [integer, 'null'] }, count: { type: integer, description: bei zusammengefassten Warnungen die Anzahl betroffener Tage } } }, description: Hinweise ohne Commit-Hindernis }
         worktime: { $ref: '#/components/schemas/WorktimePreview' }
         valid: { type: integer }
         duplicates: { type: integer }
@@ -1781,6 +1782,8 @@ components:
         pauseMinutes: { type: [integer, 'null'], minimum: 0, maximum: 240, description: null = Wert aus der Tabelle (H1) }
         pauseStart: { type: string, pattern: '^[0-2][0-9]:[0-5][0-9]$', default: '12:00' }
         roundToMinutes: { type: boolean, default: true }
+        holidayTimes: { type: string, enum: [discard, keep], default: discard, description: Zeilen mit Zeiten auf gesetzlichen oder eigenen Feiertagen. discard = keine Abschnitte, Tag gilt als Feiertag (Warnung holiday_times_discarded); keep = als Arbeit/Schule übernehmen (Mehrarbeit) }
+        partialCredit: { type: string, enum: [work, absence], default: work, description: Zeilen der Aktion vacation/sick/excused, deren Nettozeit mehr als 5 Minuten vom Tages-Soll abweicht. work = als Arbeit mit Notiz übernehmen (Warnung credit_partial_as_work); absence = trotzdem als Abwesenheit }
         rules: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/WorktimeRemarkRule' }, description: fehlend/null = Standardregeln; eine leere Liste ersetzt sie durch keine Regeln (alles wird Arbeit) }
     WorktimePreview:
       type: object
@@ -1793,6 +1796,9 @@ components:
         firstDate: { type: [string, 'null'], format: date }
         lastDate: { type: [string, 'null'], format: date }
         dateSystem: { type: string, enum: ['1900', '1904'] }
-        sheetBalanceSeconds: { type: [integer, 'null'], description: Summe der zwischengespeicherten Differenzen der Tabelle (nur Hinweis) }
+        sheetBalanceSeconds: { type: [integer, 'null'], description: Summe der zwischengespeicherten Differenzen der Tabelle über alle Zeilen (nur Hinweis) }
+        sheetBalanceUpToTodaySeconds: { type: [integer, 'null'], description: wie sheetBalanceSeconds, aber nur Zeilen bis einschließlich heute (vergleichbar mit dem Zeitkonto der App) }
+        sheetBalanceFutureSeconds: { type: [integer, 'null'], description: Anteil der Zeilen nach heute }
+        firstContentDate: { type: [string, 'null'], format: date, description: erster Tag mit Zeiten oder Bemerkung; Vorschlag für den Beginn des Arbeitsmodells, damit leere Tage davor nicht als Fehlzeit zählen }
         unmappedRemarks: { type: array, items: { type: object, required: [text, count], properties: { text: { type: string }, count: { type: integer } } } }
         byAction: { type: object, additionalProperties: { type: integer } }
