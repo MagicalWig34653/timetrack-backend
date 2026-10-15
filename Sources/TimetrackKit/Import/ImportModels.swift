@@ -219,11 +219,12 @@ struct ImportJobDTO: Codable, Sendable {
 }
 
 struct ImportRowError: Codable, Sendable, Equatable { var row: Int; var code: String }
+struct ImportWarning: Codable, Sendable, Equatable { var code: String; var row: Int? = nil; var count: Int? = nil }
 struct ImportSample: Codable, Sendable { var date: String; var startedAt: Date; var endedAt: Date; var kind: EngineSegmentKind }
 struct ImportPreviewDTO: Codable, Sendable {
     var profile: String? = nil
     var worktime: WorktimePreview? = nil
-    var warnings: [ImportRowError]? = nil
+    var warnings: [ImportWarning]? = nil
     var rows: Int
     var valid: Int
     var duplicates: Int
@@ -235,6 +236,7 @@ struct ImportPreviewDTO: Codable, Sendable {
     var errorCount: Int
 }
 struct ImportResultDTO: Codable, Sendable {
+    var warnings: [ImportWarning]? = nil
     var absencesCreated: Int = 0
     var customDaysCreated: Int = 0
     var batchId: UUID

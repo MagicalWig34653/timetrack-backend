@@ -14,8 +14,9 @@ struct WorktimeHoliday: Sendable { var row: Int; var date: LocalDate; var name: 
 
 extension ImportService {
     func evaluateWorktime(_ workbook: ImportWorkbook, mapping: ImportMapping) async throws -> ImportEvaluation {
-        let parsed = try WorktimeWorkbook.parse(workbook, options: mapping.worktime ?? WorktimeOptions())
-        let rules = (mapping.worktime ?? WorktimeOptions()).effectiveRules
+        let options = mapping.worktime ?? WorktimeOptions()
+        let parsed = try WorktimeWorkbook.parse(workbook, options: options)
+        let rules = options.effectiveRules
         let planning = try await scope.modules.enabled(.planning, account: scope.accountId, on: scope.db)
         let models = try await scope.models.list().map { try $0.engine() }
         let region = try await scope.vacation.settings().region
@@ -39,21 +40,41 @@ extension ImportService {
                   let end = ImportInterpreter.instant(to.addingDays(1), seconds: 0, zone: mapping.zone) else { return true }
             return existingSegments.contains { $0.startedAt < end && ($0.endedAt ?? .distantFuture) > start }
         }
-        var errors = parsed.errors, warnings: [ImportRowError] = [], duplicates = 0
+        var errors = parsed.errors, warnings: [ImportWarning] = [], duplicates = 0
+        var warningCounts: [String: Int] = [:]
         var segments: [ImportCandidate] = [], absences: [WorktimeAbsence] = [], days: [WorktimeHoliday] = []
         var preview = WorktimePreview(dateSystem: parsed.date1904 ? "1904" : "1900", sheetBalanceSeconds: parsed.balance)
         preview.days = parsed.days.count; preview.firstDate = parsed.days.first?.date.description; preview.lastDate = parsed.days.last?.date.description
         var unmapped: [String: Int] = [:]
         let today = LocalDate.local(now(), calendar: { var calendar = Calendar(identifier: .gregorian); calendar.timeZone = mapping.zone; return calendar }())
+        if !parsed.balanceRows.isEmpty {
+            preview.sheetBalanceUpToTodaySeconds = Int(parsed.balanceRows.filter { $0.date <= today }.reduce(0.0) { $0 + $1.seconds }.rounded())
+            preview.sheetBalanceFutureSeconds = Int(parsed.balanceRows.filter { $0.date > today }.reduce(0.0) { $0 + $1.seconds }.rounded())
+        }
+        preview.firstContentDate = parsed.firstContentDate?.description
+        let effectiveActions = try Dictionary(uniqueKeysWithValues: actions.map { day, action -> (LocalDate, WorktimeAction) in
+            guard action.isAbsence, options.partialCredit != "absence", let start = day.start, let end = day.end else { return (day.date, action) }
+            let target = try TimeEngine.selectModel(for: day.date, models: models).map { TimeEngine.target(for: day.date, model: $0) } ?? parsed.dailyTargetSeconds
+            let effectivePause = options.pauseMode == "none" || end - start <= day.pause ? 0 : day.pause
+            guard let target, abs(end - start - effectivePause - target) > 300 else { return (day.date, action) }
+            return (day.date, .work)
+        })
         for (day, action) in actions {
             preview.byAction[action.rawValue, default: 0] += 1
             if !day.remark.isEmpty && !rules.contains(where: { $0.matches(day.remark) }) { unmapped[day.remark, default: 0] += 1 }
-            if (action.isAbsence || action == .holiday) && !planning {
+            let effectiveAction = effectiveActions[day.date] ?? action
+            if (effectiveAction.isAbsence || effectiveAction == .holiday) && !planning {
                 errors.append(.init(row: day.row, code: "planning_disabled")); continue
             }
-            if action.isAbsence {
+            if effectiveAction == .work && action.isAbsence { warningCounts["credit_partial_as_work", default: 0] += 1 }
+            if (action == .work || action == .school), day.start != nil, day.end != nil,
+               options.holidayTimes != "keep", holiday(day.date) {
+                warningCounts[effectiveAction == .school ? "school_on_holiday" : "holiday_times_discarded", default: 0] += 1
+                continue
+            }
+            if effectiveAction.isAbsence {
                 let status: AbsenceStatus = day.date < today ? .taken : .approved
-                let kind = AbsenceKind(rawValue: action.rawValue)!
+                let kind = AbsenceKind(rawValue: effectiveAction.rawValue)!
                 var merge = false
                 if let previous = absences.last, previous.kind == kind,
                    previous.from.distance(to: day.date) < PlanningLimits.absenceDays {
@@ -61,7 +82,7 @@ extension ImportService {
                     while cursor < day.date {
                         if try working(cursor) { merge = false; break }
                         // An explicit, different action is never swallowed by a range.
-                        if actions.contains(where: { $0.0.date == cursor && $0.1 != action && $0.1 != .holiday && $0.1 != .skip }) { merge = false; break }
+                        if let intervening = effectiveActions[cursor], intervening != effectiveAction && intervening != .holiday && intervening != .skip { merge = false; break }
                         cursor = cursor.addingDays(1)
                     }
                 }
@@ -70,7 +91,7 @@ extension ImportService {
                     absences[absences.count - 1].rows.append(day.row)
                     if !absences[absences.count - 1].remarks.contains(day.remark) { absences[absences.count - 1].remarks.append(day.remark) }
                 } else { absences.append(.init(rows: [day.row], kind: kind, from: day.date, to: day.date, status: status, remarks: [day.remark])) }
-            } else if action == .holiday {
+            } else if effectiveAction == .holiday {
                 if HolidayCalendar.isHoliday(day.date, days: builtin) { preview.skippedHolidays += 1; continue }
                 let trimmed = day.remark.trimmingCharacters(in: .whitespacesAndNewlines)
                 let name = trimmed.isEmpty ? "Feiertag" : trimmed
@@ -81,10 +102,10 @@ extension ImportService {
                     errors.append(.init(row: day.row, code: "overlap")); continue
                 }
                 days.append(.init(row: day.row, date: day.date, name: name))
-            } else if action != .skip {
+            } else if effectiveAction != .skip {
                 do {
-                    let (candidates, warning) = try WorktimeWorkbook.segments(day, action: action, mapping: mapping)
-                    if warning { warnings.append(.init(row: day.row, code: "pause_exceeds_day")) }
+                    let (candidates, warning) = try WorktimeWorkbook.segments(day, action: effectiveAction, mapping: mapping)
+                    if warning { warnings.append(.init(code: "pause_exceeds_day", row: day.row)) }
                     if activeAbsences.contains(where: { $0.startDate <= day.date.description && $0.endDate >= day.date.description }) {
                         errors.append(.init(row: day.row, code: "overlap")); continue
                     }
@@ -108,6 +129,7 @@ extension ImportService {
             acceptedAbsences.append(absence)
         }
         preview.segments = segments.count; preview.absences = acceptedAbsences.count; preview.customDays = days.count
+        warnings += warningCounts.sorted { $0.key < $1.key }.map { ImportWarning(code: $0.key, count: $0.value) }
         preview.unmappedRemarks = unmapped.sorted { $0.key < $1.key }.map { .init(text: $0.key, count: $0.value) }
         let samples = segments.prefix(10).map { ImportSample(date: $0.date.description, startedAt: $0.start, endedAt: $0.end, kind: $0.kind) }
         let result = ImportPreviewDTO(profile: "worktime_workbook", worktime: preview, warnings: warnings,
