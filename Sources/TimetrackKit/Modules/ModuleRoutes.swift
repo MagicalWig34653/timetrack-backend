@@ -12,7 +12,7 @@ struct ModuleGuard: AsyncMiddleware {
         case "reports": return [.reports]
         case "vacation", "calendar", "plan", "shares": return [.planning]
         case "absences": return parts.count > 4 && parts[4] == "attachments" ? [.planning, .transfer] : [.planning]
-        case "export", "imports", "import-templates", "files": return [.transfer]
+        case "export", "imports", "import-templates", "import-profiles", "files": return [.transfer]
         case "automation": return [.automation]
         case "oauth": return [.mcp]
         case "admin": return parts.dropFirst(3).first == "storage" ? [.transfer] : []

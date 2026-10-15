@@ -5,7 +5,7 @@ public enum VacationEngineError: Error, Equatable, Sendable {
     case absenceOverlap, duplicateAbsenceID, duplicateSnapshotDate
 }
 
-public enum AbsenceKind: String, Codable, Sendable { case vacation, sick, other }
+public enum AbsenceKind: String, Codable, Sendable { case vacation, sick, excused, other }
 public enum AbsenceStatus: String, Codable, Sendable {
     case planned, requested, approved, rejected, cancelled, taken
     public var isActive: Bool { self != .rejected && self != .cancelled }

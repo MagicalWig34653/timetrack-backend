@@ -30,6 +30,8 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
     for migration in OAuthSchema.migrations { app.migrations.add(migration) }
     for migration in NotificationSchema.migrations { app.migrations.add(migration) }
     app.migrations.add(CreateModuleSettings())
+    app.migrations.add(EnableExcusedAbsences())
+    app.migrations.add(CreateWorktimeImportItems())
     // Fluent installs the migrate command, including --revert and the global --yes flag.
     // Do not auto-apply migrations before explicit migrate/revert commands.
     if config.autoMigrate && !app.environment.arguments.contains("migrate") {

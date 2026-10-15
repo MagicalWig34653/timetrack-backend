@@ -163,7 +163,7 @@ enum McpTools {
 
         // schedule:read
         read("list_absences", "List absences", "schedule:read",
-             "Lists vacation, sick and other absences overlapping the range (at most 366 days) with counted half days.",
+             "Lists vacation, sick, excused and other absences overlapping the range (at most 366 days) with counted half days.",
              McpSchema.object(["from": from, "to": to], required: ["from", "to"])) { ctx, args in
             try list("absences", await ctx.time.absences.list(from: day(args, "from"), to: day(args, "to")))
         },
@@ -208,7 +208,9 @@ enum McpTools {
                                 "status": McpSchema.string("planned or requested", enumeration: ["planned", "requested"]),
                                 "note": McpSchema.string("Optional note", maxLength: 200)],
                                required: ["kind", "startDate", "endDate", "status"])) { ctx, args in
-            try McpJSON.encoding(await ctx.time.absences.create(decodeArguments(AbsenceInputDTO.self, args)))
+            let input = try decodeArguments(AbsenceInputDTO.self, args)
+            guard input.kind != .excused else { throw APIError.invalid }
+            return try McpJSON.encoding(await ctx.time.absences.create(input))
         },
         write("set_plan_day", "Set plan day", "schedule:write",
               "Sets the planned working mode of one day (planning only; it does not record time). Replaces an existing plan for that day.", idempotent: true,
