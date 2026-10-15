@@ -1,6 +1,6 @@
 # Timetrack – Arbeitsgrundlage für Claude Code
 
-Grundgerüste eingerichtet; tatsächlicher Prüfstand in docs/STATUS.md. Die Implementierung soll Claude Code übernehmen;
+Backend und PWA implementiert (Etappe 1–4); tatsächlicher Prüfstand in docs/STATUS.md. Die Implementierung soll Claude Code übernehmen;
 der Nutzer plant, selbst kaum Code zu schreiben. Fragen gesammelt und nummeriert im
 normalen Chat stellen, keine interaktiven Frageformulare.
 
@@ -14,8 +14,8 @@ Zu Beginn jeder Sitzung zuerst `docs/STATUS.md`, `docs/ARBEITSPLAN.md` und
 
 1. `docs/KONZEPT.md`: bestätigte Anforderungen und offene fachliche Details.
 2. `docs/ARCHITEKTUR.md`: technischer Entwurf mit Authentifizierung und MCP.
-3. `docs/UMSETZUNG.md`: vorgeschlagene Etappen und Abnahmekriterien.
-4. `EINRICHTUNG.md`: lokale Voraussetzungen, Colima und Codex-Plugin.
+3. `docs/UMSETZUNG.md`: Etappen, Abnahmekriterien und Umsetzungsstand je Etappe.
+4. `EINRICHTUNG.md`: lokale Voraussetzungen, Start-/Testbefehle, Konfiguration, Colima und Codex-Plugin.
 
 ## Entwicklung mit Agents
 
@@ -32,7 +32,7 @@ im Repository sichern. Dokumentationspflege ist Teil jeder Implementierung und i
 
 ## Festgelegte Richtung
 
-- Open Source unter AGPLv3; Lizenztext vorhanden; Abhängigkeitsprüfung im ersten Meilenstein durchführen.
+- Open Source unter AGPLv3; Lizenztext vorhanden; Abhängigkeitsinventar in docs/LIZENZEN.md (Release-Prüfung offen).
 - Backend Swift/Vapor/Fluent; MariaDB empfohlen, SQLite unterstützt, kein PostgreSQL.
 - PWA Svelte/shadcn-svelte; Node für Entwicklung/Build erlaubt, nicht im Produktionsbetrieb.
 - Kein VS Code. PhpStorm für PWA und Backend (Noctule), Xcode für native Apps.
@@ -74,4 +74,4 @@ Diese Regel bei jedem Agent-Auftrag mitgeben.
 - Kontentrennung auch für MCP, Exporte, Anhänge, Jobs, Suche und Push durchsetzen.
 - Vorschläge nicht als Nutzerentscheidungen darstellen; offene Details kenntlich halten.
 
-Vorhandene Buildbefehle stehen in EINRICHTUNG.md; Deployment und fachliche Tests folgen.
+Build-, Start- und Testbefehle stehen in EINRICHTUNG.md; produktionsnahes Deployment (Swarm) ist noch offen. Dokumentationslandkarte: docs/README.md.

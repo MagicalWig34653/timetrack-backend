@@ -1,6 +1,6 @@
 # IDEs und lokale Entwicklungswege
 
-Stand: 13.10.2026. Bestätigt: kein VS Code. PhpStorm für PWA, Xcode für native Apps.
+Stand: 13.10.2026 (Inhalt seitdem nicht neu geprüft; Quellen und Plugin-Versionen können überholt sein). Bestätigt: kein VS Code. PhpStorm für PWA, Xcode für native Apps.
 Backend jetzt beschlossen: PhpStorm mit Noctule. Drei Repos, Backend als Hauptrepo; siehe `REPOSITORIES.md`.
 
 ## JetBrains-Option

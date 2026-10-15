@@ -2,7 +2,7 @@
 
 Stand: Paket C17 (Endpunkt und Tools). Verbindliche Entscheidungen: `docs/decisions/ADR-0009-mcp-oauth-tokens.md`.
 
-**Nicht geprüft:** Die Anbindung in einem echten ChatGPT- oder Claude-Connector wurde noch nicht getestet. Geprüft sind nur Protokoll, Tools, Rechte und Kontentrennung mit automatisierten Tests und einem Testauthentifizierer. Solange der OAuth-/Token-Server (C16) nicht angebunden ist, beantwortet `/mcp` jede Anfrage mit 401.
+**Nicht geprüft:** Die Anbindung in einem echten ChatGPT- oder Claude-Connector wurde noch nicht getestet. Geprüft sind nur Protokoll, Tools, Rechte und Kontentrennung mit automatisierten Tests und einem Testauthentifizierer. Der OAuth-/Token-Server (C16) ist seit X1 angebunden; ohne gültiges Token antwortet `/mcp` mit 401.
 
 ## Endpunkt
 

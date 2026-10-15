@@ -35,14 +35,8 @@ In Colima laufen fremde Projekte: nur `timetrack-dev-*` anfassen.
 3. Native macOS-App (Etappe 5), danach iOS/iPadOS/watchOS; KI-Entwürfe/Mac-Worker.
 4. Nach Rückkehr des Codex-Kontingents: Codex-Adversarial-Reviews für Backend-Pakete C9–C17.
 
-## C19-Prüfstand (15.10.2026, Branch `c19-review-fixes`)
+## C19-Prüfstand (Stand 15.10.2026, integriert)
 
-Zwölf Reviewkorrekturen und Zahlen-/Datums-Sweep implementiert, uncommitted im Hauptverzeichnis; noch nicht abgenommen.
-Neue Migrationen `BindStorageLocations` und `HardenPushOutbox`; Original-Dateistandorte werden gebunden,
-Push-Outbox erhält Claims und Abschlusszeit. Details: `handoffs/C19.md`, Entscheidung ADR-0011.
-Build erfolgreich. Letzte vollständige Suite: 193 Tests, 15 MariaDB-Varianten übersprungen,
-33 Tests wegen Socket-Sandboxfehlern fehlgeschlagen (35 Meldungen, ausschließlich `Operation not permitted`).
-C19: 14 Tests bestanden, 2 MariaDB-Varianten übersprungen; Fehler-Reinjektion für alle zwölf Befunde
-sowie Formatierung/ZIP64 bestätigt. MariaDB-Einrichtung scheitert am Colima-Socket, TCP ebenfalls gesperrt.
-Keine Testdatenbank angelegt, keine Container oder `.env` verändert. Vollständige Abnahme außerhalb der
-Sandbox und Commit durch den Lead stehen aus; Details und nächster Schritt im Handoff C19.
+C19 (zwölf Reviewkorrekturen, Zahlen-/Datums-Sweep) ist laut Arbeitsplan integriert (Merge `94bfb1e`); der Lead lief 193 Tests inkl. MariaDB nach.
+Neue Migrationen `BindStorageLocations` und `HardenPushOutbox`. Details: `handoffs/C19.md`, ADR-0011. Der Handoff
+beschreibt noch den Sandbox-Stand vor der Integration (Socket-blockierte Tests); maßgeblich sind die Zahlen oben.

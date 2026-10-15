@@ -35,4 +35,4 @@ Abschnitt „Sprache von Code und Oberfläche“. Gilt auch für alle delegierte
 
 Vor Übergabe/Sessionende oder Kontextwechsel: Ergebnisse, Dateien/Branch, Teststand,
 offene Fehler, laufende Jobs, Migrationsfolgen und nächsten konkreten Schritt im Repository sichern.
-Details: `docs/ENTWICKLUNGSABLAUF.md`. Keine Buildbefehle behaupten, die noch nicht existieren.
+Details: `docs/ENTWICKLUNGSABLAUF.md`. Dokumentationslandkarte: `docs/README.md`. Keine Buildbefehle behaupten, die nicht in `EINRICHTUNG.md` stehen oder ausgeführt wurden.

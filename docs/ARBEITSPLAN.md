@@ -1,6 +1,6 @@
 # Arbeitsplan und Agent-Übergabe
 
-Stand: 14.10.2026. Etappe 1 gestartet; Zuweisung gemäß ADR-0003.
+Stand: 15.10.2026. Etappen 1–4c integriert, 4d (Modulschalter) offen; Zuweisung gemäß ADR-0003.
 Gewichte unten sind ein Startvorschlag, vor Zuweisung nach technischem Durchstich anpassen.
 Abnahmebedingungen: `UMSETZUNG.md`. Vorgehen: `ENTWICKLUNGSABLAUF.md`.
 
@@ -96,7 +96,7 @@ Gegenseitiges Review: C9 soll nach Rückkehr des Kontingents (ab 20.10.) von Cod
 | ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
 | --- | --- | --- | --- | --- | --- |
 | C18 | Hinweise, Erinnerungs-Scheduler, Web-Push-Sender (ADR-0010, Vertrag v0.8.0) | Claude-Agent (Codex-Limit) | 8 | integriert (Merge); 177 Tests inkl. MariaDB (Lead nachgelaufen); Web-Push-Verschlüsselung gegen RFC-8291-Vektor, Zustellung nur gegen Fake-Dienst | Vertrag v0.8.0 |
-| L16 | PWA: Manifest/Icons, Service Worker, Offline-Hinweis, Hinweiszentrum, Push-Einstellungen | Claude-Agent | 8 | **nicht gestartet**: Agent-Start vom Berechtigungsprüfer abgelehnt; Worktree `../timetrack-pwa-wt/l16` bereit | Vertrag v0.8.0 |
+| L16 | PWA: Manifest/Icons, Service Worker, Offline-Hinweis, Hinweiszentrum, Push-Einstellungen | Claude-Agent | 8 | integriert (PWA-Merge `feff194`); Details im PWA-Repo | Vertrag v0.8.0 |
 | X2 | E2E mit Fake-Push-Dienst, Gesamtabgleich | Claude-Agent | 3 | offen | C18, L16 |
 
 ## C19 – Review-Härtung (15.10.2026)
@@ -104,11 +104,7 @@ Gegenseitiges Review: C9 soll nach Rückkehr des Kontingents (ab 20.10.) von Cod
 Codex, alleiniger Schreiber auf `c19-review-fixes` im Backend-Hauptverzeichnis. Umfang: alle zwölf Befunde
 in `reviews/2026-10-15-codex-review.md`, Zahlen-/Datums-Sweep, Regressionstests und angehängte Migrationen.
 Vertrag v0.8.0 unverändert. Entscheidungen: `decisions/ADR-0011-c19-review-haertung.md`.
-Stand: umgesetzt, in Review, uncommitted. 14 C19-Tests bestanden; 2 MariaDB-Varianten übersprungen.
-Alle zwölf Fehler-Reinjektionen sowie Formatierungs-/ZIP64-Gegenproben schlagen erwartungsgemäß fehl.
-Gesamtlauf: 193 Tests, 15 übersprungen, 33 Socket-blockierte Tests (35 Meldungen); Build erfolgreich.
-MariaDB-Vorbereitung und TCP-Verbindung sind gesperrt, keine DB angelegt. Keine laufenden Jobs.
-Nächster Schritt: Lead prüft komplette Suite mit erlaubten Sockets und eigener MariaDB, danach Commit/Integration.
+Stand: integriert (Merge `94bfb1e`), 193 Tests inkl. MariaDB vom Lead nachgelaufen; Zwischenstände der Sandbox stehen im Handoff C19.
 Details: `handoffs/C19.md`.
 | C19 | Codex-Review-Fixes (12 Befunde C9–C18, Sweep nach Absturzmustern) | **Codex** | 8 | integriert (Merge); 193 Tests inkl. MariaDB vom Lead nachgelaufen | Review 15.10. |
 | R1 | Codex-Adversarial-Reviews C9–C18 (3 Blöcke) | Codex (Review, nicht als Umsetzung gezählt) | – | abgeschlossen; Befunde in `docs/reviews/2026-10-15-codex-review.md` | – |

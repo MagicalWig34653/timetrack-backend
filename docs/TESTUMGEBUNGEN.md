@@ -66,11 +66,11 @@ Backend hinter einem vorhandenen Reverse Proxy (Domain, TLS und Proxy werden hie
   `http://localhost:5173/api/v1/auth/oidc/callback`.
 - Testnutzer (nur Testdaten): `alice@example.test` / `alice-dev-pass`, `bob@example.test` / `bob-dev-pass`.
 - Prüfung: `python3 -I scripts/oidc-pkce-check.py` führt Discovery, Autorisierung, Login, Code-Austausch mit PKCE aus (ohne Tokenwerte auszugeben).
-- Grenze: Der OIDC-Adapter im Backend ist noch nicht implementiert; Speicher ist `memory`, Neustart verwirft Sitzungen. Nur HTTP.
+- Grenze: Dex-Speicher ist `memory`, Neustart verwirft Sitzungen. Nur HTTP. Der OIDC-Adapter im Backend ist seit C14 implementiert (ADR-0007).
 
 ## Offene Punkte
 
-- OIDC-Backend-Anbindung, Anmeldung per Dex gegen das Backend: noch nicht getestet.
+- Anmeldung per Dex gegen das Backend: von C14 gegen echtes Dex gelaufen (Handoff C14); gegen andere Provider ungeprüft.
 - SMTP mit TLS/AUTH, echte S3-Signaturen und Rechte: nicht abgedeckt.
 
 

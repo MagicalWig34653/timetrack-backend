@@ -1,10 +1,10 @@
 # Lizenzinventar C4
 
-Stand: 14.10.2026, Branch `c3-smtp-licenses`. Projektlizenz: `AGPL-3.0-only`.
+Stand: 15.10.2026 (Paket D1 hat Lockfile, Manifest und das npm-Lockfile erneut abgeglichen; die Texte der übrigen Pakete stammen aus C4, 14.10.2026). Projektlizenz: `AGPL-3.0-only`.
 
 ## SwiftPM
 
-Alle 42 Pins aus `Package.resolved`; Lizenztexte aus den lokalen Checkouts vollständig eingelesen, identische Texte verglichen. Die Spalte Quelle ist relativ zu `.build/checkouts/`. Versionen und Revisionen stammen aus dem Lockfile; Checkout-HEADs wurden dagegen geprüft. „Direkt“ bezieht sich auf das Manifest nach C3; NIO und NIOSSL waren bereits transitiv vorhanden. Keine neue aufgelöste Dependency.
+Alle 43 Pins aus `Package.resolved` (42 aus C4 plus `zipfoundation` seit C11); Lizenztexte aus den lokalen Checkouts vollständig eingelesen, identische Texte verglichen. Die Spalte Quelle ist relativ zu `.build/checkouts/`. Versionen und Revisionen stammen aus dem Lockfile; Checkout-HEADs wurden dagegen geprüft. „Direkt“ bezieht sich auf `Package.swift` (neun direkte Pakete: `swift-nio`, `swift-nio-ssl`, `vapor`, `fluent`, `fluent-mysql-driver`, `fluent-sqlite-driver`, `webauthn-swift`, `Argon2Swift`, `ZIPFoundation`); NIO und NIOSSL sind seit C3 direkt eingebunden (SMTP), waren aber schon vorher transitiv vorhanden. `ZIPFoundation` kam mit C11 (ADR-0006) hinzu; die Zeile ist anhand des lokalen Checkouts (`LICENSE`, HEAD gleich Lockfile-Revision) am 15.10.2026 ergänzt.
 
 | Package | Art | Version / Branch | Revision | SPDX aus Lizenzdatei | Quelle |
 | --- | --- | --- | --- | --- | --- |
@@ -50,6 +50,7 @@ Alle 42 Pins aus `Package.resolved`; Lizenztexte aus den lokalen Checkouts volls
 | `vapor` | direkt | `4.122.2` | `33e61d0a02a9ddc9f025f8398a0dc24774f6cbe1` | `MIT` | `vapor/LICENSE` |
 | `webauthn-swift` | direkt | `1.0.0-beta.1` | `909cf4193cde7d64196553c4245ab647a68aaaca` | `Apache-2.0` | `webauthn-swift/LICENSE` |
 | `websocket-kit` | transitiv | `2.16.2` | `90bbbdab3ede12c803cfbe91646f291c092517a3` | `MIT` | `websocket-kit/LICENSE` |
+| `zipfoundation` | direkt | `0.9.20` | `22787ffb59de99e5dc1fbfe80b19c97a904ad48d` | `MIT` | `ZIPFoundation/LICENSE` |
 
 ### Bewertung und Sonderfälle
 
@@ -142,6 +143,7 @@ Weitere Sonderkennungen: `MIT-0` (zwei @csstools-Pakete) ist permissiv ohne MIT-
 
 ### Verifiziert und offen
 
+- Stand 15.10.2026 erneut abgeglichen (D1): Tabelle gegen `Package.resolved` (43 Pins, Versionen und Revisionen identisch), `ZIPFoundation`-Lizenztext (MIT, kein NOTICE) und npm-Lockfile (SHA-256 unverändert, 201 Einträge, gleiche Verteilung). Alles Übrige unten stammt aus C4.
 - Verifiziert: sämtliche SwiftPM-Pins, Checkout-Revisionen und Hauptlizenztexte; lokale NOTICE-Dateien; Argon2-C-Duallizenz; sämtliche npm-Lizenzfelder und obige Zählung, einschließlich aller MPL-/OFL-Einträge.
 - Offen: vollständiger Audit eingebetteter C-/Assembly-/Testanteile, BoringSSL/OpenSSL-Kompatibilitätsklärung, konkrete npm-Quelllizenzen jenseits der Metadaten und Inter-Lizenz, MPL-Marker, Fonts/Icons außerhalb des Lockfiles, Lizenzbeilagen und Attribution im tatsächlichen PWA-/Container-/Binary-Release.
 - Betriebssystembibliotheken, Container-Basisimages und Swift-Toolchain sind nicht Teil von Package.resolved und hier nicht inventarisiert. Keine Abhängigkeiten oder PWA-Dateien für C4 verändert.
