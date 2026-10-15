@@ -128,3 +128,17 @@ Nutzerentscheidung 15.10.: Module abschaltbar durch Betreiber **und** je Konto (
 5. **Vertragstreue**: automatisierter Abgleich Implementierung ↔ `contracts/openapi.yaml` (Contract-Tests/Linter), Typgenerierung für Clients.
 6. **Restpunkte Review/Tests**: gleichzeitiges Anlegen desselben Lernfelds liefert 500 statt 409; `pushsubscriptionchange`; weitere Push-Dienste (`PUSH_ALLOWED_HOSTS`); Import mit 20 000 Zeilen und Blobs nahe 64 MiB auf MariaDB messen; globale `auth_lock`-Serialisierung bewerten.
 7. **Fachlich/Produkt**: IHK-Ausgabeformat, Rechtsprofile (Jugendliche), Onboarding (Ausbildungsstichtag, Pausenfenster), Profilpflege (Anzeigename, E-Mail), Selbstständigenfunktionen (Kunden/Projekte/Sätze), Kalenderbrücke und KI-Worker-Schnittstellen (Job-Queue) für Etappe 5/6.
+
+## Etappe 4e: Arbeitszeit-Tabelle als Import-/Exportprofil (15.10.2026)
+
+Nutzerwunsch 15.10.: Das Tabellenformat der Beispiel-Arbeitszeittabelle (Jahresblätter, Wochenblöcke) soll Import **und** Export können (ADR-0013, Vertrag v0.10.0). Entscheidungen: „Freigestellt“ = neuer Typ `excused`; Export mit bewerteten Zeiten (Option tatsächlich).
+
+| ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
+| --- | --- | --- | --- | --- | --- |
+| C20 | Modulschalter Backend (ADR-0012) | Codex | 8 | integriert (Merge `38a3f5a`); 202 Tests inkl. MariaDB (Lead) | – |
+| L17 | Modulschalter PWA + PWA-Doku + Flaky-Test-Fix | Claude-Agent | 6 | integriert (PWA `1d88e10`); 455 Unit, 58 Mock-E2E, 128 Echt-E2E (Lead; zwei Specs an C19-Verhalten angepasst) | C20 |
+| D1 | Dokumentationsabgleich Backend (README, KONZEPT, ARCHITEKTUR, UMSETZUNG, EINRICHTUNG, ADR-Index) | Claude-Agent | 3 | integriert (Merge `1308de8`) | – |
+| C21 | `excused` durchgängig + Import-Profil `worktime_workbook` (Erkennung, Parser, Regeln, Absenzen, Rollback) | Codex | 10 | in Arbeit (Hauptordner, Branch `c21-worktime-import`) | ADR-0013 |
+| C22 | Export-Profil `worktime-xlsx` (Formelschreiber mit Cache-Werten, Jahresblätter) + Round-trip-Tests | Codex | 8 | offen (nach C21) | C21 |
+| L18 | PWA: excused, Import-Assistent-Zweig (Regeltabelle, nicht zugeordnete Bemerkungen), Export-Option; Modul-Echt-E2E | Claude-Agent | 8 | in Arbeit (PWA-Worktree `../timetrack-pwa-wt/l18`) | Vertrag v0.10.0 |
+| L19 | Echt-E2E Import/Export Tabelle (synthetische Mappe; lokale Prüfung gegen Nutzerdatei ohne Ablage) | Claude-Agent | 4 | offen | C21, C22, L18 |
