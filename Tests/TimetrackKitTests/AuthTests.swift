@@ -283,6 +283,10 @@ final class AuthTests: XCTestCase, @unchecked Sendable {
         defer { try? FileManager.default.removeItem(at: root) }
         try Data("<html>SPA</html>".utf8).write(to: root.appendingPathComponent("index.html"))
         try Data("export {};".utf8).write(to: root.appendingPathComponent("app.12345678.js"))
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("_app/immutable"), withIntermediateDirectories: true)
+        try Data("export {};".utf8).write(to: root.appendingPathComponent("_app/immutable/entry.abcdef12.js"))
+        try Data("{}".utf8).write(to: root.appendingPathComponent("manifest.webmanifest"))
+        try Data([0x89, 0x50, 0x4e, 0x47]).write(to: root.appendingPathComponent("apple-touch-icon.png"))
         try FileManager.default.createSymbolicLink(atPath: root.appendingPathComponent("escape").path, withDestinationPath: "/etc/passwd")
         try await withApp(environment: ["PWA_STATIC_DIR": root.path]) { app, _ in
             for path in ["/", "/invite/example", "/settings/passkeys"] {
@@ -292,9 +296,20 @@ final class AuthTests: XCTestCase, @unchecked Sendable {
                     XCTAssertTrue(response.headers.first(name: .contentType)?.contains("text/html") == true)
                 }
             }
-            try await app.test(.GET, "/app.12345678.js") { response async throws in
+            // Only SvelteKit's hashed output below /_app/immutable/ is cached as immutable.
+            try await app.test(.GET, "/_app/immutable/entry.abcdef12.js") { response async throws in
                 XCTAssertTrue(response.headers.first(name: .cacheControl)?.contains("immutable") == true)
                 XCTAssertTrue(response.headers.first(name: .contentType)?.contains("javascript") == true)
+            }
+            try await app.test(.GET, "/app.12345678.js") { response async throws in
+                XCTAssertEqual(response.headers.first(name: .cacheControl), "no-cache")
+            }
+            try await app.test(.GET, "/apple-touch-icon.png") { response async throws in
+                XCTAssertEqual(response.headers.first(name: .cacheControl), "no-cache")
+            }
+            try await app.test(.GET, "/manifest.webmanifest") { response async throws in
+                XCTAssertEqual(response.headers.first(name: .contentType), "application/manifest+json")
+                XCTAssertEqual(response.headers.first(name: .cacheControl), "no-cache")
             }
             for path in ["/%2e%2e/etc/passwd", "/escape", "/api/missing", "/health/missing", "/ready/missing"] {
                 try await app.test(.GET, path) { response async throws in checkEqual(response.status, .notFound) }

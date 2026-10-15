@@ -18,9 +18,12 @@ struct PWAStaticMiddleware: AsyncMiddleware {
         }
         guard file.path.hasPrefix(root.path + "/"), FileManager.default.fileExists(atPath: file.path) else { return try await next.respond(to: request) }
         let response = try await request.fileio.asyncStreamFile(at: file.path)
-        let hashed = decoded.hasPrefix("/_app/immutable/") || file.lastPathComponent.range(of: "[.-][A-Za-z0-9_-]{8,}[.]", options: .regularExpression) != nil
+        // Only SvelteKit's content-hashed output is immutable; other static files (icons, manifest, service worker) are revalidated.
+        let hashed = decoded.hasPrefix("/_app/immutable/")
         response.headers.replaceOrAdd(name: .cacheControl, value: file.lastPathComponent == "index.html" ? "no-cache" : hashed ? "public, max-age=31536000, immutable" : "no-cache")
         response.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
+        // Vapor has no mapping for .webmanifest; browsers expect the manifest media type.
+        if file.pathExtension == "webmanifest" { response.headers.replaceOrAdd(name: .contentType, value: "application/manifest+json") }
         return response
     }
 }
