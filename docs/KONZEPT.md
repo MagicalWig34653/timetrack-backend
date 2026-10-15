@@ -1,8 +1,13 @@
 # Timetrack – Produktkonzept
 
-Stand: 13.10.2026. Kein implementiertes Produkt. Bestätigt = Nutzervorgabe;
-Vorschlag = fachliche Ausarbeitung, noch nicht ausdrücklich bestätigt.
+Anforderungen Stand 13.10.2026 (bestätigt), Umsetzungsvermerke Stand 15.10.2026. Bestätigt = Nutzervorgabe;
+Vorschlag = fachliche Ausarbeitung, noch nicht ausdrücklich bestätigt; Details der Umsetzung stehen in den ADRs und
+sind dort teils Lead-Annahmen. Die Anforderungen selbst sind unverändert; neu sind nur die Vermerke
+„Umsetzungsstand“ je Abschnitt. Maßgeblich für geprüfte Zustände ist [STATUS.md](STATUS.md).
 Technik: [Architektur](ARCHITEKTUR.md). Umsetzung: [Etappen](UMSETZUNG.md).
+
+Statusbegriffe: **umgesetzt** = im Backend (und der PWA) vorhanden und automatisiert getestet, nicht auf Echtgeräten
+geprüft, sofern nicht anders vermerkt; **teilweise** = Teile vorhanden; **geplant** = noch nicht begonnen.
 
 ## 1. Ziel und Nutzerkreis – bestätigt
 
@@ -13,6 +18,10 @@ Instanz sind möglich. Keine Team-Genehmigungshierarchie im ersten Umfang.
 
 Der Nutzer ist Auszubildender mit anschließender Anstellung; Historie und Berichtshefte bleiben erhalten. Selbstständigenfunktionen dürfen später kommen.
 Die Umsetzung übernimmt Claude Code. Fragen gesammelt im normalen Chat, nicht interaktiv stellen.
+
+Umsetzungsstand: **umgesetzt** – Mehrkonten mit strikter Trennung, Registrierung nur per Einladung (auch bei OIDC),
+private Daten, Planfreigaben (siehe Abschnitt 5); keine Team-Genehmigungshierarchie. Historie bleibt über versionierte
+Arbeitsmodelle erhalten. Eigene Selbstständigenfunktionen: **geplant** (Abschnitt 8).
 
 ## 2. Arbeitsmodelle – bestätigt
 
@@ -27,10 +36,19 @@ Die Umsetzung übernimmt Claude Code. Fragen gesammelt im normalen Chat, nicht i
 - Über-/Unterstunden, Übertrag und Ausgleich frei konfigurierbar, Anfangsstände möglich.
 - Deutschland/Sachsen-Anhalt als persönliches Profil; Land und Region frei wählbar.
 
+Umsetzungsstand: **umgesetzt** (ADR-0004, ADR-0005) – Soll täglich oder wöchentlich, Modelle mit `validFrom` ohne Rückwirkung,
+Schulregel mit Schwelle und Gutschrift (Standard 4 × 45 min, 7:42), Fahrtzeiten als Arbeit konfigurierbar, Zeitkonto mit
+Anfangsstand und datierten Korrekturen, Feiertage für alle 16 Bundesländer. **Teilweise**: Rechtsprofil nur
+`arbzg-adult-de` (Hinweise); Profile für Jugendliche **geplant**. Geführtes Onboarding (Ausbildungsstichtag u. Ä.) **geplant**.
+
 Vorschlag: Wochen-Soll mit Verteilung auf Arbeitstage oder explizite Tages-Sollwerte, klare
 Vorrangregel. Bei reinem Wochen-Soll braucht die Abwesenheitsbewertung eine definierte Tagesbasis.
 Änderungen ab Stichtag, rückwirkende Neubewertung ausdrücklich wählen. Keine doppelte Gutschrift
 bei Überschneidungen von Schule, Feiertag, Urlaub und Krankheit.
+
+Umsetzungsstand der Vorschläge: Wochen-Soll wird gleichmäßig auf Arbeitstage verteilt oder durch Tageswerte überschrieben,
+Änderungen gelten ab `validFrom`, je Tag höchstens eine Markierung (ADR-0004, Lead-Annahmen). Eine wählbare
+rückwirkende Neubewertung ist nicht vorgesehen.
 
 ## 3. Erfassung und Automatik
 
@@ -59,6 +77,12 @@ Ein bloßer Server-Timer ohne weitere Standortinformation beweist keinen Aufenth
 Fehlendes Verlassen-Signal nicht als Anwesenheitsnachweis werten. Mit Shortcuts auf echten Geräten
 erproben; unklare Fälle als Vorschlag behandeln. Rundung und technische Erkennung des Verlassens trennen.
 
+Umsetzungsstand: **umgesetzt** (ADR-0004 mit Zusatz C7) – Timer, manuelle Segmente mit Revisionen, idempotenter Timer,
+Rundung nur an den äußersten Tagesgrenzen, Roh-/korrigierte/bewertete Zeit getrennt, Nachtschicht gehört zum Tag des Beginns,
+Automatik per Gerätetoken je Ort `direct`/`suggest`/`off` mit Vorbeifahrtschutz (Standard 300 s Bestätigung, Rückdatierung auf
+Ankunft). **Nicht auf Echtgeräten geprüft**: Shortcuts mit echter Standortauslösung. Ein globaler Schalter für die Automatik ist
+als Modul `automation` **geplant** (ADR-0012, C20); bis dahin je Ort `off` bzw. Gerätetoken widerrufen.
+
 Pausenvorlagen nur innerhalb aktiver Arbeitszeit anwenden, Überschneidungen nicht doppelt abziehen.
 Eine übersprungene Pause bleibt als tatsächliche Arbeit erfasst. Keine Pause zur vermeintlichen
 Rechtskonformität erfinden. Regelbasierte Hinweise sind keine verbindliche Rechtsprüfung.
@@ -69,12 +93,21 @@ keine Arbeit länger als sechs Stunden ohne Pause. Quellenstand/Rechtsprofil anz
 Implementierung fachlich validieren. Jugendliche und Sonderfälle brauchen eigene geprüfte Regeln.
 Quelle: https://www.gesetze-im-internet.de/arbzg/__4.html
 
+Umsetzungsstand: **umgesetzt** als reine Hinweise (`breakHints`, Profil `arbzg-adult-de`) auf tatsächlichen Zeiten; feste
+Pausenvorlagen überspringbar. Fachliche Validierung der Rechtsregeln durch eine fachkundige Person steht aus; keine
+Rechtsprüfung. Jugendliche/Sonderfälle **geplant**.
+
 ## 4. Urlaub, Abwesenheit und Planung
 
 Bestätigt: Jahresanspruch eingeben, Restbestand anzeigen, Urlaub/Arbeitszeit/HO planen,
 Feiertage und Ferien anzeigen. Bestehenden Resturlaub einfach zu Beginn eintragen können.
 Urlaubs-/Krankheitsunterlagen mit Bezugsdatum/-zeitraum, Einreichungsstatus und Einreichungsdatum.
 Zunächst keine allgemeine Vertrags-/Abrechnungsablage und kein automatischer Versand.
+
+Umsetzungsstand: **umgesetzt** (ADR-0005, Stufe 3a) – Urlaubskonto in halben Tagen, Übertrag, Korrekturen, Stichtagsbestand,
+Statusfolge, Vorschau, Abwesenheiten mit Anhängen und Einreichungsstatus, Planung (Arbeit/HO), Feiertage. Schulferien nur als
+vom Nutzer erfasste Zeiträume (keine eingebauten Ferientermine). Anspruch 30 Tage/5-Tage-Woche sind Standardwerte für
+Onboarding und Tests, keine Nutzerdaten. Übertrag/Verfall konfigurierbar im Rahmen des ADR; keine Rechtsbehauptung.
 
 Vorgeschlagenes Urlaubskonto:
 
@@ -100,12 +133,19 @@ Vorschlag: zuerst lesend, Schreiben offen. EventKit-Brücke auch schon auf macOS
 Explizit wählen, welche Kalenderdaten zum Backend gelangen; Aktualitätszeitpunkt anzeigen.
 Offline-Geräte garantieren keine aktuelle Kalendersicht in der PWA.
 
+Umsetzungsstand Kalender: **geplant** (Etappe 5/6). Der Kalender in der PWA zeigt Feiertage, Abwesenheiten und Planung des
+Kontos; es gibt keine Kalenderanbindung (iCloud, Google, EventKit).
+
 Zeitplan gezielt an einzelne Konten freigeben und jederzeit widerrufen können.
 Bestätigt: auch tatsächliche Arbeitszeiten und ausdrücklich als Urlaub erkennbare Abwesenheiten
 müssen teilbar sein. Vorschlag: pro Empfänger getrennt wählen, ob Planung, Ist-Zeiten und Urlaub
 sichtbar sind; nur lesender Zugriff. Standard bleibt privat.
 Keine Diagnosen, Anhänge, privaten Termintitel oder Berichtshefte durch diese Freigabe teilen.
 Kein öffentliches Nutzerverzeichnis voraussetzen.
+
+Umsetzungsstand Planfreigabe: **umgesetzt** – Freigabe je Empfänger (Kontokennung) mit getrennten Umfängen für Planung,
+Ist-Zeiten und Urlaub, nur lesend, jederzeit widerrufbar, Standard privat; Ist-Zeiten nur als bewertete Beginn/Ende/Dauer ohne
+Orte und Notizen; Anhänge und Berichtsheft nie geteilt (ADR-0005, `contracts/openapi.yaml`).
 
 ## 6. Berichtsheft und KI
 
@@ -115,6 +155,11 @@ Keine Portalautomatisierung nötig. Vorschlag: datierte Einträge mit diesen Fel
 gruppierbar. Exakte Gruppierung und Darstellung der Zeit können beim ersten Exportbeispiel geklärt werden.
 Alte Berichtshefte liegen als PDFs vor; Archivimport vorsehen, strukturierte Übernahme separat prüfen.
 
+Umsetzungsstand: **umgesetzt** (ADR-0008, ohne KI) – Lernfeldliste, datierte Einträge (Lernfeld, Zeit, Notiz), Wochenansicht
+mit Status, Quellen (Notizen/Dateien), kopierbarer Text im **Standardformat** (Ausgabeprofil `standard`); Berichtsheft bleibt
+privat. **Teilweise**: Alt-PDFs nur als Archivdatei im Dateispeicher ablegbar; strukturierte Übernahme **geplant**.
+Das Ausgabeformat ist **angenommen**, nicht gegen ein echtes IHK-Beispiel validiert (siehe Abschnitt 9).
+
 PWA-KI erwünscht, falls unterstützter ChatGPT-/Anthropic-Login ohne eigenen API-Key möglich ist;
 sonst lokale Apple-Modelle mit späterer Swift-App. Zusätzlich gewünschter Mac-Worker:
 PWA lädt Quellen hoch, persönlicher Mac verarbeitet sie und liefert Entwurf zurück.
@@ -123,6 +168,10 @@ Vorschlag: OCR, Textgenerierung und Freigabe getrennt. Keine erfundenen Tätigke
 markieren. Freigegebene Texte nicht ungefragt ändern. Manuelle Nutzung funktioniert ohne KI.
 Mac muss erreichbar und Modell verfügbar sein. Kein stiller Wechsel zur Cloud-KI.
 Machbarkeit/Anbieterbedingungen siehe Architektur.
+
+Umsetzungsstand KI: **geplant** (Etappe 5/6): kein KI-Entwurf, kein Mac-Worker, kein Anbieterzugang. Im Backend ist dafür
+nichts vorhanden; das Berichtsheft kennt nur Einträge, die der Nutzer selbst anlegt. Über MCP können externe Assistenten
+Einträge lesen/anlegen (Abschnitt 8), das ist kein eingebauter KI-Zugang.
 
 ## 7. Import, Export und Erinnerungen
 
@@ -144,6 +193,12 @@ Erinnerungen für laufende Timer, ungeprüfte Automatik, Berichtsheftlücken und
 Pro Kategorie abschaltbar, Ruhezeiten/Zeitzonen berücksichtigen. Push standardmäßig ohne sensible Details.
 Bei fehlendem Netz keine erfolgreiche Speicherung vortäuschen. Kernbuchungen nicht von Push abhängig.
 
+Umsetzungsstand: **umgesetzt** – Export XLSX/PDF/CSV (eigene Writer, `tatsächlich` und `bewertet` getrennt), Import
+CSV/XLSX mit Spaltenzuordnung, Vorschau, Commit, Rücknahme und Vorlagen (ADR-0006); Hinweise (Timer, Vorschläge,
+Berichtslücke, Einreichung), Ruhezeiten und Web Push mit generischer Nutzlast (ADR-0010). **Teilweise geprüft**: Push nur gegen
+Fake-Dienst, Exporte nicht in Excel/Viewer geöffnet, E-Mail als Hinweiskanal **geplant** (nur Recovery-Mails). Offline-Schreiben:
+bewusst nicht vorhanden (die PWA zeigt Offline-Hinweis, speichert nichts vor).
+
 ## 8. Spätere Funktionen und Plattformen
 
 Selbstständigkeit: Kunden, Projekte, Tätigkeiten, abrechenbare Zeiten, Stundensätze und Auswertungen.
@@ -157,6 +212,12 @@ Hardware und Modellverfügbarkeit später prüfen. Kein bezahlter Apple-Develope
 MCP-Server mit OAuth für ChatGPT und Claude. Andere Clients können alternativ persönliche
 Bearer-Tokens verwenden. Erster Toolumfang bleibt als Vorschlag in der Architektur dokumentiert.
 
+Umsetzungsstand Abschnitt 8: Selbstständigkeit, App-Tracking und native Apps (macOS, iOS/iPadOS, watchOS): **geplant**.
+MCP: **umgesetzt** (ADR-0009) – `/mcp` mit 22 Tools nach Scope, OAuth-Server (Dynamic Client Registration, PKCE, Refresh-Rotation),
+persönliche Tokens, Grants; Anbindung in echtem ChatGPT/Claude **nicht geprüft** (`MCP.md`).
+Kontowiederherstellung: **umgesetzt** – Recovery-Codes, Rückfallpasswort (Argon2id), E-Mail-Code (nur bei konfiguriertem SMTP;
+real nur gegen Mailpit/Fake geprüft), kombinierbar.
+
 Kontowiederherstellung beim Einrichten vom Nutzer wählbar: E-Mail-Codes, Rückfallpasswort oder
 Recovery-Codes. Passkeys bleiben primäre Anmeldung. Vorschlag: mehrere Wiederherstellungswege
 kombinierbar. E-Mail-Auswahl nur bei betriebsbereitem Mailversand und verifizierter Adresse;
@@ -164,10 +225,22 @@ ein Server ohne Mailversand bleibt mit den anderen Optionen vollständig nutzbar
 
 ## 9. Noch offene Details
 
+Stand 15.10.2026. Erledigtes ist vermerkt, nicht gelöscht; offen bleibt, was nicht durch Nutzerentscheidung geklärt ist.
+
 1. Berichtsheft-Gruppierung und Zeitdarstellung anhand eines Exportbeispiels prüfen; Felder stehen fest.
+   **Weiterhin offen**: Es liegt kein IHK-Beispiel vor; umgesetzt ist das angenommene Standardformat (ADR-0008,
+   Nutzerentscheidung 14.10.), später als weiteres Ausgabeprofil anpassbar.
 2. Erste MCP-Schreibaktionen: Vorschlag in Architektur; Zielclients und Authentifizierungswege stehen fest.
-3. Ausbildungsstichtag, Pausenfenster und Urlaubs-/Vertragsparameter später im Onboarding.
-4. Kalender-Schreibzugriff, strukturierter PDF-Import und Hardwaredetails später klären.
+   **Entschieden und umgesetzt** (ADR-0009, Lead-Entscheidung): `start_timer`, `stop_timer`, `create_segment`, `correct_segment`,
+   `create_absence` (nur geplant/beantragt), `set_plan_day`, `create_report_entry`, `update_report_entry`; keine Lösch-, Admin-,
+   Freigabe-, Token- oder Speicher-Tools. Praxis im echten Connector steht aus.
+3. Ausbildungsstichtag, Pausenfenster und Urlaubs-/Vertragsparameter später im Onboarding. **Weiterhin offen**
+   (Onboarding nicht gebaut; Standardwerte und manuelle Eingabe vorhanden).
+4. Kalender-Schreibzugriff, strukturierter PDF-Import und Hardwaredetails später klären. **Weiterhin offen.**
+5. Neu (15.10.2026, Nutzerentscheidung): Module sind durch Betreiber und je Konto abschaltbar (ADR-0012, Vertrag v0.9.0);
+   Umsetzung C20/L17 offen. Annahmen dazu (z. B. Wirkung auf Zeitkonto bei abgeschaltetem Modul `planning`) sind im ADR
+   als Lead-Annahmen markiert.
+6. Rechtsprofil: Jugendliche und Sonderfälle sowie fachliche Validierung der Pausenhinweise stehen aus.
 
 ## 10. Abgrenzung
 
