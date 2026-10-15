@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.8.1
+  version: 0.9.0
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -20,6 +20,7 @@ info:
     (4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form
     `<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.
     (6) No session listing endpoint in stage 1; only revoking other sessions.
+    v0.9.0: Modulschalter (ADR-0012). Abgeschaltete Module antworten 404 mit Code module_disabled, Änderungen an gesperrten Modulen 409 module_locked. Betreiber-Override per Umgebung MODULES_DISABLED.
     v0.8.1: C19-Review-Fixes: DELETE /files/{id} → 503 storage_unavailable, wenn das Objekt nicht entfernt werden konnte (Datensatz bleibt mit Retry-Marker); POST /oauth/token → 429 temporarily_unavailable bei Überschreitung des Limits; Push-Endpunkte nur https:443 auf erlaubten Push-Diensten (Apple/Google/Mozilla/Microsoft), sonst 400 bad_request; Datums- und Zahlenbereiche strikt validiert (Int.min/Int.max → 400).
     v0.8.0: Hinweise/Web Push (ADR-0010). Push-Nutzlast ohne Details, Ruhezeiten stellen Push zurück; REST-Fehlercodes: push_unavailable (501), too_many_subscriptions (409).
     v0.7.0: MCP/OAuth/persönliche Tokens (ADR-0009). Fehlercodes REST: reauth_required, insufficient_scope; OAuth-Endpunkte folgen RFC 6749/7009/7591/8414/9728 (Fehler als JSON `error`/`error_description`).
@@ -1121,6 +1122,30 @@ paths:
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '202': { description: gesendet }, '404': { $ref: '#/components/responses/NotFound' }, '429': { $ref: '#/components/responses/TooMany' }, '501': { $ref: '#/components/responses/NotImplemented' } }
+  /api/v1/modules:
+    get:
+      operationId: listModules
+      description: Status der abschaltbaren Module (ADR-0012) für das angemeldete Konto.
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ModuleStatus' } } } } } }
+  /api/v1/me/modules:
+    put:
+      operationId: putMyModules
+      description: Eigene Auswahl. Nicht genannte Module bleiben unverändert; ein vom Server abgeschaltetes Modul kann nicht eingeschaltet werden (409 module_locked).
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [modules], properties: { modules: { type: object, additionalProperties: { type: boolean } } } } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ModuleStatus' } } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/v1/admin/modules:
+    get:
+      operationId: getServerModules
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ServerModule' } } } } }, '403': { $ref: '#/components/responses/Forbidden' } }
+    put:
+      operationId: putServerModules
+      description: Nur Admin. Setzt die serverweite Verfügbarkeit; vom Betreiber per Umgebung gesperrte Module sind nicht änderbar (409 module_locked).
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [modules], properties: { modules: { type: object, additionalProperties: { type: boolean } } } } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ServerModule' } } } } }, '403': { $ref: '#/components/responses/Forbidden' }, '409': { $ref: '#/components/responses/Conflict' } }
 components:
   securitySchemes:
     session: { type: apiKey, in: cookie, name: tt_session }
@@ -1700,3 +1725,22 @@ components:
         userAgent: { type: [string, 'null'] }
         createdAt: { type: string, format: date-time }
         lastSuccessAt: { type: [string, 'null'], format: date-time }
+    ModuleKey:
+      type: string
+      enum: [reports, planning, transfer, automation, mcp]
+    ModuleStatus:
+      type: object
+      required: [key, serverEnabled, accountEnabled, effective, lockedByOperator]
+      properties:
+        key: { $ref: '#/components/schemas/ModuleKey' }
+        serverEnabled: { type: boolean }
+        accountEnabled: { type: boolean }
+        effective: { type: boolean }
+        lockedByOperator: { type: boolean }
+    ServerModule:
+      type: object
+      required: [key, enabled, lockedByOperator]
+      properties:
+        key: { $ref: '#/components/schemas/ModuleKey' }
+        enabled: { type: boolean }
+        lockedByOperator: { type: boolean }

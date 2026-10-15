@@ -112,3 +112,23 @@ Nächster Schritt: Lead prüft komplette Suite mit erlaubten Sockets und eigener
 Details: `handoffs/C19.md`.
 | C19 | Codex-Review-Fixes (12 Befunde C9–C18, Sweep nach Absturzmustern) | **Codex** | 8 | integriert (Merge); 193 Tests inkl. MariaDB vom Lead nachgelaufen | Review 15.10. |
 | R1 | Codex-Adversarial-Reviews C9–C18 (3 Blöcke) | Codex (Review, nicht als Umsetzung gezählt) | – | abgeschlossen; Befunde in `docs/reviews/2026-10-15-codex-review.md` | – |
+
+## Etappe 4d: Modulschalter und Dokumentationsabgleich (15.10.2026)
+
+Nutzerentscheidung 15.10.: Module abschaltbar durch Betreiber **und** je Konto (ADR-0012, Vertrag v0.9.0).
+
+| ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
+| --- | --- | --- | --- | --- | --- |
+| C20 | Modulschalter Backend: Guard, Server-/Konto-Einstellungen, Admin-API, Hinweis-/MCP-/Automationsanbindung, Tests | Codex | 8 | offen | ADR-0012 |
+| L17 | PWA: Module ausblenden, Einstellungen (Konto), Admin-Seite, Erklärtexte; PWA-Doku (README/STATUS) aktualisieren | Claude-Agent | 6 | offen | Vertrag v0.9.0 |
+| D1 | Dokumentationsabgleich Backend-Repo (README, KONZEPT, ARCHITEKTUR, UMSETZUNG, EINRICHTUNG, REPOSITORIES, deploy, LIZENZEN, ADR-Index) | Claude-Agent | 3 | offen | – |
+
+## Backlog Backend (Stand 15.10.2026, nicht begonnen)
+
+1. **Kontenverwaltung**: Admin-Liste der Konten, Deaktivieren/Reaktivieren, Rollenwechsel, Sitzungen widerrufen, Konto löschen; Selbstauskunft/Selbstlöschung und Export der eigenen Daten (ZIP aus JSON/CSV + Dateien).
+2. **Backup/Restore**: dokumentiertes und getestetes Verfahren (DB + Dateien + `STORAGE_SECRET_KEY`), Restore-Test auf MariaDB und SQLite; ARCHITEKTUR verlangt gemeinsames Restore.
+3. **Betrieb**: produktionsnahes Compose/Swarm-Stack (bisher nur Dev-Compose), expliziter Migrationsschritt, Healthchecks/Logging/Metriken, vertrauenswürdige Proxy-Header für Client-IP (Rate-Limits), amd64-Nachweis für den aktuellen Stand, CI-Skript `scripts/check-all.sh`.
+4. **Aufräumjobs**: abgelaufene Sitzungen/Challenges/OAuth-/OIDC-States/Codes/Tokens, `rate_limit_events`, `mcp_audit`-Retention, hängende Import-Jobs, Speicher-Cleanup periodisch (bisher nur nach DELETE).
+5. **Vertragstreue**: automatisierter Abgleich Implementierung ↔ `contracts/openapi.yaml` (Contract-Tests/Linter), Typgenerierung für Clients.
+6. **Restpunkte Review/Tests**: gleichzeitiges Anlegen desselben Lernfelds liefert 500 statt 409; `pushsubscriptionchange`; weitere Push-Dienste (`PUSH_ALLOWED_HOSTS`); Import mit 20 000 Zeilen und Blobs nahe 64 MiB auf MariaDB messen; globale `auth_lock`-Serialisierung bewerten.
+7. **Fachlich/Produkt**: IHK-Ausgabeformat, Rechtsprofile (Jugendliche), Onboarding (Ausbildungsstichtag, Pausenfenster), Profilpflege (Anzeigename, E-Mail), Selbstständigenfunktionen (Kunden/Projekte/Sätze), Kalenderbrücke und KI-Worker-Schnittstellen (Job-Queue) für Etappe 5/6.
