@@ -10,7 +10,7 @@ Stand: 15.10.2026. Backend und PWA decken Etappe 1–4 ab (siehe unten); native 
   Dazu Hinweise/Erinnerungen/Web Push (RFC 8291/8292, VAPID) mit Scheduler und Lease.
   **193 Tests, 0 Fehler** (`swift test --build-system native`; mit frischer MariaDB-Testdatenbank 0 übersprungen). Linux-Image baut (`docker compose --profile app build backend`). Codex-Adversarial-Review C9–C18 lieferte 12 Befunde, alle behoben (C19, `docs/reviews/2026-10-15-codex-review.md`).
 - **PWA** (Svelte 5/SvelteKit statisch, Tailwind/shadcn-Stil): alle zugehörigen Seiten inkl. Berichtsheft, Export/Import, Speicher-Admin, Verbindungen/Tokens/MCP-Hilfe, OIDC. `npm run check` ohne Fehler, **426 Unit-Tests (1 flackernder Altest L4), 53 Mock-E2E, 128 Echt-E2E, 6 PWA-Produktionsbuild-Specs** (Playwright gegen echte Wegwerf-Backends, virtueller Passkey, S3Mock-Test).
-- **Live-Testinstanz**: `https://test.example.org` (→ 192.0.2.10:18080, Compose-Profil `app`, MariaDB) mit aktuellem Backend und PWA; erster Admin-Link noch zu erzeugen (siehe EINRICHTUNG.md/TESTUMGEBUNGEN.md).
+- **Live-Testinstanz**: `https://test.example.org` (→ 192.0.2.10:18080, Compose-Profil `app`, MariaDB) mit Backend (inkl. C23) und PWA (inkl. L22: Import-Assistent mit Optionen, Warnungen, Salden, Modellbeginn-Hinweis; Stand 2026-10-16); erster Admin-Link noch zu erzeugen (siehe EINRICHTUNG.md/TESTUMGEBUNGEN.md).
 - **Testumgebungen** (`docs/TESTUMGEBUNGEN.md`): Mailpit (Mail-Recovery Ende-zu-Ende belegt), Adobe S3Mock, Dex (OIDC), Bind-Adressen.
 
 ## Offen / nicht belegt
