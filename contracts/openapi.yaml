@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.10.2
+  version: 0.10.3
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -20,6 +20,7 @@ info:
     (4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form
     `<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.
     (6) No session listing endpoint in stage 1; only revoking other sessions.
+    v0.10.3: ImportResult.warnings (additiv, wie in der Vorschau); school_on_holiday für Schulzeilen an Feiertagen neben holiday_times_discarded für Arbeitszeilen.
     v0.10.2: Import-Profil: holidayTimes/partialCredit, Warnungen holiday_times_discarded/credit_partial_as_work (zusammengefasst mit count), Vorschau sheetBalanceUpToTodaySeconds/sheetBalanceFutureSeconds/firstContentDate (Befund L20: Abweichung Tabelle/App erklärt sich aus Feiertagszeilen, Teilgutschriften, Modellbeginn und Zeilen nach heute).
     v0.10.1: Klarstellungen C21: rules leer = keine Regeln; Vorschau-warnings (pause_exceeds_day); Zeilenfehler planning_disabled (Abwesenheits-/Feiertagsaktionen bei ausgeschaltetem Modul planning, Arbeit/Schule bleiben importierbar); ImportResult.conflictItems; Notizen über 500 bzw. Feiertagsnamen über 80 Zeichen → note_too_long (keine stille Kürzung). Export worktime-xlsx ist kein verlustfreies Sicherungsformat (siehe docs/handoffs/C22.md).
     v0.10.0: Arbeitszeit-Tabelle als Import-/Exportprofil und Typ excused (ADR-0013).
@@ -1551,6 +1552,7 @@ components:
         rolledBack: { type: integer, description: bei Rollback die Zahl stornierter Segmente }
         absencesCreated: { type: integer }
         customDaysCreated: { type: integer }
+        warnings: { type: array, items: { type: object, required: [code], properties: { code: { type: string, enum: [pause_exceeds_day, holiday_times_discarded, credit_partial_as_work, school_on_holiday] }, row: { type: [integer, 'null'] }, count: { type: integer } } }, description: wie ImportPreview.warnings, auch im Ergebnis des Commits }
         batchId: { type: string, format: uuid }
         created: { type: integer }
         skipped: { type: integer }
