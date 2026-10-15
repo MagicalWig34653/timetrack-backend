@@ -3,7 +3,8 @@ import Fluent
 import FluentMySQLDriver
 import FluentSQLiteDriver
 
-public func configure(_ app: Application, configuration: Configuration? = nil, mailSender: (any MailSender)? = nil) async throws {
+public func configure(_ app: Application, configuration: Configuration? = nil, mailSender: (any MailSender)? = nil,
+                      notifications: NotificationOptions = NotificationOptions()) async throws {
     let config = try configuration ?? Configuration()
     switch config.databaseDriver {
     case .sqlite:
@@ -27,6 +28,7 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
     for migration in ReportSchema.migrations { app.migrations.add(migration) }
     for migration in McpSchemaMigrations.migrations { app.migrations.add(migration) }
     for migration in OAuthSchema.migrations { app.migrations.add(migration) }
+    for migration in NotificationSchema.migrations { app.migrations.add(migration) }
     // Fluent installs the migrate command, including --revert and the global --yes flag.
     // Do not auto-apply migrations before explicit migrate/revert commands.
     if config.autoMigrate && !app.environment.arguments.contains("migrate") {
@@ -42,6 +44,8 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
     app.middleware.use(PWAStaticMiddleware(directory: config.pwaStaticDirectory))
     app.asyncCommands.use(BootstrapAdmin(service: service), as: "bootstrap-admin")
     registerRoutes(app, service: service)
+    app.installNotifications(auth: service, options: notifications)
+    if let runtime = app.notificationRuntime { registerNotificationRoutes(app, auth: service, service: runtime.service) }
 }
 
 public struct StatusResponse: Content { public let status: String }
