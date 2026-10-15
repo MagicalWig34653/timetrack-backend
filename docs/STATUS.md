@@ -19,7 +19,7 @@ Stand: 15.10.2026. Backend und PWA decken Etappe 1–4 ab (siehe unten); native 
 - **Betrieb**: Colima-Datenplatte nahezu voll (40 GB) – `docker builder prune` oder größere Platte (TESTUMGEBUNGEN.md); amd64 nur emuliert und für SQLite belegt (Stand 14.10., nicht für den aktuellen Stand); hinter Reverse Proxy nutzt das Rate-Limit die Peer-IP; globale `auth_lock`-Serialisierung begrenzt Durchsatz.
 - **Fachlich offen**: IHK-Berichtsheft-Ausgabeformat (Standardprofil angenommen), E-Mail-SMTP nur gegen Mailpit/Fake (kein TLS/Auth real), Token-Ablauf (1 h Access) und abgelaufene Tokens nicht zeitgesteuert getestet, XLSX/PDF nicht in Excel/Viewer geöffnet, Import mit 20 000 Zeilen auf MariaDB nicht gemessen,
   MariaDB-Blobs nahe 64 MiB, S3 nur gegen S3Mock, kein periodischer Aufräumjob für Speicher, einzelne Testdatenbank-Kollisionen bei paralleler Agent-Arbeit.
-- **Codex-Anteil**: Kontingent war vom 14.10. bis 15.10. erschöpft; C9–C18 setzten deshalb Claude-Agents um (Nutzerentscheidung 14.10.), Codex prüfte sie anschließend (R1, 12 Befunde) und behob sie (C19). Dockerfile/Compose ohne Befund im Review; PWA-Code seit L3b nicht mehr von Codex geprüft.
+- **Codex-Anteil**: gesamt ca. 29 % der Punkte (71 von 246, Unterschreitung des Richtwerts, Details `docs/ARBEITSPLAN.md`); Kontingent war vom 14.10. bis 15.10. erschöpft; C9–C18 setzten deshalb Claude-Agents um (Nutzerentscheidung 14.10.), Codex prüfte sie anschließend (R1, 12 Befunde) und behob sie (C19). Dockerfile/Compose ohne Befund im Review; PWA-Code seit L3b nicht mehr von Codex geprüft.
 - **Nicht begonnen**: native Apps macOS/iOS/watchOS und Kalenderbrücke (Etappe 5), KI/Mac-Worker, Selbstständigenfunktionen, Google-Kalender, Offline-Sync (Etappe 6), strukturierte PDF-Altberichte.
 
 ## Umgebung

@@ -63,12 +63,17 @@ Diese Vorarbeit zählt nicht als abgeschlossene C1/C2/L1/L2-Punkte.
 L1 übernimmt auch die Auslagerung der bisherigen PWA-Texte in Lokalisierungsressourcen;
 die native App folgt bei ihrem ersten Implementierungspaket. Kein aktiver Agent-Auftrag.
 
-## Abweichung vom 50-%-Ziel (Nutzerentscheidung 14.10.2026)
+## Punktebilanz und Abweichung vom 50-%-Ziel (Stand 15.10.2026, Lead-Nachrechnung)
 
-Wegen des erschöpften Codex-Kontingents setzt ein Claude-Agent C9 (8 Punkte) um. Stand der integrierten Punkte (Etappe 1–3a, ohne C9/L7b):
-Codex 37 (C1 5, C2 8, C3 3, C4 1, C5 5, C6 8, C7 2, C8 5), Claude 38 (L1 8, L2 3, L3a 2, L3b 3, L4 8, L5 4, L6 8, L7a 2 – Schätzwerte).
-Mit C9 als Claude-Umsetzung (+8) ergibt sich ein Verhältnis von ca. 45 % Codex zu 55 % Claude; innerhalb des Richtwerts 40–60 %, aber Etappe 3a allein liegt klar darunter (Codex C8 5 von 26).
-Gegenseitiges Review: C9 soll nach Rückkehr des Kontingents (ab 20.10.) von Codex per Adversarial-Review geprüft werden; bis dahin prüft ein unabhängiger Claude-Agent.
+Summe der Paketpunkte (Schätzwerte, Umsetzung ohne Reviews/Koordination), Stand nach C22, ohne L19:
+
+| Seite | Pakete | Punkte |
+| --- | --- | --- |
+| Codex | C1 5, C2 8, C3 3, C4 1, C5 5, C6 8, C7 2, C8 5, C19 8, C20 8, C21 10, C22 8 | **71** |
+| Claude-Agents | L1 8, L2 3, L3a 2, L3b 3, L4 8, L5 4, L6 8, L7a 2, L7b 3, C9 8, C10 2, C11 5, C12 8, C13 8, L9 8, L10 3, C14 8, L11 5, L12 5, C15 6, L13 6, L14 4, C16 8, C17 8, L15 5, X1 4, C18 8, L16 8, L17 6, D1 3, L18 8 | **175** |
+
+**Codex-Anteil gesamt: 71 von 246 Punkten ≈ 29 % – unter dem Richtwert 40–60 %.** Ursache: Das Codex-Kontingent war vom 14.10. (nach C8) bis 15.10. erschöpft; C9–C18 (Backend-Fachpakete) setzten auf Nutzerentscheidung Claude-Agents um. Eine frühere Aussage „Codex 59 von 96“ in der Sitzungszusammenfassung vom 15.10. war falsch (Teilsumme ohne die Claude-Pakete ab C9 und ohne Oberflächenpakete).
+Codex-Reviews (R1: Adversarial-Review von C9–C18, 12 Befunde, behoben in C19) zählen **nicht** als Umsetzung, ergänzen aber die gegenseitige Prüfung. Gegenmaßnahme: Backend-Fachpakete gehen ab jetzt vorrangig an Codex (C19–C22 ausnahmslos Codex); Oberflächen-, E2E-, Doku- und Umgebungspakete bleiben bei Claude-Agents, weil Codex nur im Backend-Hauptordner schreiben darf. Nachgelagerte Pakete sollen den Anteil Richtung 40 % führen; ein Ausgleich auf 50 % ist ohne Rückbau fertiger Arbeit nicht möglich und wird nicht künstlich hergestellt.
 
 ## Etappe 1b/3c: Testumgebungen und OIDC (14.10.2026)
 
