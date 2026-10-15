@@ -95,3 +95,6 @@ Konvention: Auf dieser Instanz keine automatisierten Registrierungen mit virtuel
 Die Docker-Datenpartition der Colima-VM (40 GB) war am 15.10. wieder zu 100 % belegt (Images ~35 GB, Build-Cache ~14,6 GB, davon ~3,8 GB freigebbar). Folge: MariaDB meldete beim Anlegen neuer Tabellen „No space left on device“, das Backend startete in einer Schleife neu.
 Behelf: eigene, ungenutzte Image-Tags entfernen (`docker rmi timetrack-dev-backend:<tag>`). Dauerhaft: Build-Cache bereinigen (`docker builder prune`, betrifft alle Projekte in dieser Colima-VM nur als Cache) oder die Platte vergrößern (`colima stop && colima start --disk 80`).
 Prüfen mit `colima ssh -- df -h /var/lib/docker`. Das Projekt löscht nie fremde Images, Container oder Volumes.
+
+Vorfall 15.10.2026 (Platte voll): Bei 0 Byte freiem Platz auf `/var/lib/docker` fiel die Dev-MariaDB aus (InnoDB startet nicht, Container in Neustartschleife); Testdomain lieferte keine Daten. Nach `docker builder prune -f` (3,8 GB frei, vom Nutzer freigegeben) und `docker restart timetrack-dev-db-1`
+startete MariaDB nach automatischer InnoDB-Wiederherstellung wieder. Freier Platz danach ~3,6 GB (91 %) – für stabilen Betrieb Platte vergrößern (`colima stop && colima start --disk 80`) oder weitere fremde Images entfernen (nicht Aufgabe dieses Projekts).

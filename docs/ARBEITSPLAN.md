@@ -95,6 +95,6 @@ Gegenseitiges Review: C9 soll nach Rückkehr des Kontingents (ab 20.10.) von Cod
 
 | ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
 | --- | --- | --- | --- | --- | --- |
-| C18 | Hinweise, Erinnerungs-Scheduler, Web-Push-Sender (ADR-0010, Vertrag v0.8.0) | Claude-Agent (Codex-Limit) | 8 | in Arbeit (Worktree `../timetrack-backend-wt/c18`) | Vertrag v0.8.0 |
+| C18 | Hinweise, Erinnerungs-Scheduler, Web-Push-Sender (ADR-0010, Vertrag v0.8.0) | Claude-Agent (Codex-Limit) | 8 | integriert (Merge); 177 Tests inkl. MariaDB (Lead nachgelaufen); Web-Push-Verschlüsselung gegen RFC-8291-Vektor, Zustellung nur gegen Fake-Dienst | Vertrag v0.8.0 |
 | L16 | PWA: Manifest/Icons, Service Worker, Offline-Hinweis, Hinweiszentrum, Push-Einstellungen | Claude-Agent | 8 | **nicht gestartet**: Agent-Start vom Berechtigungsprüfer abgelehnt; Worktree `../timetrack-pwa-wt/l16` bereit | Vertrag v0.8.0 |
 | X2 | E2E mit Fake-Push-Dienst, Gesamtabgleich | Claude-Agent | 3 | offen | C18, L16 |
