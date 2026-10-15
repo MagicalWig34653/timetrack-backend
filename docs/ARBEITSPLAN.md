@@ -147,3 +147,12 @@ Nutzerwunsch 15.10.: Das Tabellenformat der Beispiel-Arbeitszeittabelle (Jahresb
 | C22 | Export-Profil `worktime-xlsx` (Formelschreiber mit Cache-Werten, Jahresblätter) + Round-trip-Tests | Codex | 8 | offen (nach C21) | C21 |
 | L18 | PWA: excused, Import-Assistent-Zweig (Regeltabelle, nicht zugeordnete Bemerkungen), Export-Option; Modul-Echt-E2E | Claude-Agent | 8 | integriert (PWA `0ad2229`); 488 Unit, 63 Mock-E2E, 6 PWA-Build-Specs, 138 Echt-E2E (Lead); Tabellen-Import/Export bisher nur gegen Mock | Vertrag v0.10.0 |
 | L19 | Echt-E2E Import/Export Tabelle (synthetische Mappe; lokale Prüfung gegen Nutzerdatei ohne Ablage) | Claude-Agent | 4 | integriert (PWA-`main`); 156 Echt-E2E + 1 `test.fixme` (Lead nachgelaufen, einzeln stabil; bei Systemlast ~280 einzelne Timeouts) | C21, C22, L18 |
+
+## Etappe 4f: Designsprache (15.10.2026)
+
+Nutzerwunsch 15.10.: Gestaltung eines bereitgestellten UI-Entwurfs festhalten und übernehmen (ADR-0014, `docs/DESIGN.md`).
+
+| ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
+| --- | --- | --- | --- | --- | --- |
+| L20 | Diagnose Zeitkonto-Abweichung Tabelle ↔ App (nur Aggregatzahlen, lokal) | Claude-Agent | 3 | in Arbeit | C21, C22 |
+| L21 | PWA: Designsprache umsetzen (Tokens, Shell, Seitenkopf, Karten, Glas, Akzent, Barrierefreiheit) | Claude-Agent | 10 | in Arbeit (PWA-Worktree `../timetrack-pwa-wt/l21`) | ADR-0014 |
