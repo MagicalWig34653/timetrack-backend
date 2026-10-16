@@ -178,5 +178,5 @@ Backend-Wartung (Start 16.10.2026):
 
 | Paket | Inhalt | Verantwortlich | Punkte | Status | Abhängigkeiten |
 | --- | --- | --- | --- | --- | --- |
-| B2 | Aufräumjob (Lease, CLI `maintenance`), Lernfeld-409, `pushsubscriptionchange`-Endpunkt, `PUSH_ALLOWED_HOSTS`-Vorschlag, `auth_lock`-Messung, MariaDB-READ-COMMITTED-Fix (ADR-0017, Vertrag v0.10.5) | Claude-Agent (Branch b2-cleanup) | 8 | umgesetzt, Lead-Prüfung offen | ADR-0011 |
+| B2 | Aufräumjob (Lease, CLI `maintenance`), Lernfeld-409, `pushsubscriptionchange`-Endpunkt, `PUSH_ALLOWED_HOSTS`-Vorschlag, `auth_lock`-Messung, MariaDB-READ-COMMITTED-Fix (ADR-0017, Vertrag v0.10.5) | Claude-Agent (Branch b2-cleanup) | 8 | integriert (Vertrag v0.12.0 zusammen mit B1); nach Merge 277 Tests auf SQLite und auf MariaDB vom Lead; S3Mock-Lauf und Mehr-Replikas-Betrieb ungeprüft | ADR-0011 |
 
