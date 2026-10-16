@@ -130,14 +130,14 @@ Claude-Agent im Worktree `timetrack-backend-wt/b3`, Branch `b3-ops`. Schreibt nu
 
 | ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
 | --- | --- | --- | --- | --- | --- |
-| B3 | Backup/Restore-Skripte mit Beweislauf (SQLite, MariaDB), Swarm-Stack-Vorlage, Image-Einstiegspunkt für `*_FILE`-Secrets, `scripts/check-all.sh`, amd64-Versuch, `docs/BETRIEB.md` | Claude-Agent | 6 | umgesetzt, Lead-Prüfung offen; Belege in `handoffs/B3.md` | Backlog 2 und 3 |
+| B3 | Backup/Restore-Skripte mit Beweislauf (SQLite, MariaDB), Swarm-Stack-Vorlage, Image-Einstiegspunkt für `*_FILE`-Secrets, `scripts/check-all.sh`, amd64-Versuch, `docs/BETRIEB.md` | Claude-Agent | 6 | integriert; Lead hat den Restore-Beweis (36 Prüfungen, SQLite und MariaDB) und `check-all.sh --fast` nachgelaufen; amd64-Build unter Emulation nicht fertig geworden (nativ nötig); echter Swarm, Last, Restore auf anderem Host ungeprüft | Backlog 2 und 3 |
 
 ## Backlog Backend (Stand 15.10.2026, nicht begonnen)
 
-1. **Kontenverwaltung** (umgesetzt in B1, Lead-Prüfung offen): Admin-Liste der Konten, Deaktivieren/Reaktivieren, Rollenwechsel, Sitzungen widerrufen, Konto löschen; Selbstauskunft/Selbstlöschung und Export der eigenen Daten (ZIP aus JSON/CSV + Dateien).
-2. **Backup/Restore** (B3: umgesetzt, Lead-Prüfung offen, `BETRIEB.md`): dokumentiertes und getestetes Verfahren (DB + Dateien + `STORAGE_SECRET_KEY`), Restore-Test auf MariaDB und SQLite; ARCHITEKTUR verlangt gemeinsames Restore.
+1. **Kontenverwaltung** (umgesetzt und integriert: B1): Admin-Liste der Konten, Deaktivieren/Reaktivieren, Rollenwechsel, Sitzungen widerrufen, Konto löschen; Selbstauskunft/Selbstlöschung und Export der eigenen Daten (ZIP aus JSON/CSV + Dateien).
+2. **Backup/Restore** (B3 integriert, `BETRIEB.md`): dokumentiertes und getestetes Verfahren (DB + Dateien + `STORAGE_SECRET_KEY`), Restore-Test auf MariaDB und SQLite; ARCHITEKTUR verlangt gemeinsames Restore.
 3. **Betrieb** (B3: Stack-Vorlage, Migrationsjob, `check-all.sh`, Entrypoint umgesetzt; Trusted-Proxy-Header und Metriken offen): produktionsnahes Compose/Swarm-Stack (bisher nur Dev-Compose), expliziter Migrationsschritt, Healthchecks/Logging/Metriken, vertrauenswürdige Proxy-Header für Client-IP (Rate-Limits), amd64-Nachweis für den aktuellen Stand, CI-Skript `scripts/check-all.sh`.
-4. **Aufräumjobs** (umgesetzt in B2, Lead-Prüfung offen, ADR-0017): abgelaufene Sitzungen/Challenges/OAuth-/OIDC-States/Codes/Tokens, `rate_limit_events`, `mcp_audit`-Retention, hängende Import-Jobs, Speicher-Cleanup periodisch (bisher nur nach DELETE).
+4. **Aufräumjobs** (umgesetzt und integriert: B2, ADR-0017): abgelaufene Sitzungen/Challenges/OAuth-/OIDC-States/Codes/Tokens, `rate_limit_events`, `mcp_audit`-Retention, hängende Import-Jobs, Speicher-Cleanup periodisch (bisher nur nach DELETE).
 5. **Vertragstreue**: automatisierter Abgleich Implementierung ↔ `contracts/openapi.yaml` (Contract-Tests/Linter), Typgenerierung für Clients.
 6. **Restpunkte Review/Tests** (B2 umgesetzt, Lead-Prüfung offen: Lernfeld-409, `pushsubscriptionchange`, `PUSH_ALLOWED_HOSTS`-Vorschlag, `auth_lock`-Bewertung samt MariaDB-Isolationsfix; Import mit 20 000 Zeilen/Blobs nahe 64 MiB weiter offen): gleichzeitiges Anlegen desselben Lernfelds liefert 500 statt 409; `pushsubscriptionchange`; weitere Push-Dienste (`PUSH_ALLOWED_HOSTS`); Import mit 20 000 Zeilen und Blobs nahe 64 MiB auf MariaDB messen; globale `auth_lock`-Serialisierung bewerten.
 7. **Fachlich/Produkt**: IHK-Ausgabeformat, Rechtsprofile (Jugendliche), Onboarding (Ausbildungsstichtag, Pausenfenster), Profilpflege (Anzeigename, E-Mail), Selbstständigenfunktionen (Kunden/Projekte/Sätze), Kalenderbrücke und KI-Worker-Schnittstellen (Job-Queue) für Etappe 5/6.

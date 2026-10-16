@@ -71,7 +71,8 @@ start_backend() { # start_backend driver port sqlite_path storage_key migrate
   local port="$2"
   local -a envs
   while IFS= read -r line; do envs+=("$line"); done < <(backend_env "$@")
-  env "${envs[@]}" "$APP" serve --env production --hostname 127.0.0.1 --port "$port" >"$WORK/backend-$port.log" 2>&1 &
+  # run from the scratch dir: the backend would otherwise load a developer's local .env from the working directory
+  (cd "$WORK" && exec env "${envs[@]}" "$APP" serve --env production --hostname 127.0.0.1 --port "$port" >"$WORK/backend-$port.log" 2>&1) &
   SERVER_PID=$!
   for _ in $(seq 1 60); do
     if [ "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/ready")" = 200 ]; then return 0; fi
@@ -148,7 +149,7 @@ run_case() { # run_case sqlite|mariadb
 
   local invite; local -a benv
   while IFS= read -r line; do benv+=("$line"); done < <(backend_env "$driver" "$PORT" "$SQLITE_FILE" "$key" true)
-  invite="$(env "${benv[@]}" "$APP" bootstrap-admin 2>/dev/null | grep -c '/invite/' || true)"
+  invite="$(cd "$WORK" && env "${benv[@]}" "$APP" bootstrap-admin 2>/dev/null | grep -c '/invite/' || true)"
   check "[$driver] bootstrap-admin CLI prints one invitation link" test "$invite" = 1
 
   seed_account "$driver"
