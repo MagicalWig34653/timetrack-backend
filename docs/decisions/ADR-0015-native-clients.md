@@ -52,3 +52,7 @@ Das Team `ABCDE12345` ist ein **persönliches** Entwicklungsteam. Apple erlaubt 
 - iPhone abgemeldet oder nur Recovery-Sitzung: Uhr löscht lokal (ohne Server-Logout). 401 auf der Uhr: Sitzung verwerfen, Hinweis „Bitte am iPhone anmelden". Solange das iPhone noch wiederherstellt/offline ist, wird nichts gesendet.
 - `WKRunsIndependentlyOfCompanionApp = true`. iPhone und Uhr teilen **eine** Serversitzung: Abmelden am iPhone beendet auch die der Uhr.
 - Offen: Komplikation (eigenes Widget-Target), Art-Auswahl (Arbeit/Fahrt/Schule) auf der Uhr, Button „Sitzung an Uhr senden" am iPhone.
+
+## Nachtrag A5 (16.10.2026): Komplikation
+
+Die Komplikation (Widget-Erweiterung `TimetrackWidget`) liest einen **nicht geheimen** Anzeigestand aus der App Group `group.com.example.timetrack` (Laufzustand, Art, Startzeit, Tagessumme, Tag, Zeitzone, Aktualisierung). Der Session-Cookie bleibt im Keychain der Uhr. Ob das persönliche Entwicklerteam App Groups provisionieren kann, ist ungeklärt (signierter Watch-Build scheitert lokal an fehlenden Profilen; Associated Domains sind bei Personal Teams nachweislich gesperrt). Notlösung ohne App Group: `CODE_SIGN_ENTITLEMENTS` der beiden Ziele entfernen, die Komplikation zeigt dann „Aus". Der manuelle Knopf „Sitzung an Uhr senden" ändert das Übergabeformat nicht.
