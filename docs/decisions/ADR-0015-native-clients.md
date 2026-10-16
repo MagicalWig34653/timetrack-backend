@@ -60,3 +60,11 @@ Die Komplikation (Widget-Erweiterung `TimetrackWidget`) liest einen **nicht gehe
 ## Nachtrag (16.10.2026, Lead-Versuch): App Groups mit dem Personal Team
 
 Mit Erlaubnis des Nutzers: `xcodebuild -allowProvisioningUpdates` mit Team `ABCDE12345` baut `TimetrackWatch` (generic watchOS) **signiert** und die Entitlements von App und Widget-Erweiterung enthalten `com.apple.security.application-groups = group.com.example.timetrack`; ebenso baut `TimetrackIOS` (Debug, ohne Associated Domains) signiert. **App Groups gehen also mit dem Personal Team; nur Associated Domains (Passkeys) nicht.** Folge: Komplikationen und Widgets (A7) sind auf echten Geräten möglich; die Notlösung ohne App Group entfällt. Dabei wurden vom Xcode-Dienst Profile/App-IDs im Entwicklerkonto angelegt. Auf einem echten Gerät nicht geprüft (nur Build und Entitlements).
+
+## Nachtrag A7 (16.10.2026): Widgets und Live Activity
+
+- Der Anzeigestand (`WidgetSnapshot`, App Group `group.com.example.timetrack`) wurde additiv erweitert um `targetSeconds`, `balanceSeconds` und `segments` (nur Art und Zeiten, höchstens 8). Weiterhin keine Geheimnisse, kein Server, keine Kontodaten. Veraltete Daten (> 30 min) werden dezent gekennzeichnet.
+- Widgets rufen die API nie selbst auf; nur vom Nutzer ausgelöste App Intents (Start/Stopp in Widget, Steuerzentrale) tun das und aktualisieren danach den Snapshot. Der Session-Cookie bleibt im Keychain; neue Einträge liegen in der gemeinsamen Keychain-Gruppe `$(AppIdentifierPrefix)com.example.timetrack.shared` (ältere Einträge werden einmalig migriert), damit Intent/Erweiterung ihn lesen können.
+- Mit dem Personal Team verifiziert (signierte Builds): App Groups auf iOS, watchOS und macOS sowie die Keychain-Gruppe auf iOS. Nicht möglich bleiben Associated Domains.
+- Live Activity ohne Push-Updates: ein im Web oder auf einem anderen Gerät gestarteter Timer erzeugt erst beim nächsten App-Start eine Live Activity.
+- Ungeprüft: Verhalten auf echten Geräten (Widget-Galerie, Intents, Live Activity, Dynamic Island, Steuerzentrale, Keychain-Zugriff der Erweiterung), macOS-Widgets.
