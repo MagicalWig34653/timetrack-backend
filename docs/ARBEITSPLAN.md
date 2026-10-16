@@ -201,3 +201,10 @@ Backend-Wartung (Start 16.10.2026):
 | --- | --- | --- | --- | --- | --- |
 | B2 | Aufräumjob (Lease, CLI `maintenance`), Lernfeld-409, `pushsubscriptionchange`-Endpunkt, `PUSH_ALLOWED_HOSTS`-Vorschlag, `auth_lock`-Messung, MariaDB-READ-COMMITTED-Fix (ADR-0017, Vertrag v0.10.5) | Claude-Agent (Branch b2-cleanup) | 8 | integriert (Vertrag v0.12.0 zusammen mit B1); nach Merge 277 Tests auf SQLite und auf MariaDB vom Lead; S3Mock-Lauf und Mehr-Replikas-Betrieb ungeprüft | ADR-0011 |
 
+## P1 – Profil und geführte Einrichtung (16.10.2026)
+
+Claude-Agent in den Worktrees `timetrack-backend-wt/p1` und `timetrack-pwa-wt/p1`, Branch `p1-profile` (beide Repos), nicht gemergt.
+
+| ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
+| --- | --- | --- | --- | --- | --- |
+| P1 | Profilbearbeitung (Name, E-Mail per Code), Einrichtungsmerker, Vertrag v0.13.0, ADR-0019; PWA: Profilseite, Einrichtungsassistent, gruppierte Einstellungsnavigation, Mock, Unit-/Mock-/Echt-E2E | Claude-Agent | 8 | umgesetzt, Lead-Prüfung offen | B1, C20 |

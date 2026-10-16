@@ -79,7 +79,8 @@ struct AuthRateLimitMiddleware: AsyncMiddleware {
     func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         let path = request.url.path
         let limited = path.hasPrefix("/api/v1/auth/register/") || path.hasPrefix("/api/v1/auth/login/") ||
-            path.hasPrefix("/api/v1/auth/recovery/") || path.hasPrefix("/api/v1/me/recovery/email")
+            path.hasPrefix("/api/v1/auth/recovery/") || path.hasPrefix("/api/v1/me/recovery/email") ||
+            path.hasPrefix("/api/v1/me/profile/email")
         if limited && [.POST, .PUT].contains(request.method) {
             // Forwarded headers count only from configured trusted proxies (ADR-0018). Charge before decoding request bodies.
             try await service.limited(ip: request.clientRateLimitKey, on: request.db)

@@ -39,7 +39,7 @@ Arbeitsmodelle erhalten. Eigene Selbstständigenfunktionen: **geplant** (Abschni
 Umsetzungsstand: **umgesetzt** (ADR-0004, ADR-0005) – Soll täglich oder wöchentlich, Modelle mit `validFrom` ohne Rückwirkung,
 Schulregel mit Schwelle und Gutschrift (Standard 4 × 45 min, 7:42), Fahrtzeiten als Arbeit konfigurierbar, Zeitkonto mit
 Anfangsstand und datierten Korrekturen, Feiertage für alle 16 Bundesländer. **Teilweise**: Rechtsprofil nur
-`arbzg-adult-de` (Hinweise); Profile für Jugendliche **geplant**. Geführtes Onboarding (Ausbildungsstichtag u. Ä.) **geplant**.
+`arbzg-adult-de` (Hinweise); Profile für Jugendliche **geplant**. Geführtes Onboarding (Ausbildungsstichtag u. Ä.) **umgesetzt als PWA-Assistent** (P1, ADR-0019; Lead-Prüfung offen): Arbeitsmodell, Pausenfenster, Schule, Urlaub (Stichtagsbestand statt anteiligem Anspruch), Module, Zusammenfassung; Vorschläge werden erst nach Bestätigung gespeichert.
 
 Vorschlag: Wochen-Soll mit Verteilung auf Arbeitstage oder explizite Tages-Sollwerte, klare
 Vorrangregel. Bei reinem Wochen-Soll braucht die Abwesenheitsbewertung eine definierte Tagesbasis.
@@ -215,6 +215,8 @@ Bearer-Tokens verwenden. Erster Toolumfang bleibt als Vorschlag in der Architekt
 Umsetzungsstand Abschnitt 8: Selbstständigkeit, App-Tracking und native Apps (macOS, iOS/iPadOS, watchOS): **geplant**.
 MCP: **umgesetzt** (ADR-0009) – `/mcp` mit 22 Tools nach Scope, OAuth-Server (Dynamic Client Registration, PKCE, Refresh-Rotation),
 persönliche Tokens, Grants; Anbindung in echtem ChatGPT/Claude **nicht geprüft** (`MCP.md`).
+Profil (Anzeigename, E-Mail-Adresse mit Bestätigungscode, Handle nur lesend): **umgesetzt** (P1, ADR-0019; Lead-Prüfung offen).
+
 Kontowiederherstellung: **umgesetzt** – Recovery-Codes, Rückfallpasswort (Argon2id), E-Mail-Code (nur bei konfiguriertem SMTP;
 real nur gegen Mailpit/Fake geprüft), kombinierbar.
 
@@ -235,7 +237,7 @@ Stand 15.10.2026. Erledigtes ist vermerkt, nicht gelöscht; offen bleibt, was ni
    `create_absence` (nur geplant/beantragt), `set_plan_day`, `create_report_entry`, `update_report_entry`; keine Lösch-, Admin-,
    Freigabe-, Token- oder Speicher-Tools. Praxis im echten Connector steht aus.
 3. Ausbildungsstichtag, Pausenfenster und Urlaubs-/Vertragsparameter später im Onboarding. **Weiterhin offen**
-   (Onboarding nicht gebaut; Standardwerte und manuelle Eingabe vorhanden).
+   (Onboarding seit P1 umgesetzt, ADR-0019; ob die Schritte und Vorschläge dem Nutzer genügen, ist nicht bestätigt. Anteiliger Urlaub im Eintrittsjahr bleibt bewusst aus, stattdessen Stichtagsbestand.)
 4. Kalender-Schreibzugriff, strukturierter PDF-Import und Hardwaredetails später klären. **Weiterhin offen.**
 5. Neu (15.10.2026, Nutzerentscheidung): Module sind durch Betreiber und je Konto abschaltbar (ADR-0012, Vertrag v0.9.0);
    Umsetzung C20/L17 offen. Annahmen dazu (z. B. Wirkung auf Zeitkonto bei abgeschaltetem Modul `planning`) sind im ADR
