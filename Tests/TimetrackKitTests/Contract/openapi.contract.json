@@ -1,0 +1,9176 @@
+{
+ "components": {
+  "parameters": {
+   "Id": {
+    "in": "path",
+    "name": "id",
+    "required": true,
+    "schema": {
+     "format": "uuid",
+     "type": "string"
+    }
+   }
+  },
+  "responses": {
+   "BadRequest": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    },
+    "description": "ungültige Anfrage"
+   },
+   "Conflict": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    },
+    "description": "Konflikt"
+   },
+   "Forbidden": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    },
+    "description": "keine Berechtigung"
+   },
+   "NotFound": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    },
+    "description": "nicht gefunden (auch bei fremden Objekten)"
+   },
+   "NotImplemented": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    },
+    "description": "auf diesem Server nicht konfiguriert"
+   },
+   "TooMany": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    },
+    "description": "zu viele Versuche"
+   },
+   "Unauthorized": {
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    },
+    "description": "nicht angemeldet oder Nachweis ungültig"
+   }
+  },
+  "schemas": {
+   "Absence": {
+    "allOf": [
+     {
+      "$ref": "#/components/schemas/AbsenceInput"
+     },
+     {
+      "properties": {
+       "countedHalfDays": {
+        "description": "berechneter Verbrauch (nur Arbeitstage, ohne Feiertage)",
+        "type": "integer"
+       },
+       "id": {
+        "format": "uuid",
+        "type": "string"
+       },
+       "version": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "id",
+       "version",
+       "countedHalfDays"
+      ],
+      "type": "object"
+     }
+    ]
+   },
+   "AbsenceInput": {
+    "properties": {
+     "documentReferenceEnd": {
+      "format": "date",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "documentReferenceStart": {
+      "format": "date",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "documentStatus": {
+      "default": "not_needed",
+      "enum": [
+       "not_needed",
+       "pending",
+       "submitted"
+      ],
+      "type": "string"
+     },
+     "documentSubmittedOn": {
+      "format": "date",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "endDate": {
+      "format": "date",
+      "type": "string"
+     },
+     "halfDayEnd": {
+      "default": false,
+      "description": "letzter Tag nur halber Tag",
+      "type": "boolean"
+     },
+     "halfDayStart": {
+      "default": false,
+      "description": "erster Tag nur halber Tag",
+      "type": "boolean"
+     },
+     "kind": {
+      "description": "excused = bezahlt frei ohne Urlaubsverbrauch (ADR-0013)",
+      "enum": [
+       "vacation",
+       "sick",
+       "excused",
+       "other"
+      ],
+      "type": "string"
+     },
+     "note": {
+      "maxLength": 500,
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "startDate": {
+      "format": "date",
+      "type": "string"
+     },
+     "status": {
+      "enum": [
+       "planned",
+       "requested",
+       "approved",
+       "rejected",
+       "cancelled",
+       "taken"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind",
+     "startDate",
+     "endDate",
+     "status"
+    ],
+    "type": "object"
+   },
+   "Account": {
+    "properties": {
+     "displayName": {
+      "type": "string"
+     },
+     "handle": {
+      "type": "string"
+     },
+     "id": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "role": {
+      "enum": [
+       "admin",
+       "member"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "handle",
+     "displayName",
+     "role"
+    ],
+    "type": "object"
+   },
+   "AccountDeletionConfirm": {
+    "properties": {
+     "confirmHandle": {
+      "description": "Handle des zu löschenden Kontos (Tippbestätigung)",
+      "type": "string"
+     }
+    },
+    "required": [
+     "confirmHandle"
+    ],
+    "type": "object"
+   },
+   "AdminAccount": {
+    "properties": {
+     "createdAt": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "disabledAt": {
+      "format": "date-time",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "displayName": {
+      "type": "string"
+     },
+     "email": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "handle": {
+      "type": "string"
+     },
+     "id": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "lastActivityAt": {
+      "description": "jüngste Sitzungsnutzung oder Passkey-Anmeldung",
+      "format": "date-time",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "passkeyCount": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "role": {
+      "enum": [
+       "admin",
+       "member"
+      ],
+      "type": "string"
+     },
+     "state": {
+      "enum": [
+       "active",
+       "disabled"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "handle",
+     "displayName",
+     "role",
+     "state",
+     "createdAt",
+     "passkeyCount"
+    ],
+    "type": "object"
+   },
+   "AdminAccountPage": {
+    "properties": {
+     "items": {
+      "items": {
+       "$ref": "#/components/schemas/AdminAccount"
+      },
+      "type": "array"
+     },
+     "limit": {
+      "type": "integer"
+     },
+     "offset": {
+      "type": "integer"
+     },
+     "total": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "items",
+     "total",
+     "limit",
+     "offset"
+    ],
+    "type": "object"
+   },
+   "AdminAccountPatch": {
+    "minProperties": 1,
+    "properties": {
+     "role": {
+      "enum": [
+       "admin",
+       "member"
+      ],
+      "type": "string"
+     },
+     "state": {
+      "enum": [
+       "active",
+       "disabled"
+      ],
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "ApiToken": {
+    "properties": {
+     "createdAt": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "expiresAt": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "id": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "lastUsedAt": {
+      "format": "date-time",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "name": {
+      "type": "string"
+     },
+     "scopes": {
+      "items": {
+       "$ref": "#/components/schemas/McpScope"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "scopes",
+     "createdAt",
+     "expiresAt"
+    ],
+    "type": "object"
+   },
+   "AuthenticationCredential": {
+    "description": "AuthenticationResponseJSON (W3C), base64url",
+    "type": "object"
+   },
+   "AutomationEvent": {
+    "properties": {
+     "deviceId": {
+      "maxLength": 80,
+      "type": "string"
+     },
+     "eventId": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "latitude": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "longitude": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "occurredAt": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "placeId": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "type": {
+      "enum": [
+       "arrival",
+       "presence_confirmed",
+       "departure",
+       "cancel"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "eventId",
+     "deviceId",
+     "type",
+     "occurredAt",
+     "placeId"
+    ],
+    "type": "object"
+   },
+   "CalendarDay": {
+    "properties": {
+     "endDate": {
+      "format": "date",
+      "type": "string"
+     },
+     "id": {
+      "format": "uuid",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "kind": {
+      "enum": [
+       "holiday",
+       "school_holiday"
+      ],
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "source": {
+      "enum": [
+       "builtin",
+       "custom"
+      ],
+      "type": "string"
+     },
+     "startDate": {
+      "format": "date",
+      "type": "string"
+     }
+    },
+    "required": [
+     "startDate",
+     "endDate",
+     "name",
+     "kind",
+     "source"
+    ],
+    "type": "object"
+   },
+   "CreationOptions": {
+    "properties": {
+     "challengeId": {
+      "type": "string"
+     },
+     "publicKey": {
+      "description": "PublicKeyCredentialCreationOptionsJSON (W3C)",
+      "type": "object"
+     }
+    },
+    "required": [
+     "challengeId",
+     "publicKey"
+    ],
+    "type": "object"
+   },
+   "DayEvaluation": {
+    "properties": {
+     "breakDeductionSeconds": {
+      "type": "integer"
+     },
+     "breakHints": {
+      "items": {
+       "properties": {
+        "code": {
+         "enum": [
+          "break_missing_30",
+          "break_missing_45",
+          "break_part_too_short",
+          "work_over_6h_without_break"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "code"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "creditSeconds": {
+      "description": "Schulregel/Markierungsgutschrift anstelle der Segmentsumme",
+      "type": "integer"
+     },
+     "date": {
+      "format": "date",
+      "type": "string"
+     },
+     "deltaSeconds": {
+      "description": "evaluated(+credit) - target",
+      "type": "integer"
+     },
+     "endAdjustSeconds": {
+      "type": "integer"
+     },
+     "evaluatedEnd": {
+      "format": "date-time",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "evaluatedStart": {
+      "format": "date-time",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "evaluatedWorkSeconds": {
+      "type": "integer"
+     },
+     "mark": {
+      "$ref": "#/components/schemas/DayMarkKind"
+     },
+     "markCreditSeconds": {
+      "description": "gesetzte Gutschrift der Markierung",
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "markSource": {
+      "description": "Herkunft der wirksamen Markierung (explicit = manuell gesetzt)",
+      "enum": [
+       "none",
+       "explicit",
+       "absence",
+       "holiday"
+      ],
+      "type": "string"
+     },
+     "modelId": {
+      "format": "uuid",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "note": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "provisional": {
+      "type": "boolean"
+     },
+     "rawWorkSeconds": {
+      "type": "integer"
+     },
+     "segmentIds": {
+      "items": {
+       "format": "uuid",
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "segments": {
+      "description": "Segmente dieses Arbeitstags (Zuordnung nach ADR-0004; ohne stornierte)",
+      "items": {
+       "$ref": "#/components/schemas/Segment"
+      },
+      "type": "array"
+     },
+     "skipFixedBreaks": {
+      "type": "boolean"
+     },
+     "startAdjustSeconds": {
+      "type": "integer"
+     },
+     "targetOverrideSeconds": {
+      "description": "abweichendes Soll, z. B. halber Urlaubstag",
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "targetSeconds": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "date",
+     "targetSeconds",
+     "rawWorkSeconds",
+     "breakDeductionSeconds",
+     "startAdjustSeconds",
+     "endAdjustSeconds",
+     "evaluatedWorkSeconds",
+     "creditSeconds",
+     "deltaSeconds",
+     "provisional",
+     "segmentIds",
+     "breakHints"
+    ],
+    "type": "object"
+   },
+   "DayMarkKind": {
+    "enum": [
+     "none",
+     "holiday",
+     "vacation",
+     "sick",
+     "excused",
+     "school_credit"
+    ],
+    "type": "string"
+   },
+   "DeviceToken": {
+    "properties": {
+     "createdAt": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "expiresAt": {
+      "format": "date-time",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "id": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "lastUsedAt": {
+      "format": "date-time",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "name": {
+      "type": "string"
+     },
+     "scope": {
+      "const": "automation",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "createdAt"
+    ],
+    "type": "object"
+   },
+   "Error": {
+    "properties": {
+     "error": {
+      "properties": {
+       "code": {
+        "type": "string"
+       },
+       "message": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "code",
+       "message"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "error"
+    ],
+    "type": "object"
+   },
+   "ExternalIdentity": {
+    "properties": {
+     "emailHint": {
+      "description": "Anzeige der E-Mail des Anbieters",
+      "nie Verknüpfungsgrundlage": null,
+      "nur Hinweis": null,
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "id": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "lastUsedAt": {
+      "format": "date-time",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "linkedAt": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "providerName": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "providerName",
+     "linkedAt"
+    ],
+    "type": "object"
+   },
+   "FileMeta": {
+    "properties": {
+     "backend": {
+      "enum": [
+       "db",
+       "s3",
+       "local"
+      ],
+      "type": "string"
+     },
+     "contentType": {
+      "type": "string"
+     },
+     "createdAt": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "id": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "sha256": {
+      "type": "string"
+     },
+     "size": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "size",
+     "sha256",
+     "contentType",
+     "backend",
+     "createdAt"
+    ],
+    "type": "object"
+   },
+   "ImportJob": {
+    "properties": {
+     "createdAt": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "detectedProfile": {
+      "description": "worktime_workbook bei erkannter Arbeitszeit-Tabelle",
+      "enum": [
+       "generic",
+       "worktime_workbook"
+      ],
+      "type": "string"
+     },
+     "filename": {
+      "type": "string"
+     },
+     "id": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "kind": {
+      "enum": [
+       "csv",
+       "xlsx"
+      ],
+      "type": "string"
+     },
+     "sha256": {
+      "type": "string"
+     },
+     "sheets": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "status": {
+      "enum": [
+       "uploaded",
+       "mapped",
+       "committed",
+       "rolled_back"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "filename",
+     "kind",
+     "status",
+     "sheets",
+     "createdAt"
+    ],
+    "type": "object"
+   },
+   "ImportMapping": {
+    "properties": {
+     "allowOvernight": {
+      "default": false,
+      "description": "Ende vor Beginn gilt als Folgetag; sonst Fehler end_before_start (24:00 immer erlaubt)",
+      "type": "boolean"
+     },
+     "columns": {
+      "properties": {
+       "date": {
+        "minimum": 0,
+        "type": "integer"
+       },
+       "duration": {
+        "description": "Dauer statt Ende (Format laut timeFormat)",
+        "minimum": 0,
+        "type": [
+         "integer",
+         "null"
+        ]
+       },
+       "end": {
+        "minimum": 0,
+        "type": [
+         "integer",
+         "null"
+        ]
+       },
+       "kind": {
+        "minimum": 0,
+        "type": [
+         "integer",
+         "null"
+        ]
+       },
+       "note": {
+        "minimum": 0,
+        "type": [
+         "integer",
+         "null"
+        ]
+       },
+       "place": {
+        "minimum": 0,
+        "type": [
+         "integer",
+         "null"
+        ]
+       },
+       "start": {
+        "minimum": 0,
+        "type": [
+         "integer",
+         "null"
+        ]
+       }
+      },
+      "required": [
+       "date"
+      ],
+      "type": "object"
+     },
+     "dateFormat": {
+      "enum": [
+       "dd.MM.yyyy",
+       "yyyy-MM-dd",
+       "excel_serial"
+      ],
+      "type": "string"
+     },
+     "defaultKind": {
+      "$ref": "#/components/schemas/SegmentKind"
+     },
+     "headerRow": {
+      "description": "0 = keine Kopfzeile",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "profile": {
+      "default": "generic",
+      "description": "Bei worktime_workbook sind sheet/headerRow/columns/Formate ohne Bedeutung (Platzhalter erlaubt) und worktime wird ausgewertet",
+      "enum": [
+       "generic",
+       "worktime_workbook"
+      ],
+      "type": "string"
+     },
+     "sheet": {
+      "type": "string"
+     },
+     "skipSummaryRows": {
+      "default": true,
+      "type": "boolean"
+     },
+     "timeFormat": {
+      "enum": [
+       "HH:mm",
+       "excel_fraction",
+       "decimal_hours"
+      ],
+      "type": "string"
+     },
+     "timezone": {
+      "default": "Europe/Berlin",
+      "type": "string"
+     },
+     "worktime": {
+      "$ref": "#/components/schemas/WorktimeOptions"
+     }
+    },
+    "required": [
+     "sheet",
+     "headerRow",
+     "columns",
+     "dateFormat",
+     "timeFormat"
+    ],
+    "type": "object"
+   },
+   "ImportPreview": {
+    "properties": {
+     "duplicates": {
+      "type": "integer"
+     },
+     "errorCount": {
+      "description": "Gesamtzahl der Fehler; errors ist auf 1000 begrenzt",
+      "type": "integer"
+     },
+     "errors": {
+      "items": {
+       "properties": {
+        "code": {
+         "enum": [
+          "date_invalid",
+          "time_invalid",
+          "end_before_start",
+          "missing_value",
+          "overlap",
+          "formula_without_value",
+          "summary_row",
+          "unknown_place",
+          "unknown_kind",
+          "note_too_long",
+          "duplicate_date_conflict",
+          "planning_disabled"
+         ],
+         "type": "string"
+        },
+        "row": {
+         "type": "integer"
+        }
+       },
+       "required": [
+        "row",
+        "code"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "profile": {
+      "enum": [
+       "generic",
+       "worktime_workbook"
+      ],
+      "type": "string"
+     },
+     "rows": {
+      "type": "integer"
+     },
+     "sample": {
+      "items": {
+       "properties": {
+        "date": {
+         "format": "date",
+         "type": "string"
+        },
+        "endedAt": {
+         "format": "date-time",
+         "type": "string"
+        },
+        "kind": {
+         "$ref": "#/components/schemas/SegmentKind"
+        },
+        "startedAt": {
+         "format": "date-time",
+         "type": "string"
+        }
+       },
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "skippedSummaryRows": {
+      "type": "integer"
+     },
+     "valid": {
+      "type": "integer"
+     },
+     "warnings": {
+      "description": "Hinweise ohne Commit-Hindernis",
+      "items": {
+       "properties": {
+        "code": {
+         "enum": [
+          "pause_exceeds_day",
+          "holiday_times_discarded",
+          "credit_partial_as_work",
+          "school_on_holiday"
+         ],
+         "type": "string"
+        },
+        "count": {
+         "description": "bei zusammengefassten Warnungen die Anzahl betroffener Tage",
+         "type": "integer"
+        },
+        "row": {
+         "type": [
+          "integer",
+          "null"
+         ]
+        }
+       },
+       "required": [
+        "code"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "worktime": {
+      "$ref": "#/components/schemas/WorktimePreview"
+     }
+    },
+    "required": [
+     "rows",
+     "valid",
+     "errors",
+     "duplicates",
+     "sample"
+    ],
+    "type": "object"
+   },
+   "ImportResult": {
+    "properties": {
+     "absencesCreated": {
+      "type": "integer"
+     },
+     "batchId": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "conflictItems": {
+      "description": "typisierte Konfliktliste (zusätzlich zu conflicts), auch im Fehlerobjekt rollback_conflict",
+      "items": {
+       "properties": {
+        "id": {
+         "format": "uuid",
+         "type": "string"
+        },
+        "type": {
+         "enum": [
+          "segment",
+          "absence",
+          "custom_day"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "type",
+        "id"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "conflicts": {
+      "items": {
+       "format": "uuid",
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "created": {
+      "type": "integer"
+     },
+     "customDaysCreated": {
+      "type": "integer"
+     },
+     "rolledBack": {
+      "description": "bei Rollback die Zahl stornierter Segmente",
+      "type": "integer"
+     },
+     "skipped": {
+      "type": "integer"
+     },
+     "warnings": {
+      "description": "wie ImportPreview.warnings, auch im Ergebnis des Commits",
+      "items": {
+       "properties": {
+        "code": {
+         "enum": [
+          "pause_exceeds_day",
+          "holiday_times_discarded",
+          "credit_partial_as_work",
+          "school_on_holiday"
+         ],
+         "type": "string"
+        },
+        "count": {
+         "type": "integer"
+        },
+        "row": {
+         "type": [
+          "integer",
+          "null"
+         ]
+        }
+       },
+       "required": [
+        "code"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "batchId",
+     "created",
+     "skipped"
+    ],
+    "type": "object"
+   },
+   "ImportTemplate": {
+    "properties": {
+     "id": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "mapping": {
+      "$ref": "#/components/schemas/ImportMapping"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "mapping"
+    ],
+    "type": "object"
+   },
+   "IncomingShare": {
+    "properties": {
+     "id": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "ownerDisplayName": {
+      "type": "string"
+     },
+     "scopes": {
+      "$ref": "#/components/schemas/ShareScopes"
+     }
+    },
+    "required": [
+     "id",
+     "ownerDisplayName",
+     "scopes"
+    ],
+    "type": "object"
+   },
+   "Invitation": {
+    "properties": {
+     "createdAt": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "expiresAt": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "id": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "note": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "status": {
+      "enum": [
+       "open",
+       "used",
+       "expired",
+       "revoked"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "createdAt",
+     "expiresAt",
+     "status"
+    ],
+    "type": "object"
+   },
+   "InvitationCreated": {
+    "allOf": [
+     {
+      "$ref": "#/components/schemas/Invitation"
+     },
+     {
+      "properties": {
+       "token": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "token"
+      ],
+      "type": "object"
+     }
+    ]
+   },
+   "LearningField": {
+    "allOf": [
+     {
+      "$ref": "#/components/schemas/LearningFieldInput"
+     },
+     {
+      "properties": {
+       "id": {
+        "format": "uuid",
+        "type": "string"
+       }
+      },
+      "required": [
+       "id"
+      ],
+      "type": "object"
+     }
+    ]
+   },
+   "LearningFieldInput": {
+    "properties": {
+     "name": {
+      "maxLength": 120,
+      "minLength": 1,
+      "type": "string"
+     },
+     "number": {
+      "minimum": 0,
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "sortOrder": {
+      "default": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "type": "object"
+   },
+   "McpScope": {
+    "enum": [
+     "time:read",
+     "time:write",
+     "schedule:read",
+     "schedule:write",
+     "reports:read",
+     "reports:write",
+     "documents:read"
+    ],
+    "type": "string"
+   },
+   "ModuleKey": {
+    "enum": [
+     "reports",
+     "planning",
+     "transfer",
+     "automation",
+     "mcp"
+    ],
+    "type": "string"
+   },
+   "ModuleStatus": {
+    "properties": {
+     "accountEnabled": {
+      "type": "boolean"
+     },
+     "effective": {
+      "type": "boolean"
+     },
+     "key": {
+      "$ref": "#/components/schemas/ModuleKey"
+     },
+     "lockedByOperator": {
+      "type": "boolean"
+     },
+     "serverEnabled": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "key",
+     "serverEnabled",
+     "accountEnabled",
+     "effective",
+     "lockedByOperator"
+    ],
+    "type": "object"
+   },
+   "Notification": {
+    "properties": {
+     "body": {
+      "type": "string"
+     },
+     "createdAt": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "id": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "kind": {
+      "$ref": "#/components/schemas/NotificationKind"
+     },
+     "read": {
+      "type": "boolean"
+     },
+     "title": {
+      "type": "string"
+     },
+     "url": {
+      "description": "relativer PWA-Pfad",
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "id",
+     "kind",
+     "title",
+     "body",
+     "createdAt",
+     "read"
+    ],
+    "type": "object"
+   },
+   "NotificationKind": {
+    "enum": [
+     "running_timer",
+     "pending_suggestions",
+     "report_gap",
+     "document_submission",
+     "system"
+    ],
+    "type": "string"
+   },
+   "NotificationSettings": {
+    "properties": {
+     "categories": {
+      "additionalProperties": {
+       "properties": {
+        "inApp": {
+         "type": "boolean"
+        },
+        "push": {
+         "type": "boolean"
+        },
+        "thresholdMinutes": {
+         "description": "nur running_timer",
+         "maximum": 1440,
+         "minimum": 30,
+         "type": "integer"
+        },
+        "time": {
+         "description": "nur report_gap",
+         "lokal": null,
+         "pattern": "^[0-2][0-9]:[0-5][0-9]$",
+         "type": "string"
+        },
+        "weekday": {
+         "description": "nur report_gap",
+         "maximum": 7,
+         "minimum": 1,
+         "type": "integer"
+        }
+       },
+       "required": [
+        "inApp",
+        "push"
+       ],
+       "type": "object"
+      },
+      "description": "Schlüssel = NotificationKind (ohne system)",
+      "type": "object"
+     },
+     "quietEnd": {
+      "pattern": "^[0-2][0-9]:[0-5][0-9]$",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "quietStart": {
+      "pattern": "^[0-2][0-9]:[0-5][0-9]$",
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "categories"
+    ],
+    "type": "object"
+   },
+   "OAuthGrant": {
+    "properties": {
+     "clientName": {
+      "type": "string"
+     },
+     "createdAt": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "id": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "lastUsedAt": {
+      "format": "date-time",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "scopes": {
+      "items": {
+       "$ref": "#/components/schemas/McpScope"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "id",
+     "clientName",
+     "scopes",
+     "createdAt"
+    ],
+    "type": "object"
+   },
+   "OAuthRequest": {
+    "properties": {
+     "clientName": {
+      "type": "string"
+     },
+     "expiresAt": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "id": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "redirectHost": {
+      "type": "string"
+     },
+     "scopes": {
+      "items": {
+       "$ref": "#/components/schemas/McpScope"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "id",
+     "clientName",
+     "redirectHost",
+     "scopes",
+     "expiresAt"
+    ],
+    "type": "object"
+   },
+   "Passkey": {
+    "properties": {
+     "createdAt": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "id": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "lastUsedAt": {
+      "format": "date-time",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "createdAt"
+    ],
+    "type": "object"
+   },
+   "Place": {
+    "allOf": [
+     {
+      "$ref": "#/components/schemas/PlaceInput"
+     },
+     {
+      "properties": {
+       "archived": {
+        "type": "boolean"
+       },
+       "id": {
+        "format": "uuid",
+        "type": "string"
+       }
+      },
+      "required": [
+       "id",
+       "archived"
+      ],
+      "type": "object"
+     }
+    ]
+   },
+   "PlaceInput": {
+    "properties": {
+     "automationMode": {
+      "enum": [
+       "direct",
+       "suggest",
+       false
+      ],
+      "type": "string"
+     },
+     "confirmAfterSeconds": {
+      "default": 300,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "defaultSegmentKind": {
+      "$ref": "#/components/schemas/SegmentKind"
+     },
+     "kind": {
+      "enum": [
+       "office",
+       "home",
+       "customer",
+       "school",
+       "other"
+      ],
+      "type": "string"
+     },
+     "latitude": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "longitude": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "name": {
+      "maxLength": 80,
+      "type": "string"
+     },
+     "radiusMeters": {
+      "minimum": 20,
+      "type": [
+       "integer",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "name",
+     "kind",
+     "automationMode"
+    ],
+    "type": "object"
+   },
+   "PlanDay": {
+    "allOf": [
+     {
+      "$ref": "#/components/schemas/PlanDayInput"
+     },
+     {
+      "properties": {
+       "date": {
+        "format": "date",
+        "type": "string"
+       }
+      },
+      "required": [
+       "date"
+      ],
+      "type": "object"
+     }
+    ]
+   },
+   "PlanDayInput": {
+    "properties": {
+     "mode": {
+      "enum": [
+       "office",
+       "home",
+       "customer",
+       "school",
+       false
+      ],
+      "type": "string"
+     },
+     "note": {
+      "maxLength": 200,
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "placeId": {
+      "format": "uuid",
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "mode"
+    ],
+    "type": "object"
+   },
+   "PushSubscriptionInfo": {
+    "properties": {
+     "createdAt": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "host": {
+      "description": "Push-Dienst-Host (nicht der volle Endpunkt)",
+      "type": "string"
+     },
+     "id": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "lastSuccessAt": {
+      "format": "date-time",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "userAgent": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "id",
+     "createdAt"
+    ],
+    "type": "object"
+   },
+   "RecoveryStatus": {
+    "properties": {
+     "email": {
+      "properties": {
+       "active": {
+        "type": "boolean"
+       },
+       "available": {
+        "description": "false wenn Server ohne Mailversand",
+        "type": "boolean"
+       },
+       "verified": {
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "available",
+       "active"
+      ],
+      "type": "object"
+     },
+     "fallbackPassword": {
+      "properties": {
+       "active": {
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "active"
+      ],
+      "type": "object"
+     },
+     "recoveryCodes": {
+      "properties": {
+       "active": {
+        "type": "boolean"
+       },
+       "remaining": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "active"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "recoveryCodes",
+     "fallbackPassword",
+     "email"
+    ],
+    "type": "object"
+   },
+   "RegistrationCredential": {
+    "description": "RegistrationResponseJSON (W3C), base64url",
+    "type": "object"
+   },
+   "ReportEntry": {
+    "allOf": [
+     {
+      "$ref": "#/components/schemas/ReportEntryInput"
+     },
+     {
+      "properties": {
+       "createdAt": {
+        "format": "date-time",
+        "type": "string"
+       },
+       "draft": {
+        "description": "true bei später KI-erzeugten",
+        "noch nicht bestätigten Entwürfen": null,
+        "type": "boolean"
+       },
+       "id": {
+        "format": "uuid",
+        "type": "string"
+       },
+       "version": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "id",
+       "version",
+       "createdAt"
+      ],
+      "type": "object"
+     }
+    ]
+   },
+   "ReportEntryInput": {
+    "properties": {
+     "date": {
+      "format": "date",
+      "type": "string"
+     },
+     "durationSeconds": {
+      "default": 0,
+      "maximum": 86400,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "learningField": {
+      "description": "Name (Snapshot); bei learningFieldId wird der aktuelle Name übernommen",
+      "maxLength": 120,
+      "minLength": 1,
+      "type": "string"
+     },
+     "learningFieldId": {
+      "format": "uuid",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "notes": {
+      "default": "",
+      "maxLength": 4000,
+      "type": "string"
+     }
+    },
+    "required": [
+     "date",
+     "learningField"
+    ],
+    "type": "object"
+   },
+   "ReportSource": {
+    "allOf": [
+     {
+      "$ref": "#/components/schemas/ReportSourceInput"
+     },
+     {
+      "properties": {
+       "createdAt": {
+        "format": "date-time",
+        "type": "string"
+       },
+       "file": {
+        "oneOf": [
+         {
+          "$ref": "#/components/schemas/FileMeta"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "id": {
+        "format": "uuid",
+        "type": "string"
+       }
+      },
+      "required": [
+       "id",
+       "createdAt"
+      ],
+      "type": "object"
+     }
+    ]
+   },
+   "ReportSourceInput": {
+    "properties": {
+     "date": {
+      "format": "date",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "fileId": {
+      "format": "uuid",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "note": {
+      "maxLength": 4000,
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "week": {
+      "type": "integer"
+     },
+     "year": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "year",
+     "week"
+    ],
+    "type": "object"
+   },
+   "ReportWeek": {
+    "properties": {
+     "byLearningField": {
+      "items": {
+       "properties": {
+        "learningField": {
+         "type": "string"
+        },
+        "seconds": {
+         "type": "integer"
+        }
+       },
+       "required": [
+        "learningField",
+        "seconds"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "endDate": {
+      "format": "date",
+      "type": "string"
+     },
+     "entries": {
+      "items": {
+       "$ref": "#/components/schemas/ReportEntry"
+      },
+      "type": "array"
+     },
+     "sourceCount": {
+      "type": "integer"
+     },
+     "startDate": {
+      "format": "date",
+      "type": "string"
+     },
+     "status": {
+      "enum": [
+       "draft",
+       "done"
+      ],
+      "type": "string"
+     },
+     "totalSeconds": {
+      "type": "integer"
+     },
+     "trackedWorkSeconds": {
+      "description": "bewertete Arbeitszeit der Woche aus dem Zeittracking (nur Hinweis)",
+      "type": "integer"
+     },
+     "week": {
+      "type": "integer"
+     },
+     "year": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "year",
+     "week",
+     "startDate",
+     "endDate",
+     "status",
+     "entries",
+     "totalSeconds",
+     "byLearningField",
+     "sourceCount"
+    ],
+    "type": "object"
+   },
+   "RequestOptions": {
+    "properties": {
+     "challengeId": {
+      "type": "string"
+     },
+     "publicKey": {
+      "description": "PublicKeyCredentialRequestOptionsJSON (W3C)",
+      "type": "object"
+     }
+    },
+    "required": [
+     "challengeId",
+     "publicKey"
+    ],
+    "type": "object"
+   },
+   "Segment": {
+    "properties": {
+     "endedAt": {
+      "format": "date-time",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "id": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "kind": {
+      "$ref": "#/components/schemas/SegmentKind"
+     },
+     "needsReview": {
+      "type": "boolean"
+     },
+     "note": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "placeId": {
+      "format": "uuid",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "rawEndedAt": {
+      "format": "date-time",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "rawStartedAt": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "revisions": {
+      "description": "Anzahl Korrekturen",
+      "type": "integer"
+     },
+     "source": {
+      "enum": [
+       "timer",
+       "manual",
+       "automation",
+       "suggestion",
+       "import"
+      ],
+      "type": "string"
+     },
+     "startedAt": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "version": {
+      "type": "integer"
+     },
+     "voided": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "id",
+     "kind",
+     "startedAt",
+     "endedAt",
+     "rawStartedAt",
+     "rawEndedAt",
+     "source",
+     "version",
+     "voided",
+     "needsReview"
+    ],
+    "type": "object"
+   },
+   "SegmentCorrection": {
+    "properties": {
+     "endedAt": {
+      "format": "date-time",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "kind": {
+      "$ref": "#/components/schemas/SegmentKind"
+     },
+     "note": {
+      "maxLength": 500,
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "placeId": {
+      "format": "uuid",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "reason": {
+      "maxLength": 200,
+      "minLength": 1,
+      "type": "string"
+     },
+     "startedAt": {
+      "format": "date-time",
+      "type": "string"
+     }
+    },
+    "required": [
+     "reason"
+    ],
+    "type": "object"
+   },
+   "SegmentInput": {
+    "properties": {
+     "endedAt": {
+      "format": "date-time",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "kind": {
+      "$ref": "#/components/schemas/SegmentKind"
+     },
+     "note": {
+      "maxLength": 500,
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "placeId": {
+      "format": "uuid",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "startedAt": {
+      "format": "date-time",
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind",
+     "startedAt"
+    ],
+    "type": "object"
+   },
+   "SegmentKind": {
+    "enum": [
+     "work",
+     "travel",
+     "school"
+    ],
+    "type": "string"
+   },
+   "ServerModule": {
+    "properties": {
+     "enabled": {
+      "type": "boolean"
+     },
+     "key": {
+      "$ref": "#/components/schemas/ModuleKey"
+     },
+     "lockedByOperator": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "key",
+     "enabled",
+     "lockedByOperator"
+    ],
+    "type": "object"
+   },
+   "Session": {
+    "properties": {
+     "account": {
+      "$ref": "#/components/schemas/Account"
+     },
+     "csrfToken": {
+      "type": "string"
+     },
+     "expiresAt": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "recovery": {
+      "description": "true = eingeschränkte Recovery-Sitzung",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "account",
+     "csrfToken",
+     "recovery"
+    ],
+    "type": "object"
+   },
+   "Share": {
+    "properties": {
+     "createdAt": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "id": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "recipientHandle": {
+      "type": "string"
+     },
+     "scopes": {
+      "$ref": "#/components/schemas/ShareScopes"
+     }
+    },
+    "required": [
+     "id",
+     "recipientHandle",
+     "scopes",
+     "createdAt"
+    ],
+    "type": "object"
+   },
+   "ShareScopes": {
+    "properties": {
+     "actual": {
+      "default": false,
+      "type": "boolean"
+     },
+     "plan": {
+      "default": false,
+      "type": "boolean"
+     },
+     "vacation": {
+      "default": false,
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "SharedView": {
+    "properties": {
+     "actual": {
+      "items": {
+       "properties": {
+        "date": {
+         "format": "date",
+         "type": "string"
+        },
+        "evaluatedEnd": {
+         "format": "date-time",
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "evaluatedStart": {
+         "format": "date-time",
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "evaluatedWorkSeconds": {
+         "type": "integer"
+        }
+       },
+       "required": [
+        "date",
+        "evaluatedWorkSeconds"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "plan": {
+      "items": {
+       "properties": {
+        "date": {
+         "format": "date",
+         "type": "string"
+        },
+        "mode": {
+         "enum": [
+          "office",
+          "home",
+          "customer",
+          "school",
+          false
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "date",
+        "mode"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "vacation": {
+      "items": {
+       "properties": {
+        "endDate": {
+         "format": "date",
+         "type": "string"
+        },
+        "startDate": {
+         "format": "date",
+         "type": "string"
+        }
+       },
+       "required": [
+        "startDate",
+        "endDate"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "Status": {
+    "properties": {
+     "status": {
+      "const": "ok",
+      "type": "string"
+     }
+    },
+    "required": [
+     "status"
+    ],
+    "type": "object"
+   },
+   "StorageRule": {
+    "properties": {
+     "backend": {
+      "enum": [
+       "db",
+       "s3",
+       "local"
+      ],
+      "type": "string"
+     },
+     "maxBytes": {
+      "description": "obere Grenze (inklusive); null = alles darüber/Rest",
+      "minimum": 1,
+      "type": [
+       "integer",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "backend"
+    ],
+    "type": "object"
+   },
+   "StorageSettings": {
+    "properties": {
+     "hasSecret": {
+      "type": "boolean"
+     },
+     "localPath": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "maxUploadBytes": {
+      "type": "integer"
+     },
+     "rules": {
+      "items": {
+       "$ref": "#/components/schemas/StorageRule"
+      },
+      "type": "array"
+     },
+     "s3": {
+      "properties": {
+       "accessKeyId": {
+        "type": "string"
+       },
+       "bucket": {
+        "type": "string"
+       },
+       "endpoint": {
+        "type": "string"
+       },
+       "pathStyle": {
+        "type": "boolean"
+       },
+       "region": {
+        "type": "string"
+       }
+      },
+      "type": [
+       "object",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "rules",
+     "maxUploadBytes",
+     "hasSecret"
+    ],
+    "type": "object"
+   },
+   "StorageSettingsInput": {
+    "properties": {
+     "localPath": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "maxUploadBytes": {
+      "default": 10485760,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "rules": {
+      "description": "geordnet; erste passende Regel gewinnt; letzte muss maxBytes null haben",
+      "items": {
+       "$ref": "#/components/schemas/StorageRule"
+      },
+      "minItems": 1,
+      "type": "array"
+     },
+     "s3": {
+      "properties": {
+       "accessKeyId": {
+        "type": "string"
+       },
+       "bucket": {
+        "type": "string"
+       },
+       "endpoint": {
+        "type": "string"
+       },
+       "pathStyle": {
+        "default": true,
+        "type": "boolean"
+       },
+       "region": {
+        "type": "string"
+       },
+       "secretAccessKey": {
+        "type": "string",
+        "writeOnly": true
+       }
+      },
+      "type": [
+       "object",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "rules"
+    ],
+    "type": "object"
+   },
+   "Suggestion": {
+    "properties": {
+     "createdAt": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "id": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "placeId": {
+      "format": "uuid",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "proposedEndedAt": {
+      "format": "date-time",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "proposedStartedAt": {
+      "format": "date-time",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "segmentId": {
+      "format": "uuid",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "type": {
+      "enum": [
+       "start",
+       "end"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "type",
+     "createdAt"
+    ],
+    "type": "object"
+   },
+   "TimeAccount": {
+    "properties": {
+     "accountStart": {
+      "format": "date",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "adjustmentSeconds": {
+      "type": "integer"
+     },
+     "asOf": {
+      "format": "date",
+      "type": "string"
+     },
+     "balanceSeconds": {
+      "type": "integer"
+     },
+     "openingSeconds": {
+      "type": "integer"
+     },
+     "provisional": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "asOf",
+     "balanceSeconds",
+     "openingSeconds",
+     "adjustmentSeconds",
+     "provisional"
+    ],
+    "type": "object"
+   },
+   "VacationBalance": {
+    "properties": {
+     "adjustmentHalfDays": {
+      "type": "integer"
+     },
+     "availableAfterPlannedHalfDays": {
+      "type": "integer"
+     },
+     "availableHalfDays": {
+      "type": "integer"
+     },
+     "bookedHalfDays": {
+      "description": "Status approved oder taken",
+      "type": "integer"
+     },
+     "carryOverHalfDays": {
+      "type": "integer"
+     },
+     "entitlementHalfDays": {
+      "type": "integer"
+     },
+     "plannedHalfDays": {
+      "description": "Status planned oder requested",
+      "type": "integer"
+     },
+     "snapshotDate": {
+      "format": "date",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "snapshotRemainingHalfDays": {
+      "description": "Stichtagsbestand; bei Snapshot sind Anspruch und Übertrag des Jahres 0",
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "year": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "year",
+     "entitlementHalfDays",
+     "carryOverHalfDays",
+     "adjustmentHalfDays",
+     "bookedHalfDays",
+     "plannedHalfDays",
+     "availableHalfDays",
+     "availableAfterPlannedHalfDays"
+    ],
+    "type": "object"
+   },
+   "VacationSettings": {
+    "properties": {
+     "annualEntitlementHalfDays": {
+      "default": 60,
+      "description": "30 Tage = 60 halbe Tage (ADR-0005)",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "carryOverByYear": {
+      "additionalProperties": {
+       "minimum": 0,
+       "type": "integer"
+      },
+      "description": "Übertrag je Urlaubsjahr in halben Tagen, z. B. {\"2026\": 8}; fehlend = 0, gilt nicht bei Stichtagsbestand im selben Jahr",
+      "type": "object"
+     },
+     "carryOverExpiry": {
+      "description": "Verfall als MM-DD (z. B. 03-31) oder null",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "configured": {
+      "description": "false solange keine Einstellungen gespeichert sind; GET liefert dann die Standardwerte (200)",
+      "readOnly": true,
+      "type": "boolean"
+     },
+     "region": {
+      "default": "DE-ST",
+      "type": "string"
+     }
+    },
+    "required": [
+     "region",
+     "annualEntitlementHalfDays"
+    ],
+    "type": "object"
+   },
+   "WorkModel": {
+    "allOf": [
+     {
+      "$ref": "#/components/schemas/WorkModelInput"
+     },
+     {
+      "properties": {
+       "createdAt": {
+        "format": "date-time",
+        "type": "string"
+       },
+       "id": {
+        "format": "uuid",
+        "type": "string"
+       }
+      },
+      "required": [
+       "id",
+       "createdAt"
+      ],
+      "type": "object"
+     }
+    ]
+   },
+   "WorkModelInput": {
+    "properties": {
+     "dailyTargetSeconds": {
+      "additionalProperties": {
+       "minimum": 0,
+       "type": "integer"
+      },
+      "description": "optional je Wochentag \"1\"..\"7\", hat Vorrang",
+      "type": "object"
+     },
+     "dayBoundaryMinutes": {
+      "default": 0,
+      "maximum": 719,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "fixedBreaks": {
+      "items": {
+       "properties": {
+        "end": {
+         "pattern": "^[0-2][0-9]:[0-5][0-9]$",
+         "type": "string"
+        },
+        "start": {
+         "pattern": "^[0-2][0-9]:[0-5][0-9]$",
+         "type": "string"
+        }
+       },
+       "required": [
+        "start",
+        "end"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "roundingEnabled": {
+      "default": true,
+      "type": "boolean"
+     },
+     "roundingMinutes": {
+      "default": 15,
+      "maximum": 60,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "schoolCreditSeconds": {
+      "description": "null = Tages-Soll",
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "schoolFullDayThresholdSeconds": {
+      "default": 10800,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "timezone": {
+      "default": "Europe/Berlin",
+      "type": "string"
+     },
+     "travelCountsAsWork": {
+      "default": true,
+      "type": "boolean"
+     },
+     "validFrom": {
+      "format": "date",
+      "type": "string"
+     },
+     "validTo": {
+      "format": "date",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "weeklyTargetSeconds": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "workdays": {
+      "items": {
+       "description": "1=Montag..7=Sonntag",
+       "maximum": 7,
+       "minimum": 1,
+       "type": "integer"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "validFrom",
+     "weeklyTargetSeconds",
+     "workdays"
+    ],
+    "type": "object"
+   },
+   "WorktimeAction": {
+    "enum": [
+     "work",
+     "school",
+     "vacation",
+     "sick",
+     "excused",
+     "holiday",
+     "skip"
+    ],
+    "type": "string"
+   },
+   "WorktimeOptions": {
+    "properties": {
+     "holidayTimes": {
+      "default": "discard",
+      "description": "Zeilen mit Zeiten auf gesetzlichen oder eigenen Feiertagen. discard = keine Abschnitte, Tag gilt als Feiertag (Warnung holiday_times_discarded); keep = als Arbeit/Schule übernehmen (Mehrarbeit)",
+      "enum": [
+       "discard",
+       "keep"
+      ],
+      "type": "string"
+     },
+     "partialCredit": {
+      "default": "work",
+      "description": "Zeilen der Aktion vacation/sick/excused, deren Nettozeit mehr als 5 Minuten vom Tages-Soll abweicht. work = als Arbeit mit Notiz übernehmen (Warnung credit_partial_as_work); absence = trotzdem als Abwesenheit",
+      "enum": [
+       "work",
+       "absence"
+      ],
+      "type": "string"
+     },
+     "pauseMinutes": {
+      "description": "null = Wert aus der Tabelle (H1)",
+      "maximum": 240,
+      "minimum": 0,
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "pauseMode": {
+      "default": "split",
+      "enum": [
+       "split",
+       "none"
+      ],
+      "type": "string"
+     },
+     "pauseStart": {
+      "default": "12:00",
+      "pattern": "^[0-2][0-9]:[0-5][0-9]$",
+      "type": "string"
+     },
+     "roundToMinutes": {
+      "default": true,
+      "type": "boolean"
+     },
+     "rules": {
+      "description": "fehlend/null = Standardregeln; eine leere Liste ersetzt sie durch keine Regeln (alles wird Arbeit)",
+      "items": {
+       "$ref": "#/components/schemas/WorktimeRemarkRule"
+      },
+      "maxItems": 100,
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "WorktimePreview": {
+    "properties": {
+     "absences": {
+      "type": "integer"
+     },
+     "byAction": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "type": "object"
+     },
+     "customDays": {
+      "type": "integer"
+     },
+     "dateSystem": {
+      "enum": [
+       "1900",
+       "1904"
+      ],
+      "type": "string"
+     },
+     "days": {
+      "type": "integer"
+     },
+     "firstContentDate": {
+      "description": "erster Tag mit Zeiten oder Bemerkung; Vorschlag für den Beginn des Arbeitsmodells, damit leere Tage davor nicht als Fehlzeit zählen",
+      "format": "date",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "firstDate": {
+      "format": "date",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "lastDate": {
+      "format": "date",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "segments": {
+      "type": "integer"
+     },
+     "sheetBalanceFutureSeconds": {
+      "description": "Anteil der Zeilen nach heute",
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "sheetBalanceSeconds": {
+      "description": "Summe der zwischengespeicherten Differenzen der Tabelle über alle Zeilen (nur Hinweis)",
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "sheetBalanceUpToTodaySeconds": {
+      "description": "wie sheetBalanceSeconds, aber nur Zeilen bis einschließlich heute (vergleichbar mit dem Zeitkonto der App)",
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "skippedHolidays": {
+      "type": "integer"
+     },
+     "unmappedRemarks": {
+      "items": {
+       "properties": {
+        "count": {
+         "type": "integer"
+        },
+        "text": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "text",
+        "count"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "WorktimeRemarkRule": {
+    "properties": {
+     "action": {
+      "$ref": "#/components/schemas/WorktimeAction"
+     },
+     "pattern": {
+      "description": "Teilstring (ohne Groß/Kleinschreibung); mit ^ und $ als exakter Text",
+      "maxLength": 80,
+      "type": "string"
+     }
+    },
+    "required": [
+     "pattern",
+     "action"
+    ],
+    "type": "object"
+   }
+  },
+  "securitySchemes": {
+   "bearer": {
+    "description": "OAuth-Access-Token (tto_) oder persönliches Token (ttp_) nur für /mcp",
+    "scheme": "bearer",
+    "type": "http"
+   },
+   "csrf": {
+    "in": "header",
+    "name": "X-CSRF-Token",
+    "type": "apiKey"
+   },
+   "deviceToken": {
+    "scheme": "bearer",
+    "type": "http"
+   },
+   "session": {
+    "in": "cookie",
+    "name": "tt_session",
+    "type": "apiKey"
+   }
+  }
+ },
+ "info": {
+  "description": "Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und\nPWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).\nAnnahmen (ADR-0003): Basispfad /api/v1; Sitzung per HttpOnly-Cookie `tt_session`;\nschreibende Requests mit Sitzung senden Header `X-CSRF-Token` (Wert aus GET /api/v1/auth/session).\nWebAuthn-Optionen/-Antworten folgen den JSON-Formen der W3C-Spezifikation (base64url-Felder).\nFehler immer als application/json `{ \"error\": { \"code\": string, \"message\": string } }`.\nAntworten verraten nie, ob eine Kontoadresse existiert.\nError codes (English, stable): bad_request, unauthorized, forbidden, not_found, conflict, handle_taken,\nlast_passkey, too_many_requests, not_implemented, invalid_code, csrf_invalid,\nrecovery_session_restricted, reauth_required, not_ready.\nDecisions (Lead, 14.10.2026): (1) register/options returns 409 handle_taken for duplicate handle and 400 bad_request\nfor validation errors. (2) Adding/revoking passkeys and changing recovery settings require a \"fresh\" session\n(login within the last 10 minutes) or a recovery session; otherwise 403 reauth_required, and the client signs in again.\n(3) A successful POST /me/passkeys/verify inside a recovery session upgrades it to a normal session (recovery=false).\n(4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form\n`<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.\n(6) No session listing endpoint in stage 1; only revoking other sessions.\nv0.11.0: Kontenverwaltung und Datenschutz (ADR-0016, additiv): Admin-API /admin/accounts (Liste, Deaktivieren/Reaktivieren, Rollenwechsel, Sitzungen widerrufen, Löschen), GET /me/export (ZIP der eigenen Daten), DELETE /me (Selbstlöschung). Fehlercodes: self_lockout (409), last_admin (409), confirmation_mismatch (400), account_deletion_incomplete (503). Löschen/Rollenwechsel verlangen eine frische Sitzung (403 reauth_required). Die Endpunkte sind keinem Modul zugeordnet.\nv0.10.4: GET /.well-known/apple-app-site-association (additiv, ADR-0015; 404 ohne APPLE_APP_IDS). Native Apple-Passkeys melden den Origin `https://<rpId>` (ohne Port); das Backend akzeptiert ihn zusätzlich zu WEBAUTHN_ORIGIN (exakter Abgleich, RP-ID-Hash unverändert), sofern die RP-ID eine echte Domain ist.\nv0.10.3: ImportResult.warnings (additiv, wie in der Vorschau); school_on_holiday für Schulzeilen an Feiertagen neben holiday_times_discarded für Arbeitszeilen.\nv0.10.2: Import-Profil: holidayTimes/partialCredit, Warnungen holiday_times_discarded/credit_partial_as_work (zusammengefasst mit count), Vorschau sheetBalanceUpToTodaySeconds/sheetBalanceFutureSeconds/firstContentDate (Befund L20: Abweichung Tabelle/App erklärt sich aus Feiertagszeilen, Teilgutschriften, Modellbeginn und Zeilen nach heute).\nv0.10.1: Klarstellungen C21: rules leer = keine Regeln; Vorschau-warnings (pause_exceeds_day); Zeilenfehler planning_disabled (Abwesenheits-/Feiertagsaktionen bei ausgeschaltetem Modul planning, Arbeit/Schule bleiben importierbar); ImportResult.conflictItems; Notizen über 500 bzw. Feiertagsnamen über 80 Zeichen → note_too_long (keine stille Kürzung). Export worktime-xlsx ist kein verlustfreies Sicherungsformat (siehe docs/handoffs/C22.md).\nv0.10.0: Arbeitszeit-Tabelle als Import-/Exportprofil und Typ excused (ADR-0013).\nv0.9.0: Modulschalter (ADR-0012). Abgeschaltete Module antworten 404 mit Code module_disabled, Änderungen an gesperrten Modulen 409 module_locked. Betreiber-Override per Umgebung MODULES_DISABLED.\nv0.8.1: C19-Review-Fixes: DELETE /files/{id} → 503 storage_unavailable, wenn das Objekt nicht entfernt werden konnte (Datensatz bleibt mit Retry-Marker); POST /oauth/token → 429 temporarily_unavailable bei Überschreitung des Limits; Push-Endpunkte nur https:443 auf erlaubten Push-Diensten (Apple/Google/Mozilla/Microsoft), sonst 400 bad_request; Datums- und Zahlenbereiche strikt validiert (Int.min/Int.max → 400).\nv0.8.0: Hinweise/Web Push (ADR-0010). Push-Nutzlast ohne Details, Ruhezeiten stellen Push zurück; REST-Fehlercodes: push_unavailable (501), too_many_subscriptions (409).\nv0.7.0: MCP/OAuth/persönliche Tokens (ADR-0009). Fehlercodes REST: reauth_required, insufficient_scope; OAuth-Endpunkte folgen RFC 6749/7009/7591/8414/9728 (Fehler als JSON `error`/`error_description`).\nv0.6.0: Berichtsheft (ADR-0008). Fehlercodes: stale_version (412), not_found; Quellen mit fileId benötigen eine eigene Datei (404 sonst).\nv0.5.1: Speicher: 503 storage_unavailable (Backend einer bestehenden Datei nicht konfiguriert), 500 storage_corrupt, 409 conflict bei mehr als 20 Anhängen je Abwesenheit; PUT /admin/storage ersetzt die gesamte Konfiguration (`s3: null` löscht S3-Konfiguration und Secret, `s3` ohne secretAccessKey behält das gespeicherte Secret). OIDC: für purpose=link führen Fehler nach `/settings/identities?oidc_error=<code>`; 'frische Sitzung nötig' ist 403 reauth_required; ungültiges inviteToken bei start = 404; pendingId gilt 10 Minuten (danach 404); der Passkey-Widerruf zählt externe Identitäten als Anmeldemethode.\nv0.5.0: OIDC (optional) siehe ADR-0007. Konfiguration: OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET (optional), OIDC_NAME, OIDC_SCOPES (Standard `openid email profile`). Kein Pflicht-Authentik; Registrierung weiter nur mit Einladung.\nv0.4.1: Import-Ergänzungen (allowOvernight, errorCount, rolledBack, Fehlercodes unknown_kind/note_too_long/too_many_rows; rollback_conflict liefert conflicts auch oben; je Konto max. 20 offene Importe, 50 Vorlagen).\nv0.4.0: Export/Import/Dateispeicher, siehe docs/decisions/ADR-0006. Fehlercodes: file_too_large (413), unsupported_type (415), import_not_ready, import_has_errors, rollback_conflict.\nv0.3.2: Tagesmarkierung Feiertag hat Vorrang vor Urlaub am selben Tag; Krankheit wirkt nur mit Status approved/taken; Freigabe an sich selbst 400 `cannot_share_with_self`; DayEvaluation.markSource/targetOverrideSeconds.\nStage 3 (v0.3.0/0.3.1): see docs/decisions/ADR-0005 (Entscheidungen 0.3.1: GET vacation/settings liefert Standardwerte mit configured=false; Übertrag je Jahr; Abwesenheiten rejected/cancelled blockieren keine Überlappung\nund haben countedHalfDays 0, countedHalfDays nur für kind=vacation; doppelte Freigabe 409 share_exists; Freigabe an sich selbst 400; Urlaubsansicht nur approved/taken; actual nur Tage mit Arbeitszeit;\nmaximale Zeiträume für absences/plan/shared view 366 Tage, time/days 93 Tage, sonst 400 range_too_large). Half days as integers (30 days = 60). Sick absences and documents are never part of shares.\nStage 2 decisions (v0.2.1): a work model `validFrom` may lie in the past but must be later than the previous version's `validFrom` (else 409 model_overlap);\ndays on or after it are then evaluated by the new version (explicit user act). Future days are never `provisional`; today and days with a running segment are.\nA second accept of a suggestion returns 409 `suggestion_resolved`. Further codes: timer_already_running, no_running_timer, segment_overlap, stale_version, model_overlap.\n--- B2 (v0.10.5, additiv; zusammen mit B1 als v0.12.0 ausgeliefert) ---\nv0.10.5 (B2, ADR-0017): POST /api/v1/me/push-subscriptions/replace für `pushsubscriptionchange` (ersetzt ein Abo atomar, behält Id und wartende Pushes). Gleichzeitiges Anlegen desselben Lernfelds liefert 409 `learning_field_exists` statt 500. Kein Schemawechsel; Aufräumjob (`MAINTENANCE_INTERVAL_MINUTES`, CLI `maintenance`) ohne API-Änderung.\n",
+  "title": "Timetrack API",
+  "version": "0.12.0"
+ },
+ "openapi": "3.1.0",
+ "paths": {
+  "/.well-known/apple-app-site-association": {
+   "get": {
+    "description": "Associated Domains für native Passkeys (ADR-0015). Öffentlich, ohne Sitzung/CSRF, ohne Weiterleitung.\nInhalt aus der Umgebungsvariable APPLE_APP_IDS (kommagetrennt, `<TeamID>.<BundleID>`); ohne Einträge 404.\nNative Clients senden in clientDataJSON den Origin `https://<rpId>` (ohne Port), der zusätzlich zu WEBAUTHN_ORIGIN\nakzeptiert wird (exakter Abgleich, nur bei RP-ID mit Punkt).\n",
+    "operationId": "appleAppSiteAssociation",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "webcredentials": {
+           "properties": {
+            "apps": {
+             "items": {
+              "example": "ABCDE12345.com.example.timetrack",
+              "type": "string"
+             },
+             "type": "array"
+            }
+           },
+           "required": [
+            "apps"
+           ],
+           "type": "object"
+          }
+         },
+         "required": [
+          "webcredentials"
+         ],
+         "type": "object"
+        }
+       }
+      },
+      "description": "AASA-Datei"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      },
+      "description": "APPLE_APP_IDS nicht gesetzt"
+     }
+    },
+    "security": []
+   }
+  },
+  "/.well-known/oauth-authorization-server": {
+   "get": {
+    "description": "RFC 8414 Metadaten (issuer = PUBLIC_BASE_URL, PKCE S256, public clients, code + refresh_token).",
+    "operationId": "oauthAuthorizationServer",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    }
+   }
+  },
+  "/.well-known/oauth-protected-resource": {
+   "get": {
+    "description": "RFC 9728 Metadaten der MCP-Ressource.",
+    "operationId": "oauthProtectedResource",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "authorization_servers": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "bearer_methods_supported": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "resource": {
+           "type": "string"
+          },
+          "scopes_supported": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "required": [
+          "resource",
+          "authorization_servers"
+         ],
+         "type": "object"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    }
+   }
+  },
+  "/api/v1/absences": {
+   "get": {
+    "operationId": "listAbsences",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "from",
+      "required": true,
+      "schema": {
+       "format": "date",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "to",
+      "required": true,
+      "schema": {
+       "format": "date",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/Absence"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   },
+   "post": {
+    "description": "Urlaub/Krankheit/sonstige Abwesenheit. Überlappung mit anderer Abwesenheit → 409 absence_overlap. Verbrauch in halben Tagen nur an Arbeitstagen des Modells, nicht an Feiertagen.",
+    "operationId": "createAbsence",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AbsenceInput"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Absence"
+        }
+       }
+      },
+      "description": "angelegt"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/absences/{id}": {
+   "delete": {
+    "operationId": "deleteAbsence",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "gelöscht"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   },
+   "get": {
+    "operationId": "getAbsence",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Absence"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   },
+   "put": {
+    "description": "Ändert Zeitraum/Status; Statuswechsel zählt Tage nie doppelt (genehmigt→genommen). If-Match auf version.",
+    "operationId": "updateAbsence",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     },
+     {
+      "in": "header",
+      "name": "If-Match",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AbsenceInput"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Absence"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "412": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      },
+      "description": "veraltete Version"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/absences/{id}/attachments": {
+   "get": {
+    "operationId": "listAbsenceAttachments",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/FileMeta"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   },
+   "post": {
+    "operationId": "attachFileToAbsence",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "fileId": {
+          "format": "uuid",
+          "type": "string"
+         }
+        },
+        "required": [
+         "fileId"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/FileMeta"
+        }
+       }
+      },
+      "description": "verknüpft"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/absences/{id}/attachments/{fileId}": {
+   "delete": {
+    "operationId": "detachFileFromAbsence",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     },
+     {
+      "in": "path",
+      "name": "fileId",
+      "required": true,
+      "schema": {
+       "format": "uuid",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "Verknüpfung entfernt"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/admin/accounts": {
+   "get": {
+    "description": "Nur Admin. Seitenweise Liste aller Konten (nach createdAt, handle). Enthält ausschließlich Identität, Rolle, Zustand,\nletzte Aktivität und Passkey-Anzahl, niemals Zeit-, Abwesenheits-, Berichts- oder Freigabedaten.\n",
+    "operationId": "listAccounts",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "limit",
+      "schema": {
+       "default": 50,
+       "maximum": 100,
+       "minimum": 1,
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "offset",
+      "schema": {
+       "default": 0,
+       "minimum": 0,
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminAccountPage"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/admin/accounts/{id}": {
+   "delete": {
+    "description": "Nur Admin, frische Sitzung nötig (403 reauth_required). Body `confirmHandle` muss dem Handle des Kontos entsprechen\n(400 confirmation_mismatch). Löscht das Konto mit allen Daten (Zeiten, Abwesenheiten, Planung, Freigaben in beide Richtungen,\nBerichte, Anhänge samt gespeicherter Dateien, Tokens, Grants, Passkeys, OIDC-Verknüpfungen, Hinweise, Importe, Audit-Zeilen mit Kontobezug).\nKann ein gespeichertes Objekt nicht entfernt werden, scheitert die Operation mit 503 account_deletion_incomplete; das Konto bleibt\ndann deaktiviert, die Dateien sind zur Wiederholung markiert, und derselbe Aufruf kann wiederholt werden. Ein Admin löscht nie sich selbst\nüber diesen Pfad (409 self_lockout, stattdessen DELETE /me) und nie den letzten aktiven Admin (409 last_admin).\n",
+    "operationId": "deleteAccount",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AccountDeletionConfirm"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "204": {
+      "description": "gelöscht"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     },
+     "503": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      },
+      "description": "Objekt konnte nicht entfernt werden (account_deletion_incomplete)"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   },
+   "patch": {
+    "description": "Nur Admin. Mindestens eines von role/state. `state=disabled` macht sofort alle Sitzungen, persönlichen Tokens, OAuth-Grants\n(samt Access-/Refresh-Tokens), Gerätetokens und Push-Abos des Kontos unbrauchbar (Sitzungen/Tokens/Grants werden widerrufen,\nPush-Abos gelöscht); Reaktivieren stellt sie nicht wieder her, nur die Anmeldung. Anmeldeversuche deaktivierter Konten\nscheitern mit dem neutralen 401 unauthorized. Ein Admin ändert nie die eigene Rolle oder den eigenen Zustand (409 self_lockout);\nder letzte aktive Admin bleibt immer erhalten (409 last_admin). Rollenwechsel verlangen eine frische Sitzung (403 reauth_required).\n",
+    "operationId": "updateAccount",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AdminAccountPatch"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdminAccount"
+        }
+       }
+      },
+      "description": "aktualisiert"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/admin/accounts/{id}/sessions": {
+   "delete": {
+    "description": "Nur Admin. Widerruft alle Sitzungen des Kontos (Tokens und Grants bleiben unberührt).",
+    "operationId": "revokeAccountSessions",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "widerrufen"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/admin/invitations": {
+   "get": {
+    "operationId": "listInvitations",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/Invitation"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   },
+   "post": {
+    "description": "Erzeugt eine Einladung; Klartext-Token nur in dieser Antwort (Server speichert nur den Hash).",
+    "operationId": "createInvitation",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "expiresInHours": {
+          "default": 72,
+          "maximum": 720,
+          "minimum": 1,
+          "type": "integer"
+         },
+         "note": {
+          "maxLength": 200,
+          "type": "string"
+         }
+        },
+        "type": "object"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/InvitationCreated"
+        }
+       }
+      },
+      "description": "erzeugt"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/admin/invitations/{id}": {
+   "delete": {
+    "operationId": "revokeInvitation",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "id",
+      "required": true,
+      "schema": {
+       "format": "uuid",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "widerrufen"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/admin/modules": {
+   "get": {
+    "operationId": "getServerModules",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/ServerModule"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   },
+   "put": {
+    "description": "Nur Admin. Setzt die serverweite Verfügbarkeit; vom Betreiber per Umgebung gesperrte Module sind nicht änderbar (409 module_locked).",
+    "operationId": "putServerModules",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "modules": {
+          "additionalProperties": {
+           "type": "boolean"
+          },
+          "type": "object"
+         }
+        },
+        "required": [
+         "modules"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/ServerModule"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/admin/storage": {
+   "get": {
+    "description": "Nur Admin. Geheimnisse werden nie ausgegeben (hasSecret).",
+    "operationId": "getStorageSettings",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StorageSettings"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   },
+   "put": {
+    "description": "Nur Admin. Wirkt nur auf neue Uploads. secretAccessKey wird nur geschrieben, wenn angegeben. Ohne STORAGE_SECRET_KEY auf dem Server → 501 not_implemented bei S3.",
+    "operationId": "putStorageSettings",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/StorageSettingsInput"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StorageSettings"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "501": {
+      "$ref": "#/components/responses/NotImplemented"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/auth/login/options": {
+   "post": {
+    "description": "Startet Anmeldung (discoverable credentials, keine Kontoangabe nötig).",
+    "operationId": "loginOptions",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RequestOptions"
+        }
+       }
+      },
+      "description": "Challenge erzeugt"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooMany"
+     }
+    }
+   }
+  },
+  "/api/v1/auth/login/verify": {
+   "post": {
+    "operationId": "loginVerify",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "challengeId": {
+          "type": "string"
+         },
+         "credential": {
+          "$ref": "#/components/schemas/AuthenticationCredential"
+         }
+        },
+        "required": [
+         "challengeId",
+         "credential"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Session"
+        }
+       }
+      },
+      "description": "angemeldet; Set-Cookie tt_session"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    }
+   }
+  },
+  "/api/v1/auth/oidc/callback": {
+   "get": {
+    "description": "Redirect-Ziel des Anbieters (PUBLIC_BASE_URL/api/v1/auth/oidc/callback). Tauscht den Code (PKCE), validiert id_token (Signatur über JWKS, iss, aud, exp, nonce, azp) und wertet die Identität (issuer, sub) aus; E-Mail-Adressen verknüpfen nie automatisch.\nAntwort ist immer ein 302 auf die PWA: login → `/` (Sitzungscookie gesetzt); link → `/settings/identities?linked=1`; register → `/invite/<token>?oidc=<pendingId>` (Konto wird erst mit POST /auth/oidc/register angelegt);\nFehler → `/login?oidc_error=<code>` mit Codes oidc_not_linked, oidc_state_invalid, oidc_token_invalid, oidc_identity_taken, oidc_invite_invalid, oidc_reauth_required, oidc_failed. Keine Tokens in URLs/Logs.\n",
+    "operationId": "oidcCallback",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "code",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "state",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "error",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "302": {
+      "description": "Weiterleitung zur PWA"
+     }
+    }
+   }
+  },
+  "/api/v1/auth/oidc/config": {
+   "get": {
+    "description": "Ob OIDC auf diesem Server konfiguriert ist (OIDC_ISSUER und OIDC_CLIENT_ID). Optional, keine Pflicht.",
+    "operationId": "oidcConfig",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "enabled": {
+           "type": "boolean"
+          },
+          "name": {
+           "description": "Anzeigename des Anbieters",
+           "type": "string"
+          }
+         },
+         "required": [
+          "enabled"
+         ],
+         "type": "object"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    }
+   }
+  },
+  "/api/v1/auth/oidc/register": {
+   "post": {
+    "description": "Schließt die Registrierung per Einladung und OIDC-Identität ab (handle und Anzeigename wählen). Einladung und Identität werden atomar verbraucht; es entsteht ein Konto ohne Passkey, die PWA bietet anschließend die Passkey-Einrichtung an.",
+    "operationId": "oidcRegister",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "displayName": {
+          "maxLength": 80,
+          "minLength": 1,
+          "type": "string"
+         },
+         "handle": {
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,31}$",
+          "type": "string"
+         },
+         "pendingId": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "pendingId",
+         "handle",
+         "displayName"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Session"
+        }
+       }
+      },
+      "description": "Konto angelegt; Set-Cookie tt_session"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     }
+    }
+   }
+  },
+  "/api/v1/auth/oidc/start": {
+   "post": {
+    "description": "Startet Authorization Code Flow mit PKCE (S256), state und nonce serverseitig gespeichert (10 min, einmalig).\npurpose=login: Anmeldung mit bereits verknüpfter Identität. purpose=link: eingeloggtes Konto verknüpft eine Identität (frische Sitzung nötig). purpose=register: Einladung (inviteToken) mit Identität einlösen.\nAntwort enthält die Anbieter-URL, zu der der Browser navigiert.\n",
+    "operationId": "oidcStart",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "inviteToken": {
+          "type": "string"
+         },
+         "purpose": {
+          "enum": [
+           "login",
+           "link",
+           "register"
+          ],
+          "type": "string"
+         }
+        },
+        "required": [
+         "purpose"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "authorizationUrl": {
+           "format": "uri",
+           "type": "string"
+          }
+         },
+         "required": [
+          "authorizationUrl"
+         ],
+         "type": "object"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "501": {
+      "$ref": "#/components/responses/NotImplemented"
+     }
+    }
+   }
+  },
+  "/api/v1/auth/recovery/complete": {
+   "post": {
+    "description": "Prüft Nachweis (Code bzw. Passwort) atomar und einmalig; eröffnet eine kurzlebige Recovery-Sitzung\n(Cookie tt_session mit Flag recovery=true), die nur das Einrichten eines neuen Passkeys und\nSitzungswiderruf erlaubt.\n",
+    "operationId": "recoveryComplete",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "proof": {
+          "type": "string"
+         },
+         "recoveryId": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "recoveryId",
+         "proof"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Session"
+        }
+       }
+      },
+      "description": "Recovery-Sitzung"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooMany"
+     }
+    }
+   }
+  },
+  "/api/v1/auth/recovery/start": {
+   "post": {
+    "description": "Startet Wiederherstellung. Antwort ist für unbekannte Konten und gültige Konten gleich (202),\num Kontoexistenz nicht zu verraten. Methode `email` sendet einen Code (falls aktiv), `recovery-code`\nund `fallback-password` erwarten Nachweis in /complete.\n",
+    "operationId": "recoveryStart",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "identifier": {
+          "description": "Konto-`handle`",
+          "type": "string"
+         },
+         "method": {
+          "enum": [
+           "email",
+           "recovery-code",
+           "fallback-password"
+          ],
+          "type": "string"
+         }
+        },
+        "required": [
+         "method",
+         "identifier"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "202": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "recoveryId": {
+           "type": "string"
+          }
+         },
+         "required": [
+          "recoveryId"
+         ],
+         "type": "object"
+        }
+       }
+      },
+      "description": "angenommen"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooMany"
+     }
+    }
+   }
+  },
+  "/api/v1/auth/register/options": {
+   "post": {
+    "description": "Startet Registrierung per Einladung; liefert WebAuthn-Creation-Options.",
+    "operationId": "registerOptions",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "displayName": {
+          "maxLength": 80,
+          "minLength": 1,
+          "type": "string"
+         },
+         "email": {
+          "description": "optional; unverifiziert bis Bestätigung",
+          "format": "email",
+          "type": "string"
+         },
+         "handle": {
+          "description": "eindeutige Kontokennung (Kleinbuchstaben); dient als Recovery-Identifier",
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,31}$",
+          "type": "string"
+         },
+         "inviteToken": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "inviteToken",
+         "handle",
+         "displayName"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CreationOptions"
+        }
+       }
+      },
+      "description": "Challenge erzeugt"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooMany"
+     }
+    }
+   }
+  },
+  "/api/v1/auth/register/verify": {
+   "post": {
+    "description": "Prüft die Attestation und legt Konto, ersten Passkey und Sitzung atomar an; verbraucht die\nEinladung genau einmal (paralleles Einlösen: genau ein Erfolg).\n",
+    "operationId": "registerVerify",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "challengeId": {
+          "type": "string"
+         },
+         "credential": {
+          "$ref": "#/components/schemas/RegistrationCredential"
+         },
+         "passkeyName": {
+          "maxLength": 80,
+          "type": "string"
+         }
+        },
+        "required": [
+         "challengeId",
+         "credential"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Session"
+        }
+       }
+      },
+      "description": "Konto angelegt; Set-Cookie tt_session"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     }
+    }
+   }
+  },
+  "/api/v1/auth/session": {
+   "delete": {
+    "operationId": "logout",
+    "responses": {
+     "204": {
+      "description": "Sitzung beendet"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   },
+   "get": {
+    "description": "Aktuelle Sitzung samt CSRF-Token und Konto.",
+    "operationId": "currentSession",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Session"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/automation/events": {
+   "post": {
+    "description": "Für Shortcuts. Auth: `Authorization: Bearer <device token>` (kein Cookie/CSRF). Idempotent über eventId; ein Duplikat liefert das erste Ergebnis.\nErgebnis je nach Ortsmodus: `booked`, `suggested`, `ignored`, `recorded` (nur festgehalten), `duplicate`, `needs_review`.\n",
+    "operationId": "postAutomationEvent",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AutomationEvent"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "result": {
+           "enum": [
+            "booked",
+            "suggested",
+            "ignored",
+            "recorded",
+            "duplicate",
+            "needs_review"
+           ],
+           "type": "string"
+          },
+          "segmentId": {
+           "format": "uuid",
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "suggestionId": {
+           "format": "uuid",
+           "type": [
+            "string",
+            "null"
+           ]
+          }
+         },
+         "required": [
+          "result"
+         ],
+         "type": "object"
+        }
+       }
+      },
+      "description": "verarbeitet"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "security": [
+     {
+      "deviceToken": []
+     }
+    ]
+   }
+  },
+  "/api/v1/calendar/custom-days": {
+   "post": {
+    "description": "Eigener Feiertag/Brückentag oder Schulferien-Zeitraum.",
+    "operationId": "createCustomCalendarDay",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "endDate": {
+          "format": "date",
+          "type": "string"
+         },
+         "kind": {
+          "enum": [
+           "holiday",
+           "school_holiday"
+          ],
+          "type": "string"
+         },
+         "name": {
+          "maxLength": 80,
+          "type": "string"
+         },
+         "startDate": {
+          "format": "date",
+          "type": "string"
+         }
+        },
+        "required": [
+         "kind",
+         "startDate",
+         "endDate",
+         "name"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CalendarDay"
+        }
+       }
+      },
+      "description": "angelegt"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/calendar/custom-days/{id}": {
+   "delete": {
+    "operationId": "deleteCustomCalendarDay",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "gelöscht"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/calendar/holidays": {
+   "get": {
+    "description": "Gesetzliche Feiertage der eingestellten Region (fest eingebaut, DE inkl. Bundesländer) plus eigene Einträge; Schulferien nur als vom Nutzer erfasste Zeiträume.",
+    "operationId": "listHolidays",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "year",
+      "required": true,
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "region",
+      "schema": {
+       "description": "ISO 3166-2, z. B. DE-ST; Standard aus Einstellungen",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/CalendarDay"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/export/time": {
+   "get": {
+    "description": "Arbeitszeitexport (siehe ADR-0006). Antwort ist eine Datei mit Content-Disposition attachment.",
+    "operationId": "exportTime",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "from",
+      "required": true,
+      "schema": {
+       "format": "date",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "to",
+      "required": true,
+      "schema": {
+       "format": "date",
+       "type": "string"
+      }
+     },
+     {
+      "description": "worktime-xlsx = Arbeitszeit-Tabelle im Jahresblatt-Format (ADR-0013)",
+      "in": "query",
+      "name": "format",
+      "required": true,
+      "schema": {
+       "enum": [
+        "xlsx",
+        "pdf",
+        "csv",
+        "worktime-xlsx"
+       ],
+       "type": "string"
+      }
+     },
+     {
+      "description": "nur worktime-xlsx",
+      "in": "query",
+      "name": "times",
+      "schema": {
+       "default": "evaluated",
+       "enum": [
+        "evaluated",
+        "actual"
+       ],
+       "type": "string"
+      }
+     },
+     {
+      "description": "nur worktime-xlsx",
+      "in": "query",
+      "name": "pauseMinutes",
+      "schema": {
+       "maximum": 240,
+       "minimum": 0,
+       "type": "integer"
+      }
+     },
+     {
+      "description": "nur worktime-xlsx",
+      "in": "query",
+      "name": "standardStart",
+      "schema": {
+       "default": "08:00",
+       "pattern": "^[0-2][0-9]:[0-5][0-9]$",
+       "type": "string"
+      }
+     },
+     {
+      "description": "nur worktime-xlsx",
+      "in": "query",
+      "name": "dateSystem",
+      "schema": {
+       "default": "1900",
+       "enum": [
+        "1900",
+        "1904"
+       ],
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/pdf": {
+        "schema": {
+         "format": "binary",
+         "type": "string"
+        }
+       },
+       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+        "schema": {
+         "format": "binary",
+         "type": "string"
+        }
+       },
+       "text/csv": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Datei"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/files": {
+   "post": {
+    "description": "Lädt eine Datei hoch (multipart, Feld file). Speicherort nach Admin-Regeln. Typ-Whitelist und Größenlimit; 413 file_too_large, 415 unsupported_type.",
+    "operationId": "uploadFile",
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "properties": {
+         "file": {
+          "format": "binary",
+          "type": "string"
+         }
+        },
+        "required": [
+         "file"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/FileMeta"
+        }
+       }
+      },
+      "description": "gespeichert"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/files/{id}": {
+   "delete": {
+    "operationId": "deleteFile",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "gelöscht"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   },
+   "get": {
+    "description": "Nur Eigentümer. Content-Disposition attachment, nosniff.",
+    "operationId": "downloadFile",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/octet-stream": {
+        "schema": {
+         "format": "binary",
+         "type": "string"
+        }
+       }
+      },
+      "description": "Datei"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/import-profiles/worktime/default-rules": {
+   "get": {
+    "description": "Standard-Bemerkungsregeln des Import-Profils worktime_workbook (ADR-0013).",
+    "operationId": "worktimeDefaultRules",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/WorktimeRemarkRule"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/import-templates": {
+   "get": {
+    "operationId": "listImportTemplates",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/ImportTemplate"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   },
+   "post": {
+    "operationId": "createImportTemplate",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "mapping": {
+          "$ref": "#/components/schemas/ImportMapping"
+         },
+         "name": {
+          "maxLength": 80,
+          "type": "string"
+         }
+        },
+        "required": [
+         "name",
+         "mapping"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ImportTemplate"
+        }
+       }
+      },
+      "description": "angelegt"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/import-templates/{id}": {
+   "delete": {
+    "operationId": "deleteImportTemplate",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "gelöscht"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/imports": {
+   "post": {
+    "description": "Lädt eine CSV- oder XLSX-Datei (multipart/form-data, Feld file) hoch. Es werden noch keine Zeiten angelegt.",
+    "operationId": "uploadImport",
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "properties": {
+         "file": {
+          "format": "binary",
+          "type": "string"
+         }
+        },
+        "required": [
+         "file"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ImportJob"
+        }
+       }
+      },
+      "description": "hochgeladen"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/imports/{id}": {
+   "delete": {
+    "description": "Verwirft einen noch nicht übernommenen Import samt hochgeladener Datei.",
+    "operationId": "discardImport",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "verworfen"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   },
+   "get": {
+    "operationId": "getImport",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ImportJob"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/imports/{id}/commit": {
+   "post": {
+    "description": "Übernimmt die zuletzt validierte Zuordnung in einer Transaktion. Wiederholung derselben Datei erzeugt keine Duplikate (skipped). Nur wenn keine Zeilenfehler bestehen oder ignoreErrors=true.",
+    "operationId": "commitImport",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "ignoreErrors": {
+          "default": false,
+          "type": "boolean"
+         }
+        },
+        "type": "object"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ImportResult"
+        }
+       }
+      },
+      "description": "übernommen"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/imports/{id}/mapping": {
+   "put": {
+    "description": "Speichert die Zuordnung und liefert die Validierungsvorschau (noch keine Übernahme).",
+    "operationId": "putImportMapping",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ImportMapping"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ImportPreview"
+        }
+       }
+      },
+      "description": "Vorschau"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/imports/{id}/preview": {
+   "get": {
+    "description": "Rohvorschau (erste 50 Zeilen des Blatts) zur Wahl von Kopfzeile und Spalten.",
+    "operationId": "previewImportRows",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     },
+     {
+      "in": "query",
+      "name": "sheet",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "rows": {
+           "items": {
+            "items": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "type": "array"
+           },
+           "type": "array"
+          },
+          "sheet": {
+           "type": "string"
+          }
+         },
+         "required": [
+          "sheet",
+          "rows"
+         ],
+         "type": "object"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/imports/{id}/rollback": {
+   "post": {
+    "description": "Nimmt eine übernommene Charge zurück (storniert deren Segmente), sofern sie seitdem unverändert sind; sonst 409 mit Konfliktliste.",
+    "operationId": "rollbackImport",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ImportResult"
+        }
+       }
+      },
+      "description": "zurückgenommen"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/invitations/{token}": {
+   "get": {
+    "description": "Prüft, ob ein Einladungstoken gültig ist (ohne Details zum Einladenden).",
+    "operationId": "inspectInvitation",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "token",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "expiresAt": {
+           "format": "date-time",
+           "type": "string"
+          },
+          "valid": {
+           "const": true,
+           "type": "boolean"
+          }
+         },
+         "required": [
+          "valid"
+         ],
+         "type": "object"
+        }
+       }
+      },
+      "description": "gültig"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    }
+   }
+  },
+  "/api/v1/me": {
+   "delete": {
+    "description": "Selbstlöschung mit denselben Regeln und derselben Kaskade wie DELETE /admin/accounts/{id}: frische Sitzung (403 reauth_required),\nBody `confirmHandle` (400 confirmation_mismatch), der letzte aktive Admin kann sich nicht löschen (409 last_admin). Das Cookie wird geleert.\nScheitert die Entfernung gespeicherter Objekte (503 account_deletion_incomplete), ist das Konto bereits deaktiviert und die Sitzung widerrufen;\nein Admin schließt die Löschung mit DELETE /admin/accounts/{id} ab.\n",
+    "operationId": "deleteMyAccount",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AccountDeletionConfirm"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "204": {
+      "description": "gelöscht"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     },
+     "503": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      },
+      "description": "Objekt konnte nicht entfernt werden (account_deletion_incomplete)"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/me/api-tokens": {
+   "get": {
+    "operationId": "listApiTokens",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/ApiToken"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   },
+   "post": {
+    "description": "Persönliches MCP-Token; frische Sitzung nötig (403 reauth_required). Klartext nur in dieser Antwort.",
+    "operationId": "createApiToken",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "expiresInDays": {
+          "maximum": 365,
+          "minimum": 1,
+          "type": "integer"
+         },
+         "name": {
+          "maxLength": 80,
+          "type": "string"
+         },
+         "scopes": {
+          "items": {
+           "$ref": "#/components/schemas/McpScope"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "name",
+         "scopes",
+         "expiresInDays"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "allOf": [
+          {
+           "$ref": "#/components/schemas/ApiToken"
+          },
+          {
+           "properties": {
+            "token": {
+             "type": "string"
+            }
+           },
+           "required": [
+            "token"
+           ],
+           "type": "object"
+          }
+         ]
+        }
+       }
+      },
+      "description": "erzeugt"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/me/api-tokens/{id}": {
+   "delete": {
+    "operationId": "revokeApiToken",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "widerrufen"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/me/device-tokens": {
+   "get": {
+    "operationId": "listDeviceTokens",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/DeviceToken"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   },
+   "post": {
+    "description": "Erzeugt ein Gerätetoken (nur Automation-Scope). Klartext nur in dieser Antwort.",
+    "operationId": "createDeviceToken",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "expiresInDays": {
+          "maximum": 730,
+          "minimum": 1,
+          "type": "integer"
+         },
+         "name": {
+          "maxLength": 80,
+          "type": "string"
+         }
+        },
+        "required": [
+         "name"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "allOf": [
+          {
+           "$ref": "#/components/schemas/DeviceToken"
+          },
+          {
+           "properties": {
+            "token": {
+             "type": "string"
+            }
+           },
+           "required": [
+            "token"
+           ],
+           "type": "object"
+          }
+         ]
+        }
+       }
+      },
+      "description": "erzeugt"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/me/device-tokens/{id}": {
+   "delete": {
+    "operationId": "revokeDeviceToken",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "widerrufen"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/me/export": {
+   "get": {
+    "description": "ZIP mit den eigenen Daten: manifest.json, account.json, je Tabelle <name>.json (zusätzlich .csv für time-entries, absences,\nreport-entries), time-entry-revisions, work-models, places, day-preferences, balance-adjustments, vacation-*, calendar-days, plan-days,\nreport-*, shares-outgoing (nur eigene ausgehende Freigaben als Metadaten), notification-settings.json, files.json und files/<id>-<name>\n(Anhänge). Rohzeiten und bewertete Zeiten stehen getrennt. Nie enthalten: Tokens, Hashes, Passkey-Material, Push-Schlüssel,\nDaten anderer Konten, eingehende Freigaben. Nicht lesbare oder über das Größenbudget (256 MiB) hinausgehende Dateien stehen in\nfiles.json mit included=false und reason. Nicht für Recovery-Sitzungen (403).\n",
+    "operationId": "exportMyData",
+    "responses": {
+     "200": {
+      "content": {
+       "application/zip": {
+        "schema": {
+         "format": "binary",
+         "type": "string"
+        }
+       }
+      },
+      "description": "ZIP",
+      "headers": {
+       "Content-Disposition": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/me/identities": {
+   "get": {
+    "operationId": "listIdentities",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/ExternalIdentity"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/me/identities/{id}": {
+   "delete": {
+    "description": "Entfernt die Verknüpfung (frische Sitzung nötig). Nicht möglich, wenn dadurch keine Anmeldemethode (Passkey oder andere Identität) übrig bliebe → 409 last_login_method.",
+    "operationId": "unlinkIdentity",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "entfernt"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/me/modules": {
+   "put": {
+    "description": "Eigene Auswahl. Nicht genannte Module bleiben unverändert; ein vom Server abgeschaltetes Modul kann nicht eingeschaltet werden (409 module_locked).",
+    "operationId": "putMyModules",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "modules": {
+          "additionalProperties": {
+           "type": "boolean"
+          },
+          "type": "object"
+         }
+        },
+        "required": [
+         "modules"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/ModuleStatus"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/me/oauth-grants": {
+   "get": {
+    "operationId": "listOAuthGrants",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/OAuthGrant"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/me/oauth-grants/{id}": {
+   "delete": {
+    "operationId": "revokeOAuthGrant",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "widerrufen"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/me/passkeys": {
+   "get": {
+    "operationId": "listPasskeys",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/Passkey"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "Passkeys des eigenen Kontos"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/me/passkeys/options": {
+   "post": {
+    "description": "Weiteren Passkey hinzufügen; erfordert frische Authentisierung oder Recovery-Sitzung.",
+    "operationId": "addPasskeyOptions",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CreationOptions"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/me/passkeys/verify": {
+   "post": {
+    "operationId": "addPasskeyVerify",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "challengeId": {
+          "type": "string"
+         },
+         "credential": {
+          "$ref": "#/components/schemas/RegistrationCredential"
+         },
+         "passkeyName": {
+          "maxLength": 80,
+          "type": "string"
+         }
+        },
+        "required": [
+         "challengeId",
+         "credential"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Passkey"
+        }
+       }
+      },
+      "description": "hinzugefügt"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/me/passkeys/{id}": {
+   "delete": {
+    "description": "Widerruft einen Passkey. Der letzte Passkey kann nur widerrufen werden, wenn eine Recovery-Methode aktiv ist.",
+    "operationId": "revokePasskey",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "id",
+      "required": true,
+      "schema": {
+       "format": "uuid",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "widerrufen"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   },
+   "patch": {
+    "operationId": "renamePasskey",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "id",
+      "required": true,
+      "schema": {
+       "format": "uuid",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "name": {
+          "maxLength": 80,
+          "type": "string"
+         }
+        },
+        "required": [
+         "name"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Passkey"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/me/push-subscriptions": {
+   "get": {
+    "operationId": "listPushSubscriptions",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/PushSubscriptionInfo"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   },
+   "post": {
+    "description": "Registriert das Gerät (idempotent über endpoint). 501 wenn Push nicht verfügbar, 409 bei mehr als 10 Abos.",
+    "operationId": "createPushSubscription",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "endpoint": {
+          "format": "uri",
+          "type": "string"
+         },
+         "keys": {
+          "properties": {
+           "auth": {
+            "type": "string"
+           },
+           "p256dh": {
+            "type": "string"
+           }
+          },
+          "required": [
+           "p256dh",
+           "auth"
+          ],
+          "type": "object"
+         },
+         "userAgent": {
+          "maxLength": 200,
+          "type": "string"
+         }
+        },
+        "required": [
+         "endpoint",
+         "keys"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PushSubscriptionInfo"
+        }
+       }
+      },
+      "description": "registriert"
+     },
+     "501": {
+      "$ref": "#/components/responses/NotImplemented"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/me/push-subscriptions/replace": {
+   "post": {
+    "description": "Für das `pushsubscriptionchange`-Ereignis des Service Workers (B2, ADR-0017). Tauscht das Abo mit `previousEndpoint`\n(= `oldSubscription.endpoint`, nur im eigenen Konto gesucht) atomar gegen das neue aus: gleiche Id, neue Endpunkt-Adresse und Schlüssel,\nwartende Pushes bleiben erhalten (200). Ist der neue Endpunkt bereits registriert, bleibt diese Zeile bestehen und die alte wird entfernt (200).\nFehlt `previousEndpoint` oder ist er unbekannt, wird wie bei POST /me/push-subscriptions neu registriert (201, Limit 10 Abos, sonst 409\ntoo_many_subscriptions). Endpunkt-Regeln und Schlüsselprüfung wie bei der Registrierung (400 bad_request); 501 push_unavailable ohne VAPID.\nSchreibende Anfrage: Sitzung und `X-CSRF-Token` (der Service Worker liest ihn über GET /api/v1/auth/session).\n",
+    "operationId": "replacePushSubscription",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "endpoint": {
+          "format": "uri",
+          "type": "string"
+         },
+         "keys": {
+          "properties": {
+           "auth": {
+            "type": "string"
+           },
+           "p256dh": {
+            "type": "string"
+           }
+          },
+          "required": [
+           "p256dh",
+           "auth"
+          ],
+          "type": "object"
+         },
+         "previousEndpoint": {
+          "description": "alter Endpunkt (oldSubscription.endpoint)",
+          "maxLength": 2048,
+          "optional": null,
+          "type": "string"
+         },
+         "userAgent": {
+          "maxLength": 200,
+          "type": "string"
+         }
+        },
+        "required": [
+         "endpoint",
+         "keys"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PushSubscriptionInfo"
+        }
+       }
+      },
+      "description": "ersetzt"
+     },
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PushSubscriptionInfo"
+        }
+       }
+      },
+      "description": "neu registriert"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     },
+     "501": {
+      "$ref": "#/components/responses/NotImplemented"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/me/push-subscriptions/{id}": {
+   "delete": {
+    "operationId": "deletePushSubscription",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "entfernt"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/me/push-subscriptions/{id}/test": {
+   "post": {
+    "description": "Sendet eine generische Testnachricht an dieses Abo (Rate-Limit 5 je Stunde).",
+    "operationId": "sendTestPush",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "202": {
+      "description": "gesendet"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooMany"
+     },
+     "501": {
+      "$ref": "#/components/responses/NotImplemented"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/me/recovery": {
+   "get": {
+    "operationId": "recoveryStatus",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RecoveryStatus"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/me/recovery/email": {
+   "delete": {
+    "operationId": "disableEmailRecovery",
+    "responses": {
+     "204": {
+      "description": "deaktiviert"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   },
+   "put": {
+    "description": "Startet Verifikation der Adresse; 409/501 wenn Server ohne Mailversand konfiguriert ist.",
+    "operationId": "enableEmailRecovery",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "email": {
+          "format": "email",
+          "type": "string"
+         }
+        },
+        "required": [
+         "email"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "202": {
+      "description": "Verifikationscode versendet"
+     },
+     "501": {
+      "$ref": "#/components/responses/NotImplemented"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/me/recovery/email/verify": {
+   "post": {
+    "operationId": "verifyRecoveryEmail",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "code": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "code"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "204": {
+      "description": "verifiziert und aktiv"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/me/recovery/fallback-password": {
+   "delete": {
+    "operationId": "removeFallbackPassword",
+    "responses": {
+     "204": {
+      "description": "entfernt"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   },
+   "put": {
+    "description": "Setzt oder ersetzt das Rückfallpasswort (nur für Recovery, nie für normale Anmeldung).",
+    "operationId": "setFallbackPassword",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "password": {
+          "maxLength": 256,
+          "minLength": 12,
+          "type": "string"
+         }
+        },
+        "required": [
+         "password"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "204": {
+      "description": "gesetzt"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/me/recovery/recovery-codes": {
+   "delete": {
+    "operationId": "disableRecoveryCodes",
+    "responses": {
+     "204": {
+      "description": "deaktiviert"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   },
+   "post": {
+    "description": "Erzeugt einen neuen Satz Recovery-Codes (invalidiert den alten). Klartext nur in dieser Antwort.",
+    "operationId": "generateRecoveryCodes",
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "codes": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "required": [
+          "codes"
+         ],
+         "type": "object"
+        }
+       }
+      },
+      "description": "Codes"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/me/sessions": {
+   "delete": {
+    "description": "Widerruft alle anderen Sitzungen des Kontos.",
+    "operationId": "revokeOtherSessions",
+    "responses": {
+     "204": {
+      "description": "widerrufen"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/modules": {
+   "get": {
+    "description": "Status der abschaltbaren Module (ADR-0012) für das angemeldete Konto.",
+    "operationId": "listModules",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/ModuleStatus"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/notifications": {
+   "get": {
+    "operationId": "listNotifications",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "unreadOnly",
+      "schema": {
+       "default": false,
+       "type": "boolean"
+      }
+     },
+     {
+      "in": "query",
+      "name": "limit",
+      "schema": {
+       "default": 50,
+       "maximum": 100,
+       "minimum": 1,
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "before",
+      "schema": {
+       "format": "date-time",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "items": {
+           "items": {
+            "$ref": "#/components/schemas/Notification"
+           },
+           "type": "array"
+          },
+          "unreadCount": {
+           "type": "integer"
+          }
+         },
+         "required": [
+          "items",
+          "unreadCount"
+         ],
+         "type": "object"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/notifications/read": {
+   "post": {
+    "description": "Markiert die angegebenen (oder bei all=true alle) Hinweise als gelesen.",
+    "operationId": "markNotificationsRead",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "all": {
+          "type": "boolean"
+         },
+         "ids": {
+          "items": {
+           "format": "uuid",
+           "type": "string"
+          },
+          "maxItems": 200,
+          "type": "array"
+         }
+        },
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "unreadCount": {
+           "type": "integer"
+          }
+         },
+         "required": [
+          "unreadCount"
+         ],
+         "type": "object"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/notifications/settings": {
+   "get": {
+    "operationId": "getNotificationSettings",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NotificationSettings"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   },
+   "put": {
+    "operationId": "putNotificationSettings",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/NotificationSettings"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NotificationSettings"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/notifications/{id}": {
+   "delete": {
+    "operationId": "deleteNotification",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "gelöscht"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/oauth/requests/{id}": {
+   "get": {
+    "description": "Consent-Daten für die angemeldete Person (Client-Name, Redirect-Host, angefragte Scopes). Nur der angemeldete Konto-Browser sieht sie (an Sitzung gebunden), 10 min gültig.",
+    "operationId": "getOAuthRequest",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/OAuthRequest"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/oauth/requests/{id}/decision": {
+   "post": {
+    "description": "Genehmigt (mit gewählter Scope-Teilmenge) oder lehnt ab; einmalig. Antwort liefert die Redirect-URL (mit code/state bzw. error).",
+    "operationId": "decideOAuthRequest",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "approve": {
+          "type": "boolean"
+         },
+         "scopes": {
+          "items": {
+           "$ref": "#/components/schemas/McpScope"
+          },
+          "type": "array"
+         }
+        },
+        "required": [
+         "approve"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "redirectUrl": {
+           "format": "uri",
+           "type": "string"
+          }
+         },
+         "required": [
+          "redirectUrl"
+         ],
+         "type": "object"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/places": {
+   "get": {
+    "operationId": "listPlaces",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/Place"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   },
+   "post": {
+    "operationId": "createPlace",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PlaceInput"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Place"
+        }
+       }
+      },
+      "description": "angelegt"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/places/{id}": {
+   "delete": {
+    "description": "Archiviert den Ort (bestehende Segmente behalten ihre Referenz).",
+    "operationId": "archivePlace",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "archiviert"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   },
+   "put": {
+    "operationId": "updatePlace",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PlaceInput"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Place"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/plan/days": {
+   "get": {
+    "description": "Geplante Arbeitsform je Tag (Büro/HO/Kunde/Schule/frei) für den Zeitraum; Urlaub/Feiertage werden im Kalender zusätzlich abgeleitet geliefert.",
+    "operationId": "listPlanDays",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "from",
+      "required": true,
+      "schema": {
+       "format": "date",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "to",
+      "required": true,
+      "schema": {
+       "format": "date",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/PlanDay"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/plan/days/{date}": {
+   "delete": {
+    "operationId": "deletePlanDay",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "date",
+      "required": true,
+      "schema": {
+       "format": "date",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "gelöscht"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   },
+   "put": {
+    "operationId": "putPlanDay",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "date",
+      "required": true,
+      "schema": {
+       "format": "date",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PlanDayInput"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlanDay"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/push/config": {
+   "get": {
+    "description": "Ob Web Push auf diesem Server verfügbar ist (VAPID konfiguriert) und der öffentliche Schlüssel.",
+    "operationId": "pushConfig",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "available": {
+           "type": "boolean"
+          },
+          "vapidPublicKey": {
+           "description": "base64url uncompressed P-256",
+           "type": "string"
+          }
+         },
+         "required": [
+          "available"
+         ],
+         "type": "object"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/reports/entries": {
+   "post": {
+    "operationId": "createReportEntry",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ReportEntryInput"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ReportEntry"
+        }
+       }
+      },
+      "description": "angelegt"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/reports/entries/{id}": {
+   "delete": {
+    "operationId": "deleteReportEntry",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "gelöscht"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   },
+   "put": {
+    "description": "If-Match mit version; sonst 412 stale_version.",
+    "operationId": "updateReportEntry",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     },
+     {
+      "in": "header",
+      "name": "If-Match",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ReportEntryInput"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ReportEntry"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "412": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      },
+      "description": "veraltete Version"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/reports/learning-fields": {
+   "get": {
+    "operationId": "listLearningFields",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/LearningField"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   },
+   "post": {
+    "operationId": "createLearningField",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LearningFieldInput"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LearningField"
+        }
+       }
+      },
+      "description": "angelegt"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/reports/learning-fields/{id}": {
+   "delete": {
+    "operationId": "deleteLearningField",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "gelöscht"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   },
+   "put": {
+    "description": "Benennt um oder sortiert; bestehende Einträge behalten ihren Namens-Snapshot.",
+    "operationId": "updateLearningField",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LearningFieldInput"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LearningField"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/reports/sources": {
+   "get": {
+    "operationId": "listReportSources",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "year",
+      "required": true,
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "week",
+      "required": true,
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/ReportSource"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   },
+   "post": {
+    "description": "Textquelle (note) oder Dateiquelle (fileId aus POST /files).",
+    "operationId": "createReportSource",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ReportSourceInput"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ReportSource"
+        }
+       }
+      },
+      "description": "angelegt"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/reports/sources/{id}": {
+   "delete": {
+    "operationId": "deleteReportSource",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "gelöscht"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/reports/weeks/{year}/{week}": {
+   "get": {
+    "description": "ISO-Woche mit Einträgen, Summen, Status, Quellenanzahl und der bewerteten Arbeitszeit der Woche als Hinweis.",
+    "operationId": "getReportWeek",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "year",
+      "required": true,
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "week",
+      "required": true,
+      "schema": {
+       "maximum": 53,
+       "minimum": 1,
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ReportWeek"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   },
+   "put": {
+    "operationId": "putReportWeekStatus",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "year",
+      "required": true,
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "week",
+      "required": true,
+      "schema": {
+       "maximum": 53,
+       "minimum": 1,
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "status": {
+          "enum": [
+           "draft",
+           "done"
+          ],
+          "type": "string"
+         }
+        },
+        "required": [
+         "status"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ReportWeek"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/reports/weeks/{year}/{week}/text": {
+   "get": {
+    "description": "Kopierbare Klartextausgabe im Standardformat (ADR-0008), text/plain; charset=utf-8.",
+    "operationId": "getReportWeekText",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "year",
+      "required": true,
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "week",
+      "required": true,
+      "schema": {
+       "maximum": 53,
+       "minimum": 1,
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "text/plain": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Text"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/shares": {
+   "get": {
+    "description": "Eigene ausgehende Freigaben.",
+    "operationId": "listShares",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/Share"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   },
+   "post": {
+    "description": "Freigabe an ein anderes Konto derselben Instanz (Empfänger per handle), je Umfang plan/actual/vacation getrennt, nur lesend, standardmäßig nichts geteilt. Unbekannter Empfänger → 404 recipient_not_found (Annahme; kleine Instanz).",
+    "operationId": "createShare",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "recipientHandle": {
+          "type": "string"
+         },
+         "scopes": {
+          "$ref": "#/components/schemas/ShareScopes"
+         }
+        },
+        "required": [
+         "recipientHandle",
+         "scopes"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Share"
+        }
+       }
+      },
+      "description": "angelegt"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/shares/incoming": {
+   "get": {
+    "operationId": "listIncomingShares",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/IncomingShare"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/shares/incoming/{shareId}/view": {
+   "get": {
+    "description": "Begrenzte Ansicht für den Empfänger. Je freigegebenem Scope: plan = geplante Arbeitsform je Tag ohne Notizen; actual = nur bewertete Beginn/Ende und Dauer je Tag, keine Orte/Notizen/Segmente;\nvacation = nur als Urlaub erkennbare Abwesenheiten (Zeiträume), niemals Krankheit/Unterlagen/Notizen. Nicht freigegebene Scopes fehlen. Widerrufen/fremd → 404.\n",
+    "operationId": "viewShared",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "shareId",
+      "required": true,
+      "schema": {
+       "format": "uuid",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "from",
+      "required": true,
+      "schema": {
+       "format": "date",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "to",
+      "required": true,
+      "schema": {
+       "format": "date",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SharedView"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/shares/{id}": {
+   "delete": {
+    "description": "Widerruft sofort; neue Abrufe liefern 404.",
+    "operationId": "revokeShare",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "widerrufen"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   },
+   "patch": {
+    "operationId": "updateShare",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "scopes": {
+          "$ref": "#/components/schemas/ShareScopes"
+         }
+        },
+        "required": [
+         "scopes"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Share"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/time/account": {
+   "get": {
+    "description": "Zeitkontosaldo bis einschließlich asOf (Standard heute); heutiger Tag ist vorläufig.",
+    "operationId": "getTimeAccount",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "asOf",
+      "schema": {
+       "format": "date",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TimeAccount"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/time/account/adjustments": {
+   "post": {
+    "description": "Anfangsstand (kind=opening, höchstens einer, setzt accountStart) oder datierte Korrektur.",
+    "operationId": "createAccountAdjustment",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "date": {
+          "format": "date",
+          "type": "string"
+         },
+         "kind": {
+          "enum": [
+           "opening",
+           "correction"
+          ],
+          "type": "string"
+         },
+         "reason": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "seconds": {
+          "type": "integer"
+         }
+        },
+        "required": [
+         "kind",
+         "date",
+         "seconds",
+         "reason"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TimeAccount"
+        }
+       }
+      },
+      "description": "angelegt"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/time/days": {
+   "get": {
+    "description": "Bewertungen für lokale Tage von..bis (max. 93 Tage), einschließlich Tagen ohne Segmente (Soll/Markierung).",
+    "operationId": "listDayEvaluations",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "from",
+      "required": true,
+      "schema": {
+       "format": "date",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "to",
+      "required": true,
+      "schema": {
+       "format": "date",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/DayEvaluation"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/time/days/{date}": {
+   "get": {
+    "operationId": "getDayEvaluation",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "date",
+      "required": true,
+      "schema": {
+       "format": "date",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/DayEvaluation"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   },
+   "put": {
+    "description": "Tagesmarkierung und/oder Überspringen fester Pausen setzen (leere Markierung `none` entfernt sie).",
+    "operationId": "setDayPreferences",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "date",
+      "required": true,
+      "schema": {
+       "format": "date",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "creditSeconds": {
+          "minimum": 0,
+          "type": [
+           "integer",
+           "null"
+          ]
+         },
+         "mark": {
+          "$ref": "#/components/schemas/DayMarkKind"
+         },
+         "note": {
+          "maxLength": 200,
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "skipFixedBreaks": {
+          "type": "boolean"
+         }
+        },
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/DayEvaluation"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/time/segments": {
+   "get": {
+    "description": "Segmente, deren Beginn in [from, to) (UTC-Instants) liegt; Rohzeiten und Revisionsanzahl enthalten, stornierte nur mit includeVoided.",
+    "operationId": "listSegments",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "from",
+      "required": true,
+      "schema": {
+       "format": "date-time",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "to",
+      "required": true,
+      "schema": {
+       "format": "date-time",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "includeVoided",
+      "schema": {
+       "default": false,
+       "type": "boolean"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/Segment"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   },
+   "post": {
+    "description": "Manueller Eintrag (abgeschlossen oder, ohne endedAt, laufend). Überschneidung mit anderem Segment → 409 segment_overlap.",
+    "operationId": "createSegment",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SegmentInput"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Segment"
+        }
+       }
+      },
+      "description": "angelegt"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/time/segments/{id}": {
+   "delete": {
+    "description": "Storniert das Segment (Soft-Delete mit Grund im Query `reason`); Rohdaten bleiben.",
+    "operationId": "voidSegment",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     },
+     {
+      "in": "query",
+      "name": "reason",
+      "required": true,
+      "schema": {
+       "maxLength": 200,
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "storniert"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   },
+   "get": {
+    "operationId": "getSegment",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Segment"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   },
+   "patch": {
+    "description": "Korrektur mit Pflichtgrund; If-Match muss die aktuelle version enthalten (sonst 412 stale_version). Rohzeiten bleiben erhalten, es entsteht eine Revision.",
+    "operationId": "correctSegment",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     },
+     {
+      "in": "header",
+      "name": "If-Match",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SegmentCorrection"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Segment"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     },
+     "412": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      },
+      "description": "veraltete Version"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/time/suggestions": {
+   "get": {
+    "operationId": "listSuggestions",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/Suggestion"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "offene Vorschläge"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/time/suggestions/{id}/accept": {
+   "post": {
+    "description": "Erzeugt aus dem Vorschlag ein Segment bzw. beendet das offene (Zeiten optional überschreibbar). Einmalig; zweites Mal → 409.",
+    "operationId": "acceptSuggestion",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "endedAt": {
+          "format": "date-time",
+          "type": "string"
+         },
+         "startedAt": {
+          "format": "date-time",
+          "type": "string"
+         }
+        },
+        "type": "object"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Segment"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/time/suggestions/{id}/reject": {
+   "post": {
+    "operationId": "rejectSuggestion",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "verworfen"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/time/timer": {
+   "get": {
+    "operationId": "currentTimer",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "oneOf": [
+          {
+           "$ref": "#/components/schemas/Segment"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        }
+       }
+      },
+      "description": "laufendes Segment oder null"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/time/timer/start": {
+   "post": {
+    "description": "Idempotent über clientEventId. Läuft bereits ein anderes Segment → 409 timer_already_running.",
+    "operationId": "startTimer",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "clientEventId": {
+          "format": "uuid",
+          "type": "string"
+         },
+         "kind": {
+          "$ref": "#/components/schemas/SegmentKind"
+         },
+         "placeId": {
+          "format": "uuid",
+          "type": [
+           "string",
+           "null"
+          ]
+         }
+        },
+        "required": [
+         "clientEventId"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Segment"
+        }
+       }
+      },
+      "description": "gestartet oder bereits durch dieses Ereignis gestartet"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/time/timer/stop": {
+   "post": {
+    "description": "Idempotent über clientEventId; ohne laufendes Segment und ohne früheres Ereignis → 409 no_running_timer.",
+    "operationId": "stopTimer",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "clientEventId": {
+          "format": "uuid",
+          "type": "string"
+         }
+        },
+        "required": [
+         "clientEventId"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Segment"
+        }
+       }
+      },
+      "description": "gestoppt"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/vacation/adjustments": {
+   "post": {
+    "operationId": "createVacationAdjustment",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "date": {
+          "format": "date",
+          "type": "string"
+         },
+         "halfDays": {
+          "type": "integer"
+         },
+         "reason": {
+          "maxLength": 200,
+          "type": "string"
+         }
+        },
+        "required": [
+         "date",
+         "halfDays",
+         "reason"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/VacationBalance"
+        }
+       }
+      },
+      "description": "angelegt"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/vacation/balance": {
+   "get": {
+    "description": "Kontostand für ein Urlaubsjahr (Kalenderjahr). available = Anspruch + Übertrag + Korrekturen − gebucht(genehmigt/genommen); geplant/beantragt separat, `availableAfterPlanned` als Vorschau.",
+    "operationId": "getVacationBalance",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "year",
+      "required": true,
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/VacationBalance"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/vacation/entries": {
+   "get": {
+    "description": "Stichtagsbestände und Korrekturen mit IDs.",
+    "operationId": "listVacationEntries",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "year",
+      "required": true,
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "adjustments": {
+           "items": {
+            "properties": {
+             "date": {
+              "format": "date",
+              "type": "string"
+             },
+             "halfDays": {
+              "type": "integer"
+             },
+             "id": {
+              "format": "uuid",
+              "type": "string"
+             },
+             "reason": {
+              "type": "string"
+             }
+            },
+            "required": [
+             "id",
+             "date",
+             "halfDays",
+             "reason"
+            ],
+            "type": "object"
+           },
+           "type": "array"
+          },
+          "snapshots": {
+           "items": {
+            "properties": {
+             "date": {
+              "format": "date",
+              "type": "string"
+             },
+             "id": {
+              "format": "uuid",
+              "type": "string"
+             },
+             "remainingHalfDays": {
+              "type": "integer"
+             }
+            },
+            "required": [
+             "id",
+             "date",
+             "remainingHalfDays"
+            ],
+            "type": "object"
+           },
+           "type": "array"
+          }
+         },
+         "required": [
+          "snapshots",
+          "adjustments"
+         ],
+         "type": "object"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/vacation/entries/{id}": {
+   "delete": {
+    "description": "Löscht einen Stichtagsbestand oder eine Korrektur (eigene ID).",
+    "operationId": "deleteVacationEntry",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "gelöscht"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/vacation/settings": {
+   "get": {
+    "operationId": "getVacationSettings",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/VacationSettings"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   },
+   "put": {
+    "description": "Region, Jahresanspruch und Übertragsregel. Standard laut ADR-0005 (Annahme für Onboarding) 30 Tage und Region DE-ST.",
+    "operationId": "putVacationSettings",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/VacationSettings"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/VacationSettings"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/vacation/snapshots": {
+   "post": {
+    "description": "Stichtagsbestand (Resturlaub zu einem Datum). Ersetzt die davor liegende Kontohistorie; Verbrauch/Anspruch zählen erst ab dem Stichtag.",
+    "operationId": "createVacationSnapshot",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "date": {
+          "format": "date",
+          "type": "string"
+         },
+         "remainingHalfDays": {
+          "minimum": 0,
+          "type": "integer"
+         }
+        },
+        "required": [
+         "date",
+         "remainingHalfDays"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/VacationBalance"
+        }
+       }
+      },
+      "description": "angelegt"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/work-models": {
+   "get": {
+    "description": "Alle Arbeitsmodell-Versionen des Kontos, nach validFrom sortiert.",
+    "operationId": "listWorkModels",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/WorkModel"
+         },
+         "type": "array"
+        }
+       }
+      },
+      "description": "ok"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   },
+   "post": {
+    "description": "Legt eine neue Modellversion an. Eine laufende Vorversion wird am Vortag von validFrom beendet; Vergangenheit wird nie verändert (409 model_overlap bei Überschneidung mit späteren Versionen).",
+    "operationId": "createWorkModel",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/WorkModelInput"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WorkModel"
+        }
+       }
+      },
+      "description": "angelegt"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/work-models/{id}": {
+   "get": {
+    "operationId": "getWorkModel",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WorkModel"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   },
+   "patch": {
+    "description": "Setzt nur validTo (z. B. Ausbildungsende). Weitere Felder sind unveränderlich; neue Regeln = neue Version.",
+    "operationId": "endWorkModel",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "validTo": {
+          "format": "date",
+          "type": "string"
+         }
+        },
+        "required": [
+         "validTo"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WorkModel"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/health": {
+   "get": {
+    "description": "Prozess-Liveness, ohne Datenbank.",
+    "operationId": "health",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Status"
+        }
+       }
+      },
+      "description": "Prozess antwortet"
+     }
+    }
+   }
+  },
+  "/mcp": {
+   "get": {
+    "operationId": "mcpGet",
+    "responses": {
+     "405": {
+      "description": "kein SSE-Stream in v1"
+     }
+    }
+   },
+   "post": {
+    "description": "MCP Streamable HTTP (JSON-RPC 2.0), siehe ADR-0009 (initialize, ping, tools/list, tools/call). Auth per Authorization-Header mit Bearer-Token (tto_… oder ttp_…).",
+    "operationId": "mcp",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "JSON-RPC Antwort"
+     },
+     "202": {
+      "description": "Notification angenommen"
+     },
+     "401": {
+      "description": "Token fehlt/ungültig (WWW-Authenticate mit resource_metadata)"
+     },
+     "403": {
+      "description": "insufficient_scope"
+     }
+    },
+    "security": [
+     {
+      "bearer": []
+     }
+    ]
+   }
+  },
+  "/oauth/authorize": {
+   "get": {
+    "description": "Autorisierungsendpunkt; leitet zur PWA-Seite /oauth/consent?request=<id> weiter (Login falls nötig). Fehler vor gültiger redirect_uri als HTML/JSON-Fehler, danach als Redirect mit error.",
+    "operationId": "oauthAuthorize",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "response_type",
+      "required": true,
+      "schema": {
+       "enum": [
+        "code"
+       ],
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "client_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "redirect_uri",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "code_challenge",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "code_challenge_method",
+      "required": true,
+      "schema": {
+       "enum": [
+        "S256"
+       ],
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "scope",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "state",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "resource",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "302": {
+      "description": "Weiterleitung"
+     }
+    }
+   }
+  },
+  "/oauth/register": {
+   "post": {
+    "description": "Dynamic Client Registration (RFC 7591), nur öffentliche Clients.",
+    "operationId": "oauthRegister",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "client_name": {
+          "maxLength": 100,
+          "type": "string"
+         },
+         "grant_types": {
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         },
+         "redirect_uris": {
+          "items": {
+           "format": "uri",
+           "type": "string"
+          },
+          "maxItems": 5,
+          "minItems": 1,
+          "type": "array"
+         },
+         "token_endpoint_auth_method": {
+          "enum": [
+           "none"
+          ],
+          "type": "string"
+         }
+        },
+        "required": [
+         "redirect_uris"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "client_id": {
+           "type": "string"
+          },
+          "client_name": {
+           "type": "string"
+          },
+          "redirect_uris": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "token_endpoint_auth_method": {
+           "type": "string"
+          }
+         },
+         "required": [
+          "client_id",
+          "redirect_uris"
+         ],
+         "type": "object"
+        }
+       }
+      },
+      "description": "registriert"
+     },
+     "400": {
+      "description": "invalid_client_metadata"
+     }
+    }
+   }
+  },
+  "/oauth/revoke": {
+   "post": {
+    "operationId": "oauthRevoke",
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "properties": {
+         "client_id": {
+          "type": "string"
+         },
+         "token": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "token"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "immer 200 (RFC 7009)"
+     }
+    }
+   }
+  },
+  "/oauth/token": {
+   "post": {
+    "operationId": "oauthToken",
+    "requestBody": {
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "properties": {
+         "client_id": {
+          "type": "string"
+         },
+         "code": {
+          "type": "string"
+         },
+         "code_verifier": {
+          "type": "string"
+         },
+         "grant_type": {
+          "enum": [
+           "authorization_code",
+           "refresh_token"
+          ],
+          "type": "string"
+         },
+         "redirect_uri": {
+          "type": "string"
+         },
+         "refresh_token": {
+          "type": "string"
+         },
+         "resource": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "grant_type"
+        ],
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "access_token": {
+           "type": "string"
+          },
+          "expires_in": {
+           "type": "integer"
+          },
+          "refresh_token": {
+           "type": "string"
+          },
+          "scope": {
+           "type": "string"
+          },
+          "token_type": {
+           "const": "Bearer",
+           "type": "string"
+          }
+         },
+         "required": [
+          "access_token",
+          "token_type",
+          "expires_in"
+         ],
+         "type": "object"
+        }
+       }
+      },
+      "description": "Token"
+     },
+     "400": {
+      "description": "invalid_grant / invalid_request / invalid_client"
+     }
+    }
+   }
+  },
+  "/ready": {
+   "get": {
+    "description": "Readiness inklusive Datenbankverbindung und angewendeter Migrationen.",
+    "operationId": "ready",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Status"
+        }
+       }
+      },
+      "description": "bereit"
+     },
+     "503": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      },
+      "description": "nicht bereit"
+     }
+    }
+   }
+  }
+ },
+ "servers": [
+  {
+   "url": "/"
+  }
+ ],
+ "x-source-sha256": "dc301a76ee7ddc0d90456cd31b080a4350b822dac3433e83b2678cb20d24da40"
+}

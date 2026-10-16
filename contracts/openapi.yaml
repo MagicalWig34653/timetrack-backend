@@ -789,7 +789,7 @@ paths:
       security: [ { session: [] } ]
       parameters:
         - { name: year, in: query, required: true, schema: { type: integer } }
-        - { name: region, in: query, schema: { type: string, description: ISO 3166-2, z. B. DE-ST; Standard aus Einstellungen } }
+        - { name: region, in: query, schema: { type: string, description: 'ISO 3166-2, z. B. DE-ST; Standard aus Einstellungen' } }
       responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/CalendarDay' } } } } } }
   /api/v1/calendar/custom-days:
     post:
@@ -1457,7 +1457,7 @@ components:
         timezone: { type: string, default: Europe/Berlin }
         weeklyTargetSeconds: { type: integer, minimum: 0 }
         workdays: { type: array, items: { type: integer, minimum: 1, maximum: 7, description: 1=Montag..7=Sonntag } }
-        dailyTargetSeconds: { type: object, additionalProperties: { type: integer, minimum: 0 }, description: optional je Wochentag "1".."7", hat Vorrang }
+        dailyTargetSeconds: { type: object, additionalProperties: { type: integer, minimum: 0 }, description: 'optional je Wochentag "1".."7", hat Vorrang' }
         travelCountsAsWork: { type: boolean, default: true }
         roundingEnabled: { type: boolean, default: true }
         roundingMinutes: { type: integer, minimum: 1, maximum: 60, default: 15 }
@@ -1548,7 +1548,7 @@ components:
         segments: { type: array, items: { $ref: '#/components/schemas/Segment' }, description: Segmente dieses Arbeitstags (Zuordnung nach ADR-0004; ohne stornierte) }
         markCreditSeconds: { type: [integer, 'null'], description: gesetzte Gutschrift der Markierung }
         markSource: { type: string, enum: [none, explicit, absence, holiday], description: Herkunft der wirksamen Markierung (explicit = manuell gesetzt) }
-        targetOverrideSeconds: { type: [integer, 'null'], description: abweichendes Soll, z. B. halber Urlaubstag }
+        targetOverrideSeconds: { type: [integer, 'null'], description: 'abweichendes Soll, z. B. halber Urlaubstag' }
         note: { type: [string, 'null'] }
         breakHints: { type: array, items: { type: object, required: [code], properties: { code: { type: string, enum: [break_missing_30, break_missing_45, break_part_too_short, work_over_6h_without_break] } } } }
     TimeAccount:
@@ -1636,7 +1636,7 @@ components:
         - $ref: '#/components/schemas/AbsenceInput'
         - type: object
           required: [id, version, countedHalfDays]
-          properties: { id: { type: string, format: uuid }, version: { type: integer }, countedHalfDays: { type: integer, description: berechneter Verbrauch (nur Arbeitstage, ohne Feiertage) } }
+          properties: { id: { type: string, format: uuid }, version: { type: integer }, countedHalfDays: { type: integer, description: 'berechneter Verbrauch (nur Arbeitstage, ohne Feiertage)' } }
     CalendarDay:
       type: object
       required: [startDate, endDate, name, kind, source]
@@ -1745,12 +1745,12 @@ components:
         rolledBack: { type: integer, description: bei Rollback die Zahl stornierter Segmente }
         absencesCreated: { type: integer }
         customDaysCreated: { type: integer }
-        warnings: { type: array, items: { type: object, required: [code], properties: { code: { type: string, enum: [pause_exceeds_day, holiday_times_discarded, credit_partial_as_work, school_on_holiday] }, row: { type: [integer, 'null'] }, count: { type: integer } } }, description: wie ImportPreview.warnings, auch im Ergebnis des Commits }
+        warnings: { type: array, items: { type: object, required: [code], properties: { code: { type: string, enum: [pause_exceeds_day, holiday_times_discarded, credit_partial_as_work, school_on_holiday] }, row: { type: [integer, 'null'] }, count: { type: integer } } }, description: 'wie ImportPreview.warnings, auch im Ergebnis des Commits' }
         batchId: { type: string, format: uuid }
         created: { type: integer }
         skipped: { type: integer }
         conflicts: { type: array, items: { type: string, format: uuid } }
-        conflictItems: { type: array, items: { type: object, required: [type, id], properties: { type: { type: string, enum: [segment, absence, custom_day] }, id: { type: string, format: uuid } } }, description: typisierte Konfliktliste (zusätzlich zu conflicts), auch im Fehlerobjekt rollback_conflict }
+        conflictItems: { type: array, items: { type: object, required: [type, id], properties: { type: { type: string, enum: [segment, absence, custom_day] }, id: { type: string, format: uuid } } }, description: 'typisierte Konfliktliste (zusätzlich zu conflicts), auch im Fehlerobjekt rollback_conflict' }
     ImportTemplate:
       type: object
       required: [id, name, mapping]
@@ -1977,8 +1977,8 @@ components:
         pauseMinutes: { type: [integer, 'null'], minimum: 0, maximum: 240, description: null = Wert aus der Tabelle (H1) }
         pauseStart: { type: string, pattern: '^[0-2][0-9]:[0-5][0-9]$', default: '12:00' }
         roundToMinutes: { type: boolean, default: true }
-        holidayTimes: { type: string, enum: [discard, keep], default: discard, description: Zeilen mit Zeiten auf gesetzlichen oder eigenen Feiertagen. discard = keine Abschnitte, Tag gilt als Feiertag (Warnung holiday_times_discarded); keep = als Arbeit/Schule übernehmen (Mehrarbeit) }
-        partialCredit: { type: string, enum: [work, absence], default: work, description: Zeilen der Aktion vacation/sick/excused, deren Nettozeit mehr als 5 Minuten vom Tages-Soll abweicht. work = als Arbeit mit Notiz übernehmen (Warnung credit_partial_as_work); absence = trotzdem als Abwesenheit }
+        holidayTimes: { type: string, enum: [discard, keep], default: discard, description: 'Zeilen mit Zeiten auf gesetzlichen oder eigenen Feiertagen. discard = keine Abschnitte, Tag gilt als Feiertag (Warnung holiday_times_discarded); keep = als Arbeit/Schule übernehmen (Mehrarbeit)' }
+        partialCredit: { type: string, enum: [work, absence], default: work, description: 'Zeilen der Aktion vacation/sick/excused, deren Nettozeit mehr als 5 Minuten vom Tages-Soll abweicht. work = als Arbeit mit Notiz übernehmen (Warnung credit_partial_as_work); absence = trotzdem als Abwesenheit' }
         rules: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/WorktimeRemarkRule' }, description: fehlend/null = Standardregeln; eine leere Liste ersetzt sie durch keine Regeln (alles wird Arbeit) }
     WorktimePreview:
       type: object
@@ -1992,9 +1992,9 @@ components:
         lastDate: { type: [string, 'null'], format: date }
         dateSystem: { type: string, enum: ['1900', '1904'] }
         sheetBalanceSeconds: { type: [integer, 'null'], description: Summe der zwischengespeicherten Differenzen der Tabelle über alle Zeilen (nur Hinweis) }
-        sheetBalanceUpToTodaySeconds: { type: [integer, 'null'], description: wie sheetBalanceSeconds, aber nur Zeilen bis einschließlich heute (vergleichbar mit dem Zeitkonto der App) }
+        sheetBalanceUpToTodaySeconds: { type: [integer, 'null'], description: 'wie sheetBalanceSeconds, aber nur Zeilen bis einschließlich heute (vergleichbar mit dem Zeitkonto der App)' }
         sheetBalanceFutureSeconds: { type: [integer, 'null'], description: Anteil der Zeilen nach heute }
-        firstContentDate: { type: [string, 'null'], format: date, description: erster Tag mit Zeiten oder Bemerkung; Vorschlag für den Beginn des Arbeitsmodells, damit leere Tage davor nicht als Fehlzeit zählen }
+        firstContentDate: { type: [string, 'null'], format: date, description: 'erster Tag mit Zeiten oder Bemerkung; Vorschlag für den Beginn des Arbeitsmodells, damit leere Tage davor nicht als Fehlzeit zählen' }
         unmappedRemarks: { type: array, items: { type: object, required: [text, count], properties: { text: { type: string }, count: { type: integer } } } }
         byAction: { type: object, additionalProperties: { type: integer } }
     AdminAccount:

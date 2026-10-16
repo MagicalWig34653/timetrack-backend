@@ -134,6 +134,14 @@ docker build --target build .
 Die Datenbank muss vor dem Lauf existieren; der Anlege-Befehl ist aus `compose.yaml` abgeleitet und nicht erneut
 ausgeführt (die Handoffs C18/C19 legen die Datenbank manuell an und löschen sie danach). Letzter dokumentierter
 Lauf des Leads: 193 Tests, 0 Fehler, mit frischer MariaDB-Testdatenbank 0 übersprungen (`docs/STATUS.md`).
+### Vertragstest (OpenAPI)
+
+`swift test` enthält Tests unter `Tests/TimetrackKitTests/Contract/`: Routenabgleich Implementierung ↔ `contracts/openapi.yaml` und Antwortformen
+ausgewählter Endpunkte (eigener JSON-Schema-Validator). Die Tests lesen eine JSON-Kopie des Vertrags
+(`Tests/TimetrackKitTests/Contract/openapi.contract.json`) und scheitern mit Hinweis, wenn sie veraltet ist. Nach jeder Vertragsänderung:
+`scripts/contract-json.sh` (Python 3 mit PyYAML) und die Kopie mit committen. Optional: `npx @redocly/cli@1.34.5 lint contracts/openapi.yaml`
+und `npx openapi-typescript@7.9.1 contracts/openapi.yaml -o /tmp/types.ts` (Netzwerk nötig).
+
 ### Alles prüfen: `scripts/check-all.sh`
 
 Ein Befehl für den lokalen Gesamtlauf: `swift build --build-system native`, `swift test` auf SQLite, optional MariaDB (nur wenn
