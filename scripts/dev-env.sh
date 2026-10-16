@@ -36,10 +36,10 @@ rand() { LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 28; }
 need_env() { [ -f .env ] || { echo ".env missing: run scripts/dev-env.sh init" >&2; exit 1; }; }
 
 wait_healthy() {
-  local cid status i
+  local cid status
   cid="$("${DC[@]}" ps -q db)"
   [ -n "$cid" ] || { echo "db container not running" >&2; exit 1; }
-  for i in $(seq 1 90); do
+  for _ in $(seq 1 90); do
     status="$(docker inspect -f '{{.State.Health.Status}}' "$cid")"
     [ "$status" = healthy ] && { echo "db healthy"; return 0; }
     sleep 2

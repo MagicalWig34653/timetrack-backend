@@ -44,6 +44,8 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY --from=build --chown=timetrack:timetrack /staging/ /app/
+# Translates VAR_FILE (Docker/Swarm secrets) into VAR, then execs /app/App (scripts/docker-entrypoint.sh).
+COPY --chown=timetrack:timetrack --chmod=0755 scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
 
 USER timetrack:timetrack
 ENV HOST=0.0.0.0 PORT=8080 SQLITE_PATH=/data/timetrack.sqlite
@@ -51,5 +53,5 @@ EXPOSE 8080
 VOLUME ["/data"]
 HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=3 \
     CMD curl -fsS http://127.0.0.1:8080/health || exit 1
-ENTRYPOINT ["/app/App"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["serve", "--env", "production", "--hostname", "0.0.0.0", "--port", "8080"]

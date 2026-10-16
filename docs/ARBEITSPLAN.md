@@ -124,11 +124,19 @@ Nutzerentscheidung 15.10.: Module abschaltbar durch Betreiber **und** je Konto (
 | L17 | PWA: Module ausblenden, Einstellungen (Konto), Admin-Seite, Erklärtexte; PWA-Doku (README/STATUS) aktualisieren | Claude-Agent | 6 | offen | Vertrag v0.9.0 |
 | D1 | Dokumentationsabgleich Backend-Repo (README, KONZEPT, ARCHITEKTUR, UMSETZUNG, EINRICHTUNG, REPOSITORIES, deploy, LIZENZEN, ADR-Index) | Claude-Agent | 3 | offen | – |
 
+## B3 – Betrieb: Backup/Restore, Swarm-Stack, Gesamtprüfung (16.10.2026)
+
+Claude-Agent im Worktree `timetrack-backend-wt/b3`, Branch `b3-ops`. Schreibt nur `scripts/`, `deploy/`, Dockerfile, Compose, Betriebsdokumentation; kein Swift-Code unter `Sources/`.
+
+| ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
+| --- | --- | --- | --- | --- | --- |
+| B3 | Backup/Restore-Skripte mit Beweislauf (SQLite, MariaDB), Swarm-Stack-Vorlage, Image-Einstiegspunkt für `*_FILE`-Secrets, `scripts/check-all.sh`, amd64-Versuch, `docs/BETRIEB.md` | Claude-Agent | 6 | umgesetzt, Lead-Prüfung offen; Belege in `handoffs/B3.md` | Backlog 2 und 3 |
+
 ## Backlog Backend (Stand 15.10.2026, nicht begonnen)
 
 1. **Kontenverwaltung** (umgesetzt in B1, Lead-Prüfung offen): Admin-Liste der Konten, Deaktivieren/Reaktivieren, Rollenwechsel, Sitzungen widerrufen, Konto löschen; Selbstauskunft/Selbstlöschung und Export der eigenen Daten (ZIP aus JSON/CSV + Dateien).
-2. **Backup/Restore**: dokumentiertes und getestetes Verfahren (DB + Dateien + `STORAGE_SECRET_KEY`), Restore-Test auf MariaDB und SQLite; ARCHITEKTUR verlangt gemeinsames Restore.
-3. **Betrieb**: produktionsnahes Compose/Swarm-Stack (bisher nur Dev-Compose), expliziter Migrationsschritt, Healthchecks/Logging/Metriken, vertrauenswürdige Proxy-Header für Client-IP (Rate-Limits), amd64-Nachweis für den aktuellen Stand, CI-Skript `scripts/check-all.sh`.
+2. **Backup/Restore** (B3: umgesetzt, Lead-Prüfung offen, `BETRIEB.md`): dokumentiertes und getestetes Verfahren (DB + Dateien + `STORAGE_SECRET_KEY`), Restore-Test auf MariaDB und SQLite; ARCHITEKTUR verlangt gemeinsames Restore.
+3. **Betrieb** (B3: Stack-Vorlage, Migrationsjob, `check-all.sh`, Entrypoint umgesetzt; Trusted-Proxy-Header und Metriken offen): produktionsnahes Compose/Swarm-Stack (bisher nur Dev-Compose), expliziter Migrationsschritt, Healthchecks/Logging/Metriken, vertrauenswürdige Proxy-Header für Client-IP (Rate-Limits), amd64-Nachweis für den aktuellen Stand, CI-Skript `scripts/check-all.sh`.
 4. **Aufräumjobs** (umgesetzt in B2, Lead-Prüfung offen, ADR-0017): abgelaufene Sitzungen/Challenges/OAuth-/OIDC-States/Codes/Tokens, `rate_limit_events`, `mcp_audit`-Retention, hängende Import-Jobs, Speicher-Cleanup periodisch (bisher nur nach DELETE).
 5. **Vertragstreue**: automatisierter Abgleich Implementierung ↔ `contracts/openapi.yaml` (Contract-Tests/Linter), Typgenerierung für Clients.
 6. **Restpunkte Review/Tests** (B2 umgesetzt, Lead-Prüfung offen: Lernfeld-409, `pushsubscriptionchange`, `PUSH_ALLOWED_HOSTS`-Vorschlag, `auth_lock`-Bewertung samt MariaDB-Isolationsfix; Import mit 20 000 Zeilen/Blobs nahe 64 MiB weiter offen): gleichzeitiges Anlegen desselben Lernfelds liefert 500 statt 409; `pushsubscriptionchange`; weitere Push-Dienste (`PUSH_ALLOWED_HOSTS`); Import mit 20 000 Zeilen und Blobs nahe 64 MiB auf MariaDB messen; globale `auth_lock`-Serialisierung bewerten.
