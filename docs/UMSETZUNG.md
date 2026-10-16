@@ -148,3 +148,7 @@ Stand: nicht begonnen.
 
 Offene Details siehe KONZEPT.md Abschnitt 9. Routinemäßige Implementierungsentscheidungen
 selbst treffen und dokumentieren; bereits bestätigte Richtungen nicht erneut abfragen.
+
+### Simulator-Sichtprüfung iOS (16.10.2026, Lead)
+
+iPhone 18 Pro Simulator gegen Wegwerf-Backend (synthetische Daten, danach gelöscht): „Heute" hell sowie dunkel mit größter Schrift (accessibility-extra-extra-large) gesichtet; Layout bricht nicht, Inhalt scrollt, Karten und Tab-Leiste lesbar. Auffälligkeit: der Umschalter Arbeit/Fahrt/Schule skaliert bei großer Schrift nicht mit. Zeit, Urlaub, Einstellungen, iPad, macOS-App und Uhr wurden vom Lead nicht gesichtet (macOS: kein Screenshot in dieser Umgebung möglich).
