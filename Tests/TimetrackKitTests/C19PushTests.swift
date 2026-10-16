@@ -16,7 +16,32 @@ actor C19PushTransport: PushTransport {
     var count: Int { requests.count }
 }
 
+/// Transport whose first send blocks on an explicit gate, so tests synchronise on events instead of sleeps.
+actor C19GatedTransport: PushTransport {
+    var requests: [PushHTTPRequest] = []
+    private var open = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    func send(_ request: PushHTTPRequest) async throws -> Int {
+        requests.append(request)
+        if requests.count == 1 && !open { await withCheckedContinuation { waiters.append($0) } }
+        return 201
+    }
+    func shutdown() async {}
+    var count: Int { requests.count }
+    func openGate() { open = true; let pending = waiters; waiters = []; pending.forEach { $0.resume() } }
+    /// Waits (generous deadline, no fixed timing assumption) until the first request has arrived.
+    func waitForFirstRequest() async -> Bool {
+        let deadline = Date().addingTimeInterval(60)
+        while requests.isEmpty && Date() < deadline { try? await Task.sleep(nanoseconds: 5_000_000) }
+        return !requests.isEmpty
+    }
+}
+
 extension AuthTests {
+    /// A Wednesday at noon: the scheduler's weekday reminders (for example `report_gap`, which fires from Friday on) add no
+    /// outbox rows, so row counts do not depend on the day the suite runs.
+    static let c19QuietWeekday = notificationDate("2026-10-14T10:00:00Z")
+
     func c19Outbox(_ app: Application, _ auth: AuthService, _ runtime: NotificationRuntime, count: Int, now: Date,
                    kind: String = "system") async throws -> (AuthContext, [UUID]) {
         let (owner, _) = try await registered(auth, db: app.db)
@@ -35,16 +60,24 @@ extension AuthTests {
     }
 
     func c19PushClaimsAndLease(database: [String: String]) async throws {
-        let transport = C19PushTransport(delay: 600_000_000)
+        let transport = C19GatedTransport()
         try await notificationApp(env: vapidEnvironment(), database: database, transport: transport) { app, auth, runtime in
-            let now = Date()
+            let now = Self.c19QuietWeekday
             let (_, ids) = try await self.c19Outbox(app, auth, runtime, count: 2, now: now)
-            runtime.leaseDuration = 0.2
+            // The first send blocks until the test opens the gate; only the heartbeat can keep the lease alive meanwhile.
+            let lease: TimeInterval = 1.5
+            runtime.leaseDuration = lease
             let other = NotificationRuntime(scheduler: runtime.scheduler, service: runtime.service, transport: transport, interval: 60)
-            other.leaseDuration = 0.2
+            other.leaseDuration = lease
+            let started = Date()
             let running = Task { await runtime.tick(now: now) }
-            try await Task.sleep(nanoseconds: 350_000_000)
-            try await self.eq(await other.tick(now: now.addingTimeInterval(0.35)), false)
+            let arrived = await transport.waitForFirstRequest()
+            XCTAssertTrue(arrived)
+            // Wait (wall clock) until well past the initially granted lease: without renewals it would have expired.
+            let pastInitialExpiry = started.addingTimeInterval(lease + 0.4)  // wall clock; the injected `now` advances with it
+            while Date() < pastInitialExpiry { try await Task.sleep(nanoseconds: 20_000_000) }
+            try await self.eq(await other.tick(now: now.addingTimeInterval(Date().timeIntervalSince(started))), false)
+            await transport.openGate()
             _ = await running.value
             try await self.eq(await transport.count, 2)
             try await self.eq(try await PushOutboxRecord.query(on: app.db).filter(\.$id ~~ ids).filter(\.$status == "sent").count(), 2)
@@ -111,16 +144,16 @@ extension AuthTests {
         }
     }
     func testC19PushStopsAfterLeaseOwnershipLoss() async throws {
-        let transport = C19PushTransport(delay: 300_000_000)
+        let transport = C19GatedTransport()
         try await notificationApp(env: vapidEnvironment(), transport: transport) { app, auth, runtime in
-            let now = Date()
+            let now = Self.c19QuietWeekday
             _ = try await self.c19Outbox(app, auth, runtime, count: 2, now: now)
             let running = Task { await runtime.tick(now: now) }
-            for _ in 0..<100 {
-                if await transport.count > 0 { break }
-                try await Task.sleep(nanoseconds: 10_000_000)
-            }
+            let arrived = await transport.waitForFirstRequest()
+            XCTAssertTrue(arrived)
+            // The first send is still blocked on the gate, so ownership is lost deterministically before it finishes.
             try await JobLeaseRecord.query(on: app.db).set(\.$holder, to: "successor").update()
+            await transport.openGate()
             _ = await running.value
             try await self.eq(await transport.count, 1)
             try await self.eq(try await PushOutboxRecord.query(on: app.db).filter(\.$status == "pending").count(), 1)

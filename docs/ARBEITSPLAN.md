@@ -146,9 +146,17 @@ Claude-Agent im Worktree `timetrack-backend-wt/b4`, Branch `b4-proxy`.
 2. **Backup/Restore** (B3 integriert, `BETRIEB.md`): dokumentiertes und getestetes Verfahren (DB + Dateien + `STORAGE_SECRET_KEY`), Restore-Test auf MariaDB und SQLite; ARCHITEKTUR verlangt gemeinsames Restore.
 3. **Betrieb** (B3: Stack-Vorlage, Migrationsjob, `check-all.sh`, Entrypoint umgesetzt; Trusted-Proxy-Header: B4 umgesetzt, Lead-Prüfung offen; Metriken offen): produktionsnahes Compose/Swarm-Stack (bisher nur Dev-Compose), expliziter Migrationsschritt, Healthchecks/Logging/Metriken, vertrauenswürdige Proxy-Header für Client-IP (Rate-Limits), amd64-Nachweis für den aktuellen Stand, CI-Skript `scripts/check-all.sh`.
 4. **Aufräumjobs** (umgesetzt und integriert: B2, ADR-0017): abgelaufene Sitzungen/Challenges/OAuth-/OIDC-States/Codes/Tokens, `rate_limit_events`, `mcp_audit`-Retention, hängende Import-Jobs, Speicher-Cleanup periodisch (bisher nur nach DELETE).
-5. **Vertragstreue**: automatisierter Abgleich Implementierung ↔ `contracts/openapi.yaml` (Contract-Tests/Linter), Typgenerierung für Clients.
+5. **Vertragstreue** (B5 umgesetzt, Lead-Prüfung offen): Routenabgleich und Antwortformen-Tests gegen `contracts/openapi.yaml` (Swift, Standardlauf), Redocly-Lint und Typgenerierung (`openapi-typescript`) geprüft; offen: Lint-Regel `operation-summary` (100 Operationen ohne `summary`), Request-Schemas und Fehlerstatus je Endpunkt nicht abgeglichen, Typgenerierung für Swift-Clients nicht ausprobiert (kein Generator verfügbar).
 6. **Restpunkte Review/Tests** (B2 umgesetzt, Lead-Prüfung offen: Lernfeld-409, `pushsubscriptionchange`, `PUSH_ALLOWED_HOSTS`-Vorschlag, `auth_lock`-Bewertung samt MariaDB-Isolationsfix; Import mit 20 000 Zeilen/Blobs nahe 64 MiB weiter offen): gleichzeitiges Anlegen desselben Lernfelds liefert 500 statt 409; `pushsubscriptionchange`; weitere Push-Dienste (`PUSH_ALLOWED_HOSTS`); Import mit 20 000 Zeilen und Blobs nahe 64 MiB auf MariaDB messen; globale `auth_lock`-Serialisierung bewerten.
 7. **Fachlich/Produkt**: IHK-Ausgabeformat, Rechtsprofile (Jugendliche), Onboarding (Ausbildungsstichtag, Pausenfenster), Profilpflege (Anzeigename, E-Mail), Selbstständigenfunktionen (Kunden/Projekte/Sätze), Kalenderbrücke und KI-Worker-Schnittstellen (Job-Queue) für Etappe 5/6.
+
+## B5 – Vertragstreue und Testrobustheit (16.10.2026)
+
+Claude-Agent im Worktree `timetrack-backend-wt/b5`, Branch `b5-conformance`. Schreibt Tests, Skripte, Doku; am Vertrag nur reine Dokumentationsfehler (YAML-Quoting).
+
+| ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
+| --- | --- | --- | --- | --- | --- |
+| B5 | Contract-Tests (Routenabgleich, Antwortformen mit eigenem JSON-Schema-Validator), `scripts/contract-json.sh`, Redocly-Lint, deterministische C19-Push-Tests (Ursache: tagesabhängige `report_gap`-Erinnerung), Handoff `handoffs/B5.md` | Claude-Agent | 4 | umgesetzt, Lead-Prüfung offen | Backlog 5 |
 
 ## Etappe B: Kontenverwaltung und Datenschutz (16.10.2026)
 
