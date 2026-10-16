@@ -45,3 +45,10 @@ Backend-Paket A2 (AASA, `APPLE_APP_IDS`, Origin-Prüfung, Vertrag v0.10.4) ist u
 ## Nachtrag A3 (16.10.2026): Personal Team
 
 Das Team `ABCDE12345` ist ein **persönliches** Entwicklungsteam. Apple erlaubt dort die Capability *Associated Domains* nicht („Personal development teams … do not support the Associated Domains capability"); ein signierter Build damit scheitert. Folgen: Echte Passkeys in den Apps brauchen die bezahlte Apple Developer Program-Mitgliedschaft. Bis dahin: Debug-Konfiguration von iOS ohne Associated Domains (signiert mit Personal Team, Anmeldung per Debug-Cookie-Import; Recovery-Sitzungen sind backendseitig auf Passkey-Einrichtung beschränkt). Release und `TimetrackDebug.entitlements` enthalten die Domains (`timetrack.example.org`, Testdomain mit `?mode=developer`) für den Betrieb mit bezahltem Team. Entscheidung über die Mitgliedschaft liegt beim Nutzer.
+
+## Nachtrag A4 (16.10.2026): Übergabe an die Uhr
+
+- Nutzlast genau `v`, `stamp` (streng steigend), `server`, `cookie`, per `WCSession.updateApplicationContext`; die Uhr speichert sie im eigenen Keychain und ignoriert alte/doppelte Kontexte, damit kein rotiertes Cookie überschrieben wird.
+- iPhone abgemeldet oder nur Recovery-Sitzung: Uhr löscht lokal (ohne Server-Logout). 401 auf der Uhr: Sitzung verwerfen, Hinweis „Bitte am iPhone anmelden". Solange das iPhone noch wiederherstellt/offline ist, wird nichts gesendet.
+- `WKRunsIndependentlyOfCompanionApp = true`. iPhone und Uhr teilen **eine** Serversitzung: Abmelden am iPhone beendet auch die der Uhr.
+- Offen: Komplikation (eigenes Widget-Target), Art-Auswahl (Arbeit/Fahrt/Schule) auf der Uhr, Button „Sitzung an Uhr senden" am iPhone.

@@ -32,7 +32,7 @@ In Colima laufen fremde Projekte: nur `timetrack-dev-*` anfassen.
 0. Nutzer: Echtgeräte-Tests (Push-Zustellung iOS/Android/Desktop über die Testdomain, Installation als PWA, Shortcuts, ChatGPT-/Claude-Connector).
 1. Nutzer: ersten Admin-Link erzeugen, mit echtem Passkey registrieren, Shortcuts/Passkeys/MCP-Connector prüfen (`docs/SHORTCUTS.md` im PWA-Repo, `docs/MCP.md`).
 2. Flackernder Unit-Test `TimerCard … double click` (L4) stabilisieren; Backend-Findings aus L16 (Allowlist für weitere Push-Dienste prüfen).
-3. Native Apps (Etappe 5): A1 (Kern + macOS), A2 (AASA im Backend), A3 (iOS/iPadOS) integriert, A4 (watchOS) in Arbeit. Passkeys in den Apps brauchen das bezahlte Apple Developer Program (ADR-0015, Nachtrag); bis dahin Debug-Cookie-Import. Danach KI-Entwürfe/Mac-Worker, Kalenderbrücke, Standortautomatik.
+3. Native Apps (Etappe 5): A1 (Kern + macOS), A2 (AASA im Backend), A3 (iOS/iPadOS) integriert, A4 (watchOS) integriert; offen: Komplikation, Art-Auswahl auf der Uhr, Echtgerätetests. Passkeys in den Apps brauchen das bezahlte Apple Developer Program (ADR-0015, Nachtrag); bis dahin Debug-Cookie-Import. Danach KI-Entwürfe/Mac-Worker, Kalenderbrücke, Standortautomatik.
 4. Nach Rückkehr des Codex-Kontingents: Codex-Adversarial-Reviews für Backend-Pakete C9–C17.
 
 ## C19-Prüfstand (Stand 15.10.2026, integriert)
