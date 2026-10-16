@@ -81,7 +81,7 @@ Regeln: Text/Symbole stets deckend; **Rückfall deckend** bei `@media (prefers-r
 | Einstellungen | Abschnittskarten, links Unterpunkte (Tabs), Einstellungssuche |
 | Auswahl/Galerie | Dialog mit Kategorieliste + Vorschaukarten (z. B. Kachel hinzufügen, später Dashboard-Layout) |
 
-Informationsarchitektur (Seitenleiste, Module blenden Einträge aus — ADR-0012): **Alltag** (Heute, Zeit, Kalender, Berichtsheft) · **Planung** (Urlaub, Abwesenheiten, Geteilt, Vorschläge) · **Daten** (Export, Import) · **Verwaltung** nur Admin (Einladungen, Module, Speicher) · unten Hinweise, Einstellungen/Konto & Sicherheit, Hilfe.
+Informationsarchitektur (Seitenleiste, Module blenden Einträge aus — ADR-0012): **Alltag** (Heute, Zeit, Kalender, Berichtsheft) · **Planung** (Urlaub, Abwesenheiten, Geteilt, Vorschläge) · **Daten** (Export, Import) · **Verwaltung** nur Admin (Einladungen, Module; der Dateispeicher liegt nur in den Einstellungs-Tabs) · unten Hinweise, Einstellungen/Konto & Sicherheit, Hilfe.
 
 ## Anpassungen für Timetrack (gegenüber dem Vorbild)
 
