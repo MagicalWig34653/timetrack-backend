@@ -10,6 +10,7 @@ func registerRoutes(_ app: Application, service: AuthService) {
     registerStorageRoutes(app, auth: service)
     registerReportRoutes(app, auth: service)
     registerOIDCRoutes(app, auth: service)
+    registerAccountRoutes(app, auth: service)
     app.mcpAuthenticator = OAuthMcpAuthenticator(disabledModules: service.configuration.disabledModules)
     registerMCPRoutes(app, auth: service)
     registerOAuthRoutes(app, auth: service)

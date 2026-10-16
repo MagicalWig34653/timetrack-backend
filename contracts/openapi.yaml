@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.10.4
+  version: 0.11.0
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -20,6 +20,7 @@ info:
     (4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form
     `<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.
     (6) No session listing endpoint in stage 1; only revoking other sessions.
+    v0.11.0: Kontenverwaltung und Datenschutz (ADR-0016, additiv): Admin-API /admin/accounts (Liste, Deaktivieren/Reaktivieren, Rollenwechsel, Sitzungen widerrufen, Löschen), GET /me/export (ZIP der eigenen Daten), DELETE /me (Selbstlöschung). Fehlercodes: self_lockout (409), last_admin (409), confirmation_mismatch (400), account_deletion_incomplete (503). Löschen/Rollenwechsel verlangen eine frische Sitzung (403 reauth_required). Die Endpunkte sind keinem Modul zugeordnet.
     v0.10.4: GET /.well-known/apple-app-site-association (additiv, ADR-0015; 404 ohne APPLE_APP_IDS). Native Apple-Passkeys melden den Origin `https://<rpId>` (ohne Port); das Backend akzeptiert ihn zusätzlich zu WEBAUTHN_ORIGIN (exakter Abgleich, RP-ID-Hash unverändert), sofern die RP-ID eine echte Domain ist.
     v0.10.3: ImportResult.warnings (additiv, wie in der Vorschau); school_on_holiday für Schulzeilen an Feiertagen neben holiday_times_discarded für Arbeitszeilen.
     v0.10.2: Import-Profil: holidayTimes/partialCredit, Warnungen holiday_times_discarded/credit_partial_as_work (zusammengefasst mit count), Vorschau sheetBalanceUpToTodaySeconds/sheetBalanceFutureSeconds/firstContentDate (Befund L20: Abweichung Tabelle/App erklärt sich aus Feiertagszeilen, Teilgutschriften, Modellbeginn und Zeilen nach heute).
@@ -376,6 +377,99 @@ paths:
       security: [ { session: [], csrf: [] } ]
       parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
       responses: { '204': { description: widerrufen }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/admin/accounts:
+    get:
+      operationId: listAccounts
+      description: |
+        Nur Admin. Seitenweise Liste aller Konten (nach createdAt, handle). Enthält ausschließlich Identität, Rolle, Zustand,
+        letzte Aktivität und Passkey-Anzahl, niemals Zeit-, Abwesenheits-, Berichts- oder Freigabedaten.
+      security: [ { session: [] } ]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/AdminAccountPage' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/admin/accounts/{id}:
+    patch:
+      operationId: updateAccount
+      description: |
+        Nur Admin. Mindestens eines von role/state. `state=disabled` macht sofort alle Sitzungen, persönlichen Tokens, OAuth-Grants
+        (samt Access-/Refresh-Tokens), Gerätetokens und Push-Abos des Kontos unbrauchbar (Sitzungen/Tokens/Grants werden widerrufen,
+        Push-Abos gelöscht); Reaktivieren stellt sie nicht wieder her, nur die Anmeldung. Anmeldeversuche deaktivierter Konten
+        scheitern mit dem neutralen 401 unauthorized. Ein Admin ändert nie die eigene Rolle oder den eigenen Zustand (409 self_lockout);
+        der letzte aktive Admin bleibt immer erhalten (409 last_admin). Rollenwechsel verlangen eine frische Sitzung (403 reauth_required).
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AdminAccountPatch' } } } }
+      responses:
+        '200': { description: aktualisiert, content: { application/json: { schema: { $ref: '#/components/schemas/AdminAccount' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: deleteAccount
+      description: |
+        Nur Admin, frische Sitzung nötig (403 reauth_required). Body `confirmHandle` muss dem Handle des Kontos entsprechen
+        (400 confirmation_mismatch). Löscht das Konto mit allen Daten (Zeiten, Abwesenheiten, Planung, Freigaben in beide Richtungen,
+        Berichte, Anhänge samt gespeicherter Dateien, Tokens, Grants, Passkeys, OIDC-Verknüpfungen, Hinweise, Importe, Audit-Zeilen mit Kontobezug).
+        Kann ein gespeichertes Objekt nicht entfernt werden, scheitert die Operation mit 503 account_deletion_incomplete; das Konto bleibt
+        dann deaktiviert, die Dateien sind zur Wiederholung markiert, und derselbe Aufruf kann wiederholt werden. Ein Admin löscht nie sich selbst
+        über diesen Pfad (409 self_lockout, stattdessen DELETE /me) und nie den letzten aktiven Admin (409 last_admin).
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AccountDeletionConfirm' } } } }
+      responses:
+        '204': { description: gelöscht }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { description: Objekt konnte nicht entfernt werden (account_deletion_incomplete), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/v1/admin/accounts/{id}/sessions:
+    delete:
+      operationId: revokeAccountSessions
+      description: Nur Admin. Widerruft alle Sitzungen des Kontos (Tokens und Grants bleiben unberührt).
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '204': { description: widerrufen }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/me/export:
+    get:
+      operationId: exportMyData
+      description: |
+        ZIP mit den eigenen Daten: manifest.json, account.json, je Tabelle <name>.json (zusätzlich .csv für time-entries, absences,
+        report-entries), time-entry-revisions, work-models, places, day-preferences, balance-adjustments, vacation-*, calendar-days, plan-days,
+        report-*, shares-outgoing (nur eigene ausgehende Freigaben als Metadaten), notification-settings.json, files.json und files/<id>-<name>
+        (Anhänge). Rohzeiten und bewertete Zeiten stehen getrennt. Nie enthalten: Tokens, Hashes, Passkey-Material, Push-Schlüssel,
+        Daten anderer Konten, eingehende Freigaben. Nicht lesbare oder über das Größenbudget (256 MiB) hinausgehende Dateien stehen in
+        files.json mit included=false und reason. Nicht für Recovery-Sitzungen (403).
+      security: [ { session: [] } ]
+      responses:
+        '200': { description: ZIP, headers: { Content-Disposition: { schema: { type: string } } }, content: { application/zip: { schema: { type: string, format: binary } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/me:
+    delete:
+      operationId: deleteMyAccount
+      description: |
+        Selbstlöschung mit denselben Regeln und derselben Kaskade wie DELETE /admin/accounts/{id}: frische Sitzung (403 reauth_required),
+        Body `confirmHandle` (400 confirmation_mismatch), der letzte aktive Admin kann sich nicht löschen (409 last_admin). Das Cookie wird geleert.
+        Scheitert die Entfernung gespeicherter Objekte (503 account_deletion_incomplete), ist das Konto bereits deaktiviert und die Sitzung widerrufen;
+        ein Admin schließt die Löschung mit DELETE /admin/accounts/{id} ab.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AccountDeletionConfirm' } } } }
+      responses:
+        '204': { description: gelöscht }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { description: Objekt konnte nicht entfernt werden (account_deletion_incomplete), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   /api/v1/work-models:
     get:
       operationId: listWorkModels
@@ -1829,3 +1923,36 @@ components:
         firstContentDate: { type: [string, 'null'], format: date, description: erster Tag mit Zeiten oder Bemerkung; Vorschlag für den Beginn des Arbeitsmodells, damit leere Tage davor nicht als Fehlzeit zählen }
         unmappedRemarks: { type: array, items: { type: object, required: [text, count], properties: { text: { type: string }, count: { type: integer } } } }
         byAction: { type: object, additionalProperties: { type: integer } }
+    AdminAccount:
+      type: object
+      required: [id, handle, displayName, role, state, createdAt, passkeyCount]
+      properties:
+        id: { type: string, format: uuid }
+        handle: { type: string }
+        displayName: { type: string }
+        email: { type: [string, 'null'] }
+        role: { type: string, enum: [admin, member] }
+        state: { type: string, enum: [active, disabled] }
+        createdAt: { type: string, format: date-time }
+        disabledAt: { type: [string, 'null'], format: date-time }
+        lastActivityAt: { type: [string, 'null'], format: date-time, description: jüngste Sitzungsnutzung oder Passkey-Anmeldung }
+        passkeyCount: { type: integer, minimum: 0 }
+    AdminAccountPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AdminAccount' } }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+    AdminAccountPatch:
+      type: object
+      minProperties: 1
+      properties:
+        role: { type: string, enum: [admin, member] }
+        state: { type: string, enum: [active, disabled] }
+    AccountDeletionConfirm:
+      type: object
+      required: [confirmHandle]
+      properties:
+        confirmHandle: { type: string, description: Handle des zu löschenden Kontos (Tippbestätigung) }
