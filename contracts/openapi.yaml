@@ -503,7 +503,7 @@ paths:
   /api/v1/me/profile/email/verify:
     post:
       operationId: verifyProfileEmail
-      description: Bestätigt den Code. Falscher/abgelaufener/verbrauchter Code 400 invalid_code. Hat ein anderes Konto die Adresse bereits bestätigt, 409 email_taken (die Anforderung ist dann verbraucht). Gleichzeitige Bestätigungen derselben Adresse: genau eine gewinnt.
+      description: Bestätigt den Code. Falscher/abgelaufener/verbrauchter Code 400 invalid_code. Hat ein anderes Konto die Adresse bereits bestätigt, 409 email_taken (die Anforderung ist dann verbraucht). Bei gleichzeitigen Bestätigungen derselben Adresse gewinnt genau eine.
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [code], properties: { code: { type: string } } } } } }
       responses: { '200': { description: übernommen, content: { application/json: { schema: { $ref: '#/components/schemas/Profile' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '403': { $ref: '#/components/responses/Forbidden' }, '409': { $ref: '#/components/responses/Conflict' } }
