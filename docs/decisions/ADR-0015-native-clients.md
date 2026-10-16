@@ -56,3 +56,7 @@ Das Team `ABCDE12345` ist ein **persönliches** Entwicklungsteam. Apple erlaubt 
 ## Nachtrag A5 (16.10.2026): Komplikation
 
 Die Komplikation (Widget-Erweiterung `TimetrackWidget`) liest einen **nicht geheimen** Anzeigestand aus der App Group `group.com.example.timetrack` (Laufzustand, Art, Startzeit, Tagessumme, Tag, Zeitzone, Aktualisierung). Der Session-Cookie bleibt im Keychain der Uhr. Ob das persönliche Entwicklerteam App Groups provisionieren kann, ist ungeklärt (signierter Watch-Build scheitert lokal an fehlenden Profilen; Associated Domains sind bei Personal Teams nachweislich gesperrt). Notlösung ohne App Group: `CODE_SIGN_ENTITLEMENTS` der beiden Ziele entfernen, die Komplikation zeigt dann „Aus". Der manuelle Knopf „Sitzung an Uhr senden" ändert das Übergabeformat nicht.
+
+## Nachtrag (16.10.2026, Lead-Versuch): App Groups mit dem Personal Team
+
+Mit Erlaubnis des Nutzers: `xcodebuild -allowProvisioningUpdates` mit Team `ABCDE12345` baut `TimetrackWatch` (generic watchOS) **signiert** und die Entitlements von App und Widget-Erweiterung enthalten `com.apple.security.application-groups = group.com.example.timetrack`; ebenso baut `TimetrackIOS` (Debug, ohne Associated Domains) signiert. **App Groups gehen also mit dem Personal Team; nur Associated Domains (Passkeys) nicht.** Folge: Komplikationen und Widgets (A7) sind auf echten Geräten möglich; die Notlösung ohne App Group entfällt. Dabei wurden vom Xcode-Dienst Profile/App-IDs im Entwicklerkonto angelegt. Auf einem echten Gerät nicht geprüft (nur Build und Entitlements).
