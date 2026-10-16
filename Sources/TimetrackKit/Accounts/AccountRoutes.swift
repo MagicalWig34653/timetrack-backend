@@ -45,3 +45,24 @@ func registerAccountRoutes(_ app: Application, auth: AuthService) {
         return response
     }
 }
+
+/// Profile and onboarding endpoints (package P1, ADR-0019). Not behind any module switch.
+func registerProfileRoutes(_ app: Application, auth: AuthService) {
+    let api = app.grouped("api", "v1").grouped(SessionMiddleware(service: auth)).grouped(AuthRateLimitMiddleware(service: auth))
+    api.get("me", "profile") { req async throws -> ProfileDTO in try await auth.profile(req.authContext, on: req.db) }
+    api.patch("me", "profile") { req async throws -> ProfileDTO in
+        try await auth.updateProfile(req.content.decode(ProfilePatch.self), context: req.authContext, on: req.db)
+    }
+    api.put("me", "profile", "email") { req async throws -> HTTPStatus in
+        try await auth.requestEmailChange(req.content.decode(EmailChangeInput.self).email, context: req.authContext, on: req.db); return .accepted
+    }
+    api.post("me", "profile", "email", "verify") { req async throws -> ProfileDTO in
+        try await auth.confirmEmailChange(req.content.decode(EmailChangeProof.self).code, context: req.authContext, on: req.db)
+    }
+    api.delete("me", "profile", "email") { req async throws -> HTTPStatus in
+        try await auth.removeEmail(req.authContext, on: req.db); return .noContent
+    }
+    api.put("me", "onboarding") { req async throws -> ProfileDTO in
+        try await auth.setOnboarding(req.content.decode(OnboardingInput.self).state, context: req.authContext, on: req.db)
+    }
+}

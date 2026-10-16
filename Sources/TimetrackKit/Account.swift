@@ -11,6 +11,9 @@ public final class Account: Model, @unchecked Sendable {
     @Field(key: "role") public var role: AccountRole
     @Field(key: "created_at") public var createdAt: Date
     @OptionalField(key: "disabled_at") public var disabledAt: Date?
+    /// `completed` or `skipped`; nil means the guided setup has not been dealt with yet (ADR-0019).
+    @OptionalField(key: "onboarding_state") public var onboardingState: String?
+    @OptionalField(key: "onboarding_updated_at") public var onboardingUpdatedAt: Date?
 
     public init() {}
 

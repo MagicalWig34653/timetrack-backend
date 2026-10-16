@@ -19,7 +19,7 @@ final class AccountAuditRecord: Model, @unchecked Sendable {
 }
 
 enum AccountSchema {
-    static let migrations: [any Migration] = [CreateAccountAudit()]
+    static let migrations: [any Migration] = [CreateAccountAudit(), AddAccountOnboarding(), CreateEmailChangeRequests()]
 }
 
 struct CreateAccountAudit: AsyncMigration {

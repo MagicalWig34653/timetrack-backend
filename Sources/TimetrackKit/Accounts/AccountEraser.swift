@@ -66,7 +66,7 @@ enum AccountEraser {
         byColumn(ShareRecord.self, "owner_id"), byColumn(ShareRecord.self, "recipient_id"),
         // Identity and security material.
         byColumn(WebAuthnChallenge.self), byColumn(RecoveryAttempt.self), byColumn(RecoveryCode.self), byColumn(FallbackPassword.self),
-        byColumn(EmailRecovery.self), byColumn(Passkey.self), byColumn(Session.self), byColumn(ExternalIdentity.self), byColumn(OIDCState.self),
+        byColumn(EmailRecovery.self), byColumn(EmailChangeRequest.self), byColumn(Passkey.self), byColumn(Session.self), byColumn(ExternalIdentity.self), byColumn(OIDCState.self),
         byColumn(AccountModuleSetting.self), byColumn(ModuleAudit.self, "actor_id"),
     ]
 

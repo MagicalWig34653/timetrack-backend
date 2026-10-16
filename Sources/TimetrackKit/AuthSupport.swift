@@ -137,8 +137,11 @@ struct AuthService: Sendable {
     }
 }
 
-struct AccountDTO: Content { let id: UUID; let handle: String; let displayName: String; let role: AccountRole
-    init(_ account: Account) throws { id = try account.requireID(); handle = account.handle; displayName = account.displayName; role = account.role }
+struct AccountDTO: Content { let id: UUID; let handle: String; let displayName: String; let role: AccountRole; let onboardingState: String
+    init(_ account: Account) throws {
+        id = try account.requireID(); handle = account.handle; displayName = account.displayName; role = account.role
+        onboardingState = account.onboardingState ?? "pending"
+    }
 }
 struct SessionDTO: Content { let account: AccountDTO; let csrfToken: String; let recovery: Bool; let expiresAt: Date }
 struct PasskeyDTO: Content { let id: UUID; let name: String; let createdAt: Date; let lastUsedAt: Date?
