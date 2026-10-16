@@ -6,7 +6,7 @@ func registerOAuthRoutes(_ app: Application, auth: AuthService) {
     let tokenLimiter = OAuthTokenLimiter()
     let credentials = OAuthCredentialService(auth: auth, oauth: oauth)
     let api = app.grouped("api", "v1").grouped(SessionMiddleware(service: auth))
-    @Sendable func ip(_ req: Request) -> String { req.remoteAddress?.ipAddress ?? "unknown" }
+    @Sendable func ip(_ req: Request) -> String { req.clientRateLimitKey }
     @Sendable func id(_ req: Request) throws -> UUID { guard let id = req.parameters.get("id", as: UUID.self) else { throw APIError.missing }; return id }
 
     @Sendable func machine(_ req: Request, _ body: () async throws -> Response) async throws -> Response { try await machineResponse(req, body) }

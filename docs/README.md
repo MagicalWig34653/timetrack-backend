@@ -52,3 +52,4 @@ und keine Nutzerentscheidungen (siehe jeweilige Statuszeile). Nummer 0004 existi
 | 0015 | Native Clients: Anmeldung und API-Zugriff | Entwurf (A1); offene Fragen im ADR | [ADR-0015](decisions/ADR-0015-native-clients.md) |
 | 0016 | Kontenverwaltung, Selbstauskunft und Löschung | akzeptiert (B1, integriert) | [ADR-0016](decisions/ADR-0016-kontenverwaltung.md) |
 | 0017 | Wartung: Aufräumjob, Review-Restpunkte, MariaDB-Isolation unter `auth_lock` | akzeptiert (B2, integriert) | [ADR-0017](decisions/ADR-0017-wartung.md) |
+| 0018 | Vertrauenswürdige Proxys: Client-Adresse für Rate-Limits | akzeptiert (B4, Lead-Prüfung offen) | [ADR-0018](decisions/ADR-0018-vertrauenswuerdige-proxys.md) |

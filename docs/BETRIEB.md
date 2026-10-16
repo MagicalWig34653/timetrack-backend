@@ -216,21 +216,33 @@ Der Proxy terminiert TLS und leitet an `http://backend:8080` (Overlay `timetrack
 | Pfade | `/api/`, `/oauth/`, `/mcp`, `/health`, `/ready`, `/.well-known/` und alle PWA-Pfade gehen an das Backend (es liefert die PWA aus). `/health` und `/ready` besser nicht öffentlich. |
 | Uploads | Anfragekörper bis **64 MiB** Datei + 64 KiB Multipart-Aufschlag (`StorageLimits`): Proxy-Limit mindestens 65 MiB (z. B. nginx `client_max_body_size 65m;`), Timeouts für Lesen/Senden ≥ 120 s, Request-Buffering aus oder ausreichend Platz. Das Backend sammelt den Körper im Speicher (siehe Ressourcen). |
 | WebSocket | Nicht erforderlich. MCP ist Streamable HTTP, nur `POST`, JSON-Antworten (kein SSE); keine Upgrade-Header nötig. |
-| Header | Der Proxy setzt `X-Forwarded-For`/`-Proto` (für Logs), das Backend wertet sie **nicht** aus (nächster Abschnitt). |
+| Header | Der Proxy muss `X-Forwarded-For` **anhängen** (Standard bei nginx `$proxy_add_x_forwarded_for`, Traefik, Caddy) oder ersetzen, nie unverändert durchreichen; alternativ `X-Real-IP` setzen (dann `TRUSTED_PROXY_HEADER=X-Real-IP`, ein einzelner Wert, vom Proxy überschrieben). Das Backend wertet den Header nur aus, wenn `TRUSTED_PROXY_CIDRS` gesetzt ist (nächster Abschnitt). |
 
-### Client-IP und Rate-Limit: Lücke
+### Client-IP und Rate-Limit (ADR-0018)
 
-Das Backend verwendet für alle IP-bezogenen Grenzen (`AuthRateLimitMiddleware`, OAuth, OIDC) ausdrücklich `req.remoteAddress`, also die
-**Socket-Gegenstelle**, und ignoriert `Forwarded`/`X-Forwarded-For` (Kommentar im Code: „Forwarded headers are untrusted“). Eine Konfiguration
-für vertrauenswürdige Proxys (Trusted-Proxy-Liste) gibt es nicht. Hinter einem Reverse Proxy ist die Gegenstelle immer der Proxy. Folgen:
+Alle IP-bezogenen Grenzen (Auth-Middleware, OAuth, OIDC) verwenden eine zentrale Auflösung (`Request.clientRateLimitKey`, `Sources/TimetrackKit/TrustedProxies.swift`).
+Ohne Konfiguration gilt wie bisher die Socket-Gegenstelle. **Hinter einem Proxy muss `TRUSTED_PROXY_CIDRS` gesetzt werden**, sonst teilen alle Clients
+einen Zähler (60 Ereignisse je 5 Minuten, Schlüssel `ip:<Hash>`) und ein Angreifer sperrt die Anmeldung für alle. Die Pro-Handle-Grenzen (15 je 5 Minuten) gelten unabhängig davon.
 
-- Alle Clients teilen **einen** Zähler (derzeit 60 Ereignisse je 5 Minuten für Registrierung/Login/Recovery, Schlüssel `ip:<Hash>`). Ein Angreifer kann damit die Anmeldung für **alle** Nutzer sperren (Denial of Service der Anmeldung), und die IP-Grenze schützt nicht pro Angreifer.
-- Zusätzlich gelten pro-Handle-Grenzen (15 je 5 Minuten); sie bleiben wirksam.
-- Im Swarm kann zudem das Routing Mesh die Quelladresse verändern (SNAT); der Proxy sollte im Overlay-Netz direkt angesprochen werden.
+Einrichtung:
 
-Abmilderung ohne Codeänderung: Rate-Limit **am Proxy** je Client-IP für `/api/v1/auth/`, `/api/v1/me/recovery/`, `/oauth/` setzen und das Backend nicht öffentlich veröffentlichen.
-Kleinste Codeänderung (nicht umgesetzt, `Sources/` gehört B1/B2): Umgebungsvariable `TRUSTED_PROXY_CIDRS`; nur wenn `remoteAddress` darin liegt,
-`req.peerAddress` (wertet `X-Forwarded-For` aus) statt `remoteAddress` verwenden, an den drei Stellen `ip(_:)`/`SessionService.swift:85`. Mit Tests (Header von nicht vertrauenswürdiger Quelle bleibt wirkungslos).
+1. Netz des Proxys bestimmen, so eng wie möglich. Im Swarm ist das das Subnetz des Overlay-Netzes `PROXY_NETWORK`:
+   `docker network inspect timetrack-proxy --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'`. Ein ganzes Netz zu vertrauen ist nur dann sicher, wenn dort ausschließlich der Proxy (und keine
+   anderen, von Angreifern erreichbaren Dienste) Verbindungen zum Backend aufbauen kann. Besser ist ein eigenes Netz nur für Proxy und Backend oder die feste Proxy-Adresse als `/32`.
+2. `TRUSTED_PROXY_CIDRS=<Netz>[,<Netz>...]` in `stack.env` (bzw. `.env`) setzen; optional `TRUSTED_PROXY_HEADER`. Ein ungültiger Eintrag verhindert den Start (Fehler nennt den Schlüssel).
+3. Prüfen: Zwei Clients nacheinander gegen den Proxy (`POST /api/v1/auth/login/options`, mehr als 60-mal von Client A) dürfen Client B nicht sperren.
+
+Regeln der Auflösung:
+
+- Gegenstelle nicht in der Liste (oder Liste leer): Header werden vollständig ignoriert (kein Spoofing von außen).
+- Gegenstelle vertrauenswürdig: `X-Forwarded-For` wird **von rechts** gelesen; vertrauenswürdige Hops werden übersprungen, die erste nicht vertrauenswürdige Adresse ist der Client.
+  Vom Angreifer vorangestellte Einträge links davon werden nie gelesen. Fehlt der Header, ist ein Eintrag keine IP (Ports `1.2.3.4:5` und `[v6]:5` werden toleriert) oder sind alle Hops vertrauenswürdig, gilt die Gegenstelle.
+- IPv4-gemappte IPv6-Adressen (`::ffff:a.b.c.d`) werden zu IPv4. Für das Rate-Limit werden IPv6-Clients nach **/64** zusammengefasst (ein Anschluss besitzt üblicherweise ein ganzes /64; sonst ließe sich die Grenze mit beliebigen Adressen umgehen). IPv4 bleibt pro Adresse. Hinter CGNAT teilen sich viele Nutzer eine IPv4-Adresse und damit einen Zähler; das ist hier nicht lösbar.
+- `0.0.0.0/0` ist erlaubt, hebt den Schutz aber auf (jeder könnte den Header setzen). Nicht verwenden.
+- Im Swarm kann das Routing Mesh die Quelladresse verändern (SNAT); der Proxy sollte im Overlay-Netz direkt angesprochen werden, sonst sieht das Backend nur eine Mesh-Adresse.
+
+Weiterhin sinnvoll: zusätzliches Rate-Limit am Proxy für `/api/v1/auth/`, `/api/v1/me/recovery/`, `/oauth/`, und das Backend nicht öffentlich veröffentlichen.
+Nicht geprüft: Verhalten mit echtem Proxy (nginx/Traefik) und Swarm-Overlay; geprüft sind die Auflösung und ein HTTP-Test mit Socket-Gegenstelle 127.0.0.1 als Proxy.
 
 ## 7. amd64-Build (Emulation) und Multi-Arch
 

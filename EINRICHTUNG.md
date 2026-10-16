@@ -220,6 +220,8 @@ Nie ein echtes `.env` committen. Ungültige Werte brechen den Start mit klarer M
 | `MCP_AUDIT_RETENTION_DAYS` | `90` | Aufbewahrung der `mcp_audit`-Zeilen in Tagen (1 bis 3650) |
 | `IMPORT_JOB_TIMEOUT_HOURS` | `168` | offene Importe (hochgeladen/zugeordnet) älter als dies werden verworfen (1 bis 8760) |
 | `STORAGE_ORPHAN_GRACE_HOURS` | `168` | Karenzzeit, bevor verwaiste Objekte im lokalen Speicher gelöscht werden (1 bis 8760) |
+| `TRUSTED_PROXY_CIDRS` | leer | Kommagetrennt IPv4-/IPv6-Adressen oder CIDR-Netze der Reverse Proxys (z. B. `172.18.0.0/16,fd00::/8`). Nur wenn die Socket-Gegenstelle darin liegt, wird die Client-Adresse aus dem Forwarded-Header gelesen (ADR-0018). Leer: niemand vertrauenswürdig, Header wirkungslos. Ungültiger Eintrag ist ein Startfehler |
+| `TRUSTED_PROXY_HEADER` | `X-Forwarded-For` | `X-Forwarded-For` oder `X-Real-IP` (Groß-/Kleinschreibung egal); anderes ist ein Startfehler |
 | `MODULES_DISABLED` | – | **geplant** (ADR-0012, Paket C20, noch nicht im Code): kommagetrennt, z. B. `reports,mcp`; schaltet Module serverweit ab |
 
 Vorschlag für `PUSH_ALLOWED_HOSTS` (ein echtes Muster je Push-Dienst; Chrome/Edge/Samsung über FCM, Firefox über Mozilla, Safari und installierte

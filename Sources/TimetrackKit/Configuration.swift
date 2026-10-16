@@ -31,6 +31,8 @@ public struct Configuration: Sendable {
     public let smtp: SMTPConfiguration?
     public let disabledModules: Set<ModuleKey>
     public let oidc: OIDCConfiguration?
+    /// Reverse proxies whose forwarded client address is honoured (empty: none, ADR-0018).
+    public let trustedProxies: TrustedProxies
 
     public init(environment: [String: String] = ProcessInfo.processInfo.environment) throws {
         func value(_ key: String, _ fallback: String) throws -> String {
@@ -68,6 +70,7 @@ public struct Configuration: Sendable {
         smtpPort = try integer("SMTP_PORT", "587", 1...65535)
         smtp = try SMTPConfiguration(environment: environment)
         oidc = try OIDCConfiguration(environment: environment)
+        trustedProxies = try TrustedProxies(cidrs: environment["TRUSTED_PROXY_CIDRS"] ?? "", header: environment["TRUSTED_PROXY_HEADER"])
         databaseDriver = driver
         dbHost = try value("DB_HOST", "127.0.0.1")
         dbPort = try integer("DB_PORT", "3306", 1...65535)
