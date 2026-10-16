@@ -156,7 +156,7 @@ Claude-Agent im Worktree `timetrack-backend-wt/b5`, Branch `b5-conformance`. Sch
 
 | ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
 | --- | --- | --- | --- | --- | --- |
-| B5 | Contract-Tests (Routenabgleich, Antwortformen mit eigenem JSON-Schema-Validator), `scripts/contract-json.sh`, Redocly-Lint, deterministische C19-Push-Tests (Ursache: tagesabhängige `report_gap`-Erinnerung), Handoff `handoffs/B5.md` | Claude-Agent | 4 | umgesetzt, Lead-Prüfung offen | Backlog 5 |
+| B5 | Contract-Tests (Routenabgleich, Antwortformen mit eigenem JSON-Schema-Validator), `scripts/contract-json.sh`, Redocly-Lint, deterministische C19-Push-Tests (Ursache: tagesabhängige `report_gap`-Erinnerung), Handoff `handoffs/B5.md` | Claude-Agent | 4 | integriert; Lead: nach Merge mit P1 (Vertrag 0.13.0, JSON-Kopie neu erzeugt) 302 Tests auf SQLite, 0 Fehler; MariaDB 295/0 und Linux-Build laut Agent; Push-Tests 20/20 stabil; Antwortformen ca. 55 Endpunkte ohne Abweichung, Anfrageschemas/MCP/OAuth/Dateien ungeprüft; Redocly: 100 Operationen ohne `summary` | Backlog 5 |
 
 ## Etappe B: Kontenverwaltung und Datenschutz (16.10.2026)
 
