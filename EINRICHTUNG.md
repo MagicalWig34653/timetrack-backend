@@ -178,6 +178,7 @@ Nie ein echtes `.env` committen. Ungültige Werte brechen den Start mit klarer M
 | `AUTO_MIGRATE` | `false` | `true` migriert beim Start; Compose/`.env.example` setzen `true` |
 | `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME` | `localhost`, `Timetrack` | RP-ID als Kleinbuchstaben-Hostname; Wechsel entwertet vorhandene Passkeys |
 | `WEBAUTHN_ORIGIN`, `PUBLIC_BASE_URL` | `http://localhost:18080` | HTTPS außer auf Loopback, ohne Pfad/Slash; Host muss zur RP-ID passen |
+| `APPLE_APP_IDS` | leer | Kommagetrennt `<TeamID>.<BundleID>` (z. B. `ABCDE12345.com.example.timetrack`); Leerstellen/leere Einträge werden ignoriert, ungültiges Format ist ein Startfehler. Leer: `/.well-known/apple-app-site-association` antwortet 404, sonst `{"webcredentials":{"apps":[...]}}`. Native Passkeys melden den Origin `https://<RP-ID>` (ohne Port); das Backend akzeptiert ihn zusätzlich zu `WEBAUTHN_ORIGIN`, sofern die RP-ID eine echte Domain (mit Punkt) ist (ADR-0015) |
 | `SESSION_TTL_HOURS` | `720` | Compose/`.env.example` setzen `336` |
 | `PWA_STATIC_DIR` | `/srv/pwa` | Verzeichnis der gebauten PWA |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_TLS`, `SMTP_FROM`, `SMTP_FROM_NAME`, `SMTP_USER`, `SMTP_PASSWORD` | Port `587`, TLS `starttls` | E-Mail-Recovery; ohne `SMTP_HOST` ist sie nicht wählbar. `SMTP_TLS`: `starttls`, `implicit`, `off` |

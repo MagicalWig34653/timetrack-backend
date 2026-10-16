@@ -21,6 +21,8 @@ public struct Configuration: Sendable {
     public let webAuthnRPName: String
     public let webAuthnOrigin: URL
     public let publicBaseURL: URL
+    /// Apple app IDs (`<TeamID>.<BundleID>`) served in the apple-app-site-association file; empty disables the endpoint.
+    public let appleAppIDs: [String]
     public let sessionTTLHours: Int
     public let autoMigrate: Bool
     public let pwaStaticDirectory: String
@@ -94,6 +96,7 @@ public struct Configuration: Sendable {
               originHost == webAuthnRPID || originHost.hasSuffix("." + webAuthnRPID) else {
             throw ConfigurationError(key: "WEBAUTHN_ORIGIN", reason: "host must match RP ID or its subdomain")
         }
+        appleAppIDs = try Self.parseAppleAppIDs(environment["APPLE_APP_IDS"] ?? "")
         publicBaseURL = try url("PUBLIC_BASE_URL", "http://localhost:18080")
         sessionTTLHours = try integer("SESSION_TTL_HOURS", "720", 1...8760)
         switch environment["AUTO_MIGRATE"] ?? "false" {
@@ -101,5 +104,27 @@ public struct Configuration: Sendable {
         case "false": autoMigrate = false
         default: throw ConfigurationError(key: "AUTO_MIGRATE", reason: "expected true or false")
         }
+    }
+
+    /// Parses a comma separated list of `<TeamID>.<BundleID>`; blanks are ignored, duplicates removed, invalid entries rejected.
+    static func parseAppleAppIDs(_ raw: String) throws -> [String] {
+        var result: [String] = []
+        for part in raw.split(separator: ",", omittingEmptySubsequences: true) {
+            let entry = part.trimmingCharacters(in: .whitespacesAndNewlines)
+            if entry.isEmpty { continue }
+            guard entry.range(of: "^[A-Z0-9]{10}\\.[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*$", options: .regularExpression) != nil else {
+                throw ConfigurationError(key: "APPLE_APP_IDS", reason: "entries must look like <TeamID>.<BundleID> (10-character team ID, reverse-DNS bundle ID)")
+            }
+            if !result.contains(entry) { result.append(entry) }
+        }
+        return result
+    }
+
+    /// Exact-match allow-list of WebAuthn origins. Apple platform passkeys report `https://<rpId>` (no port) as origin,
+    /// so that origin is added for real domains (RP ID containing a dot) when it differs from the configured web origin.
+    public var webAuthnAllowedOrigins: [String] {
+        let web = webAuthnOrigin.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let native = "https://" + webAuthnRPID
+        return webAuthnRPID.contains(".") && native != web ? [web, native] : [web]
     }
 }

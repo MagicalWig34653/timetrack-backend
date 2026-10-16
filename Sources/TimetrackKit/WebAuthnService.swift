@@ -41,7 +41,7 @@ extension AuthService {
         try requireSameOriginClient(proof.credential.attestationResponse.clientDataJSON)
         let credential: Credential
         do {
-            credential = try await webAuthn.finishRegistration(challenge: Array(challenge.challenge), credentialCreationData: proof.credential, requireUserVerification: true) { _ in
+            credential = try await webAuthn(clientDataJSON: proof.credential.attestationResponse.clientDataJSON).finishRegistration(challenge: Array(challenge.challenge), credentialCreationData: proof.credential, requireUserVerification: true) { _ in
                 try await Passkey.query(on: db).filter(\.$credentialId == Data(proof.credential.rawID)).first() == nil
             }
         } catch { throw APIError.invalid }
@@ -87,7 +87,7 @@ extension AuthService {
             let verified: VerifiedAuthentication
             do {
                 try requireSameOriginClient(proof.credential.response.clientDataJSON)
-                verified = try webAuthn.finishAuthentication(credential: proof.credential, expectedChallenge: Array(challenge.challenge),
+                verified = try webAuthn(clientDataJSON: proof.credential.response.clientDataJSON).finishAuthentication(credential: proof.credential, expectedChallenge: Array(challenge.challenge),
                     credentialPublicKey: Array(key.publicKey), credentialCurrentSignCount: UInt32(key.signCount), requireUserVerification: true)
             } catch { throw APIError.unauthorized }
             guard try await SingleUse.consume(.challenge, id: proof.challengeId, on: tx) else { throw APIError.unauthorized }
