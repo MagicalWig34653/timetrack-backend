@@ -14,6 +14,8 @@ public final class Account: Model, @unchecked Sendable {
     /// `completed` or `skipped`; nil means the guided setup has not been dealt with yet (ADR-0019).
     @OptionalField(key: "onboarding_state") public var onboardingState: String?
     @OptionalField(key: "onboarding_updated_at") public var onboardingUpdatedAt: Date?
+    /// Appearance preferences shared by all clients of the account (ADR-0020); nil means "never set", i.e. the defaults.
+    @OptionalField(key: "preferences") var preferences: AccountPreferences?
 
     public init() {}
 

@@ -37,6 +37,8 @@ struct AccountExportService: Sendable {
             "email": account.email.map(JSONValue.string) ?? .null, "role": .string(account.role.rawValue), "createdAt": Self.iso(account.createdAt),
         ])))
 
+        try add("preferences.json", try Self.json(try Self.value(account.preferences ?? .defaults)))
+
         let segments = try await SegmentRecord.query(on: db).filter(\.$accountId == id).sort(\.$startedAt).all()
         try table("time-entries", segments.map { s in
             ["id": .string(s.id?.uuidString ?? ""), "kind": .string(s.kind), "rawStartedAt": Self.iso(s.rawStartedAt), "rawEndedAt": Self.iso(s.rawEndedAt),

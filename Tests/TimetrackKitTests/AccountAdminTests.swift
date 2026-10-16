@@ -452,7 +452,7 @@ extension AuthTests {
             let files = try self.entries(Data(response.body.readableBytesView))
             let names = Set(files.keys)
             for name in ["manifest.json", "account.json", "time-entries.json", "time-entries.csv", "time-entry-revisions.json", "absences.json", "absences.csv", "report-entries.json", "report-entries.csv",
-                         "shares-outgoing.json", "work-models.json", "places.json", "day-preferences.json", "plan-days.json", "files.json", "notification-settings.json"] {
+                         "shares-outgoing.json", "work-models.json", "places.json", "day-preferences.json", "plan-days.json", "files.json", "notification-settings.json", "preferences.json"] {
                 XCTAssertTrue(names.contains(name), name)
             }
             let attachment = names.first { $0.hasPrefix("files/") }

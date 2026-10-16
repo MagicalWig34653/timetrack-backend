@@ -42,7 +42,7 @@ Zahlen mit tabellarischen Ziffern (`font-variant-numeric: tabular-nums`) für Ze
 
 ### Akzentfarbe
 
-Je Person wählbar (Vorgaben + freie Farbwahl), lokal gespeichert (zusätzlich optional im Konto). Aus der gewählten Farbe werden vier Tokens berechnet: `--ui-accent` (Primärfläche), `--ui-accent-foreground` (Weiß oder Schwarz je Kontrast), `--ui-accent-ink` (Akzent als **Schriftfarbe**, bei Bedarf in 10-%-Schritten abgedunkelt/aufgehellt bis ≥ 4,5:1 gegen den Hintergrund), `--ui-accent-soft` (Mischung 9 % hell / 18 % dunkel mit `--background`, für aktive Navigation, Chips, Hervorhebung). **Standard-Akzent Timetrack: ruhiges Blau `#2563EB`.** Ungültige Eingaben werden verworfen. Statusfarben (Fehler/Warnung/OK) sind unabhängig vom Akzent.
+Je Person wählbar (Vorgaben + freie Farbwahl) und **im Konto gespeichert** (ADR-0020, `GET/PATCH /me/preferences`), damit PWA und Apple-Apps sie teilen; lokal nur als Sofort-Cache. Transparenz und App-Symbol bleiben Gerätewahl. Aus der gewählten Farbe werden vier Tokens berechnet: `--ui-accent` (Primärfläche), `--ui-accent-foreground` (Weiß oder Schwarz je Kontrast), `--ui-accent-ink` (Akzent als **Schriftfarbe**, bei Bedarf in 10-%-Schritten abgedunkelt/aufgehellt bis ≥ 4,5:1 gegen den Hintergrund), `--ui-accent-soft` (Mischung 9 % hell / 18 % dunkel mit `--background`, für aktive Navigation, Chips, Hervorhebung). **Standard-Akzent Timetrack: ruhiges Blau `#2563EB`.** Ungültige Eingaben werden verworfen. Statusfarben (Fehler/Warnung/OK) sind unabhängig vom Akzent.
 
 ## Layout
 

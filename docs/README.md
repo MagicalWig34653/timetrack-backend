@@ -54,3 +54,4 @@ und keine Nutzerentscheidungen (siehe jeweilige Statuszeile). Nummer 0004 existi
 | 0017 | Wartung: Aufräumjob, Review-Restpunkte, MariaDB-Isolation unter `auth_lock` | akzeptiert (B2, integriert) | [ADR-0017](decisions/ADR-0017-wartung.md) |
 | 0018 | Vertrauenswürdige Proxys: Client-Adresse für Rate-Limits | akzeptiert (B4, Lead-Prüfung offen) | [ADR-0018](decisions/ADR-0018-vertrauenswuerdige-proxys.md) |
 | 0019 | Profil, E-Mail-Änderung per Code, geführte Einrichtung | akzeptiert (P1, Lead-Prüfung offen) | [ADR-0019](decisions/ADR-0019-profil-onboarding.md) |
+| 0020 | Darstellung (Akzentfarbe, Farbschema) je Konto | akzeptiert (P2, Nutzerentscheidung 16.10.; Lead-Prüfung offen) | [ADR-0020](decisions/ADR-0020-darstellung-konto.md) |
