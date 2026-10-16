@@ -68,3 +68,7 @@ Mit Erlaubnis des Nutzers: `xcodebuild -allowProvisioningUpdates` mit Team `ABCD
 - Mit dem Personal Team verifiziert (signierte Builds): App Groups auf iOS, watchOS und macOS sowie die Keychain-Gruppe auf iOS. Nicht möglich bleiben Associated Domains.
 - Live Activity ohne Push-Updates: ein im Web oder auf einem anderen Gerät gestarteter Timer erzeugt erst beim nächsten App-Start eine Live Activity.
 - Ungeprüft: Verhalten auf echten Geräten (Widget-Galerie, Intents, Live Activity, Dynamic Island, Steuerzentrale, Keychain-Zugriff der Erweiterung), macOS-Widgets.
+
+## Nachtrag A8 (17.10.2026)
+
+Der Widget-Snapshot enthält zusätzlich `accentHex` und `colorScheme` (nicht geheim; aus den Kontoeinstellungen, ADR-0020). Die Apps laden Akzent und Erscheinungsbild aus dem Konto (`/me/preferences`, Session-Objekt) und schreiben Änderungen entprellt zurück; das App-Symbol bleibt geräteweise. Bekannte Einschränkung: ein einziger lokaler Cache — eine nicht gesendete Änderung von Konto A geht verloren, wenn Konto B sich auf demselben Gerät anmeldet.

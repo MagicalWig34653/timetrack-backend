@@ -97,3 +97,6 @@ Fokus sichtbar (2 px Ring `--ring`, Offset), Tastaturbedienung für alles Intera
 ## Prüfung
 
 Jede Umsetzung belegt Hell/Dunkel, 390 px und Desktop per Screenshot, Kontrastprüfung der Akzentableitung (Tests mit Beispielfarben), Rückfall ohne Transparenz (Emulation `prefers-reduced-transparency`), keine horizontale Scrollbar, Tastaturdurchlauf der Shell.
+
+
+**Bekannte Abweichung Apps ↔ PWA (A8, 16.10.2026):** Verbindlich sind nur die Preset-IDs (`blue, teal, violet, green, orange, pink, graphite, custom`, ADR-0020). Die nativen Farbwerte weichen bei drei Presets von der PWA ab: Türkis #0EA5A4 (PWA #0D9488), Orange #F97316 (PWA #D97706), Rosa #EC4899 (PWA #DB2777); Blau, Violett, Grün, Graphit sind gleich.
