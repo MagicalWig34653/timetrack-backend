@@ -1,7 +1,7 @@
 # Lokale Container und spätere Swarm-Auslieferung
 
 Stand: 15.10.2026. Vorhanden ist ausschließlich die **Entwicklungsumgebung** (Compose-Projekt `timetrack-dev`);
-ein produktionsnahes Compose-/Swarm-Stack-File gibt es noch nicht (Backlog in `../docs/ARBEITSPLAN.md`).
+das produktionsnahe Swarm-Stack-File `swarm/stack.yaml` (Paket B3) ist als Vorlage vorhanden, aber noch nicht in einem Swarm deployt. Betrieb, Backup, Reverse Proxy: [../docs/BETRIEB.md](../docs/BETRIEB.md).
 
 ## Was vorhanden ist
 
@@ -11,6 +11,10 @@ ein produktionsnahes Compose-/Swarm-Stack-File gibt es noch nicht (Backlog in `.
 | `../Dockerfile` | Mehrstufiger Build (`swift:*-noble` → `-noble-slim`), Healthcheck `/health`, Einstieg `/app/App serve` auf Port 8080 |
 | `../scripts/dev-env.sh` | Start/Stopp/Status/Multi-Arch-Build der Dev-Umgebung (nie `-v`, nie `prune`) |
 | `../.env.example` | Vorlage der Konfiguration; `scripts/dev-env.sh init` erzeugt `.env` |
+| `swarm/stack.yaml`, `swarm/stack.env.example` | Swarm-Stack (Backend + einmaliger Migrationsjob, Docker-Secrets, Healthcheck, Update/Rollback, Limits); Vorlage, per `docker stack config` geprüft |
+| `../scripts/backup.sh`, `restore.sh`, `test-restore.sh` | Sicherung/Wiederherstellung und Beweislauf (`../docs/BETRIEB.md`) |
+| `../scripts/docker-entrypoint.sh` | Image-Einstiegspunkt: `VAR_FILE` (Docker-Secrets) nach `VAR`, dann `/app/App` |
+| `../scripts/check-all.sh`, `test-image-smoke.sh` | Gesamtprüfung; Container-Smoke-Test des Produktions-Images |
 | `dex/config.yaml` | Konfiguration des Dex-Testproviders |
 | `pwa-empty/` | leeres Standardverzeichnis, das als `/srv/pwa` eingebunden wird, bis eine gebaute PWA bereitgestellt wird (`PWA_STATIC_HOST_DIR`) |
 | `pwa-static/` | lokale, ignorierte Kopie des PWA-Builds für die Testdomain (nicht versioniert) |
@@ -21,11 +25,9 @@ Befehle und Konfiguration: `../EINRICHTUNG.md`, Testdienste: `../docs/TESTUMGEBU
 
 ## Offen (Produktionsziel)
 
-- Swarm-/Produktions-Stack mit Secrets (statt `.env`), Healthchecks, Logging/Metriken, Update-Strategie.
-- Einmaliger, koordinierter Migrationsschritt statt `AUTO_MIGRATE` in jedem Replikat; MariaDB für mehrere Replikate,
-  SQLite nur als eine Instanz auf persistentem Volume (nie geteilt).
-- Vertrauenswürdige Proxy-Header für die Client-IP (Rate-Limits nutzen derzeit die Peer-IP).
-- Backup/Restore (DB, Dateien, `STORAGE_SECRET_KEY`), amd64-Nachweis für den aktuellen Stand (bisher nur emuliert, SQLite, Stand 14.10.).
+- Reales Swarm-Deployment der Vorlage (Secrets-Einhängung, Job, Rollback) ist nicht erprobt.
+- Vertrauenswürdige Proxy-Header für die Client-IP fehlen im Backend (Rate-Limits nutzen die Peer-IP; Risiko und Abhilfe: `../docs/BETRIEB.md`, Abschnitt 6).
+- Metriken (kein `/metrics`), zeitgesteuerte Backups, S3-Backup gegen echtes S3, amd64-Nachweis siehe `../docs/handoffs/B3.md`.
 
 Ziele: Linux amd64/arm64, MariaDB empfohlen, statische PWA ohne Node-Laufzeit. Entwurf: `../docs/ARCHITEKTUR.md`.
 Reverse Proxy, Domains und TLS stellt der Betreiber; das Projekt provisioniert sie nicht.

@@ -1,0 +1,158 @@
+# Timetrack production-like Swarm stack (backend + one-shot migration job).
+# Deploy:   docker stack deploy --with-registry-auth -c deploy/swarm/stack.yaml timetrack
+# Check:    docker stack config -c deploy/swarm/stack.yaml        (renders and validates without deploying)
+# Full procedure, prerequisites and reverse-proxy requirements: docs/BETRIEB.md. Variables: deploy/swarm/stack.env.example.
+#
+# Not part of this file (the operator provides them, nothing is provisioned here):
+#   - the MariaDB (existing server, DB_HOST) with an empty database and a user for it
+#   - the image (TIMETRACK_IMAGE, built from the Dockerfile and pushed to a registry the nodes can pull from)
+#   - the external overlay network of the reverse proxy and the Docker secrets listed below
+#   - the built PWA directory (bind mount, PWA_HOST_DIR) and the reverse proxy itself
+# No `build:` here: `docker stack deploy` ignores it.
+
+services:
+  # One-shot schema migration (Swarm job). Run it BEFORE rolling out a new image:
+  #   docker service update --force --image "$TIMETRACK_IMAGE" timetrack_migrate     # re-run the job with the new image (not tried on a real swarm)
+  # The backend service never migrates (AUTO_MIGRATE=false) and reports /ready = 503 until the schema is current.
+  migrate:
+    image: ${TIMETRACK_IMAGE:?set TIMETRACK_IMAGE}
+    command: ["migrate", "--yes", "--env", "production"]
+    # Least privilege: only what the schema migration needs (database access); no storage or push keys.
+    environment:
+      DATABASE_DRIVER: mariadb
+      DB_HOST: ${DB_HOST:?set DB_HOST}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_NAME: ${DB_NAME:-timetrack}
+      DB_USER: ${DB_USER:-timetrack}
+      DB_PASSWORD_FILE: /run/secrets/tt_db_password
+      DB_TLS: ${DB_TLS:-required}
+      AUTO_MIGRATE: "false"
+    secrets:
+      - tt_db_password
+    read_only: true
+    tmpfs:
+      - /tmp
+    logging: &logging
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+    deploy:
+      mode: replicated-job
+      replicas: 1
+      restart_policy:
+        condition: none
+      resources:
+        limits: { cpus: "1.0", memory: 512M }
+
+  backend:
+    image: ${TIMETRACK_IMAGE:?set TIMETRACK_IMAGE}
+    # Default command of the image: serve --env production --hostname 0.0.0.0 --port 8080
+    environment:
+      DATABASE_DRIVER: mariadb
+      DB_HOST: ${DB_HOST:?set DB_HOST}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_NAME: ${DB_NAME:-timetrack}
+      DB_USER: ${DB_USER:-timetrack}
+      DB_PASSWORD_FILE: /run/secrets/tt_db_password
+      DB_TLS: ${DB_TLS:-required}
+      AUTO_MIGRATE: "false"
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:?set WEBAUTHN_RP_ID (public host name)}
+      WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-Timetrack}
+      WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN:?set WEBAUTHN_ORIGIN (https://host)}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL (https://host)}
+      APPLE_APP_IDS: ${APPLE_APP_IDS:-}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-336}
+      STORAGE_SECRET_KEY_FILE: /run/secrets/tt_storage_secret_key
+      VAPID_PRIVATE_KEY_FILE: /run/secrets/tt_vapid_private_key
+      VAPID_SUBJECT: ${VAPID_SUBJECT:?set VAPID_SUBJECT (mailto or https contact URI)}
+      NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-true}
+      MODULES_DISABLED: ${MODULES_DISABLED:-}
+      PWA_STATIC_DIR: /srv/pwa
+      # Mail recovery (optional): set SMTP_HOST and add the commented SMTP secret below.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_TLS: ${SMTP_TLS:-starttls}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_USER: ${SMTP_USER:-}
+      # SMTP_PASSWORD_FILE: /run/secrets/tt_smtp_password
+      # OIDC (optional): OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_NAME, OIDC_SCOPES and
+      # OIDC_CLIENT_SECRET_FILE: /run/secrets/tt_oidc_client_secret
+    secrets:
+      - tt_db_password
+      - tt_storage_secret_key
+      - tt_vapid_private_key
+      # - tt_smtp_password
+      # - tt_oidc_client_secret
+    volumes:
+      # Local file storage rule (admin sets the path to /data/files). A node-local named volume only works with
+      # a single node (placement constraint below); for several nodes use a shared volume (NFS driver) or S3/DB.
+      - type: volume
+        source: timetrack-files
+        target: /data/files
+      - type: bind
+        source: ${PWA_HOST_DIR:?set PWA_HOST_DIR (absolute path of the built PWA on the node)}
+        target: /srv/pwa
+        read_only: true
+    networks: [proxy, default]
+    # No published ports: the reverse proxy reaches http://backend:8080 on the shared overlay network.
+    # Proxy outside Swarm? Uncomment (host mode keeps the TCP source address; still the proxy's address):
+    # ports:
+    #   - { target: 8080, published: 18080, protocol: tcp, mode: host }
+    # The container check uses /ready (database reachable AND all migrations applied): a new image whose schema has
+    # not been migrated never becomes healthy, so the rolling update stops and rolls back instead of serving errors.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/ready"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+    read_only: true
+    tmpfs:
+      - /tmp
+    stop_grace_period: 30s
+    logging: *logging
+    deploy:
+      replicas: ${BACKEND_REPLICAS:-1}
+      placement:
+        constraints:
+          - ${BACKEND_PLACEMENT:-node.role == manager}
+      resources:
+        limits: { cpus: "1.0", memory: 768M }
+        reservations: { cpus: "0.1", memory: 128M }
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 5
+        window: 120s
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        failure_action: rollback
+        monitor: 60s
+        max_failure_ratio: 0
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+        order: start-first
+        failure_action: pause
+        monitor: 30s
+
+networks:
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-timetrack-proxy}
+
+volumes:
+  timetrack-files:
+
+secrets:
+  tt_db_password:
+    external: true
+  tt_storage_secret_key:
+    external: true
+  tt_vapid_private_key:
+    external: true
+  # tt_smtp_password:
+  #   external: true
+  # tt_oidc_client_secret:
+  #   external: true

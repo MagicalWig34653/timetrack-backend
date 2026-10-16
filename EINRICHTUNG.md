@@ -111,7 +111,7 @@ SQLITE_PATH=/tmp/tt.sqlite AUTO_MIGRATE=true swift run --build-system native App
 scripts/dev-env.sh up-app          # baut das Image und startet db + backend (Profil app), Port 18080
 scripts/dev-env.sh up-sqlite       # nur Backend mit SQLite im Volume timetrack-dev-sqlite (Profil sqlite)
 docker compose --project-name timetrack-dev --profile app run --rm -T backend bootstrap-admin
-scripts/dev-env.sh build-multiarch # amd64+arm64 per buildx als OCI-Archiv, nicht gepusht (amd64 nur emuliert, QEMU_LIMIT=1)
+scripts/dev-env.sh build-multiarch # amd64+arm64 per buildx als OCI-Archiv, nicht gepusht (amd64 nur emuliert, QEMU_LIMIT=1; siehe unten)
 ```
 
 WebAuthn lokal immer über `http://localhost:<port>` (RP-ID `localhost`), nicht über `127.0.0.1`.
@@ -134,7 +134,36 @@ docker build --target build .
 Die Datenbank muss vor dem Lauf existieren; der Anlege-Befehl ist aus `compose.yaml` abgeleitet und nicht erneut
 ausgeführt (die Handoffs C18/C19 legen die Datenbank manuell an und löschen sie danach). Letzter dokumentierter
 Lauf des Leads: 193 Tests, 0 Fehler, mit frischer MariaDB-Testdatenbank 0 übersprungen (`docs/STATUS.md`).
-Ein pauschales `make check` oder `scripts/check-all.sh` gibt es nicht (Backlog, `docs/ARBEITSPLAN.md`).
+### Alles prüfen: `scripts/check-all.sh`
+
+Ein Befehl für den lokalen Gesamtlauf: `swift build --build-system native`, `swift test` auf SQLite, optional MariaDB (nur wenn
+`MARIADB_TEST_HOST` gesetzt ist, Voraussetzung wie oben), Parsen von `contracts/openapi.yaml` (OpenAPI 3.x, Version, doppelte `operationId`)
+und der YAML-Dateien unter `deploy/`, `bash -n` und `shellcheck` (falls installiert) für `scripts/`, `docker compose config` (alle Profile) und
+`docker stack config` für `deploy/swarm/stack.yaml` (nichts wird gestartet oder deployt). Am Ende eine PASS/FAIL/SKIP-Tabelle; Exit-Code 1 bei einem Fehler.
+
+```sh
+scripts/check-all.sh                 # alles (Swift und Docker nötig; fehlende Werkzeuge ergeben SKIP)
+scripts/check-all.sh --fast          # nur statische Prüfungen (YAML, Shell, Compose/Stack), ohne Build und Tests
+scripts/check-all.sh --with-restore  # zusätzlich scripts/test-restore.sh (Dev-MariaDB-Container, Port 18150/18151)
+```
+
+### Backup, Restore und Container-Nachweise
+
+Verfahren, Archivaufbau und Grenzen: [docs/BETRIEB.md](docs/BETRIEB.md). Kurzform:
+
+```sh
+scripts/backup.sh  --driver sqlite  --sqlite-path /pfad/timetrack.sqlite --local-files /pfad/files --out /backups
+scripts/restore.sh --from /backups/timetrack-backup-<UTC> --sqlite-path /pfad/timetrack.sqlite --files-target /pfad/files
+scripts/test-restore.sh [sqlite|mariadb|all]   # Beweislauf mit Wegwerfdaten (braucht .build/debug/App und den Dev-DB-Container)
+docker build -t timetrack-dev-b3-backend:test . && scripts/test-image-smoke.sh   # Produktions-Container-Verhalten (read-only, *_FILE-Secrets)
+```
+
+### amd64 und Multi-Arch
+
+`scripts/dev-env.sh build-multiarch` baut amd64 und arm64 (OCI-Archiv, nicht gepusht). Auf dem arm64-Mac läuft amd64 unter QEMU;
+`QEMU_LIMIT=1` (Standard im Skript, Docker-Build-Argument) begrenzt SwiftPM auf wenige CPUs, sonst stürzt es unter Emulation ab. Nur amd64 geladen:
+`docker buildx build --platform linux/amd64 --build-arg QEMU_LIMIT=1 -t timetrack-dev-b3-amd64 --load .` (danach `docker rmi timetrack-dev-b3-amd64`).
+Ergebnis und Dauer: docs/BETRIEB.md, Abschnitt 7, und `docs/handoffs/B3.md`.
 
 ### PWA (Repo timetrack-pwa)
 
@@ -188,6 +217,9 @@ Nie ein echtes `.env` committen. Ungültige Werte brechen den Start mit klarer M
 | `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | – | Web Push; beide nötig, sonst `available:false` |
 | `PUSH_ALLOWED_HOSTS` | Standard-Allowlist | kommagetrennt, erweitert die erlaubten Push-Dienste (ADR-0011) |
 | `MODULES_DISABLED` | – | **geplant** (ADR-0012, Paket C20, noch nicht im Code): kommagetrennt, z. B. `reports,mcp`; schaltet Module serverweit ab |
+
+`*_FILE`: Das Backend liest nur die Variablen selbst. Das Container-Image übersetzt im Einstiegspunkt `DB_PASSWORD_FILE`, `STORAGE_SECRET_KEY_FILE`,
+`VAPID_PRIVATE_KEY_FILE`, `SMTP_PASSWORD_FILE`, `OIDC_CLIENT_SECRET_FILE` in die jeweilige Variable (Docker/Swarm-Secrets, `docs/BETRIEB.md` 5.4); bei `swift run` gilt das nicht.
 
 Schlüssel erzeugen:
 

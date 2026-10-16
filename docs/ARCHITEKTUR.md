@@ -33,7 +33,7 @@ keine gemeinsam beschreibbare SQLite-Datei im Swarm. Migrationen einmalig koordi
 Umsetzungsstand: Das Backend ist ein modularer Monolith (Swift-Paket `TimetrackKit`, Einstieg `App`); REST unter `/api/v1`
 nach `contracts/openapi.yaml` (v0.9.0), `/mcp` und `/oauth/*` als Adapter derselben Dienste. Der Erinnerungs-Scheduler läuft
 im Prozess mit DB-Lease (`job_leases`, ADR-0010), kein eigener Worker-Prozess und kein Redis. Migrationen laufen derzeit über
-`AUTO_MIGRATE=true` beim Start; ein expliziter, einmaliger Migrationsschritt für den Swarm-Betrieb ist **offen**. Die PWA wird vom
+`AUTO_MIGRATE=true` beim Start; für den Swarm-Betrieb gibt es einen einmaligen Migrationsjob mit `AUTO_MIGRATE=false` (`deploy/swarm/stack.yaml`, `BETRIEB.md`; Stack nicht real deployt). Die PWA wird vom
 Backend statisch ausgeliefert (`PWA_STATIC_DIR`). Ein automatisierter Abgleich Implementierung ↔ OpenAPI-Vertrag fehlt (Backlog).
 
 ## 2. Passkeys, Einladungen und OIDC
@@ -184,8 +184,8 @@ Umsetzungsstand (ADR-0006, ADR-0011): Admin-Regeln (`/admin/storage`, geordnete 
 In-Process-Fake geprüft; S3-Secret mit AES-256-GCM unter `STORAGE_SECRET_KEY`; Dateimetadaten (Backend, Schlüssel, Größe,
 SHA-256, Eigentümer) in der DB; Original-Standorte werden gebunden (C19), Regeländerung gilt nur für neue Uploads. XLSX- und
 PDF-Erzeugung per **eigener Writer** (OOXML über ZIPFoundation, PDF mit Helvetica/WinAnsi), Import liest XLSX mit Foundation-`XMLParser`.
-**Offen**: Migration bestehender Dateien zwischen Backends, periodischer Speicher-Aufräumjob, dokumentiertes und getestetes
-Backup/Restore.
+**Offen**: Migration bestehender Dateien zwischen Backends, periodischer Speicher-Aufräumjob. Backup/Restore (DB + lokale Dateien +
+Manifest; S3-Objekte und Secrets getrennt) ist in `BETRIEB.md` beschrieben und mit `scripts/test-restore.sh` auf SQLite und MariaDB belegt (B3).
 
 ## 7. Kalender, Push und KI
 
