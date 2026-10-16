@@ -49,3 +49,4 @@ und keine Nutzerentscheidungen (siehe jeweilige Statuszeile). Nummer 0004 existi
 | 0013 | Arbeitszeit-Tabelle (Import/Export) | akzeptiert (inkl. Nachträge) | [ADR-0013](decisions/ADR-0013-arbeitszeit-tabelle.md) |
 | 0014 | Designsprache | akzeptiert | [ADR-0014](decisions/ADR-0014-designsprache.md) |
 | 0015 | Native Clients: Anmeldung und API-Zugriff | Entwurf (A1); offene Fragen im ADR | [ADR-0015](decisions/ADR-0015-native-clients.md) |
+| 0017 | Wartung: Aufräumjob, Review-Restpunkte, MariaDB-Isolation unter `auth_lock` | akzeptiert (B2, Lead-Prüfung offen) | [ADR-0017](decisions/ADR-0017-wartung.md) |

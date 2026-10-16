@@ -4,7 +4,7 @@ import FluentMySQLDriver
 import FluentSQLiteDriver
 
 public func configure(_ app: Application, configuration: Configuration? = nil, mailSender: (any MailSender)? = nil,
-                      notifications: NotificationOptions = NotificationOptions()) async throws {
+                      notifications: NotificationOptions = NotificationOptions(), maintenance: MaintenanceOptions? = nil) async throws {
     let config = try configuration ?? Configuration()
     switch config.databaseDriver {
     case .sqlite:
@@ -50,6 +50,7 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
     registerRoutes(app, service: service)
     app.installNotifications(auth: service, options: notifications)
     if let runtime = app.notificationRuntime { registerNotificationRoutes(app, auth: service, service: runtime.service) }
+    app.installMaintenance(auth: service, options: try maintenance ?? MaintenanceOptions())
 }
 
 public struct StatusResponse: Content { public let status: String }

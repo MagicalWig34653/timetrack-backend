@@ -285,8 +285,8 @@ struct StorageService: Sendable {
     /// Retries removals of `deleting` and `failed` files and of `pending` files abandoned for an hour.
     /// Also drops attachment links whose absence no longer exists. Returns the number of purged files.
     @discardableResult
-    func cleanup(limit: Int = StorageLimits.cleanupBatch, pendingOlderThan: TimeInterval = 3600) async throws -> Int {
-        let cutoff = Date().addingTimeInterval(-pendingOlderThan)
+    func cleanup(limit: Int = StorageLimits.cleanupBatch, pendingOlderThan: TimeInterval = 3600, now: Date = Date()) async throws -> Int {
+        let cutoff = now.addingTimeInterval(-pendingOlderThan)
         let rows = try await StoredFileRecord.query(on: db)
             .group(.or) { group in
                 group.filter(\.$state == FileState.deleting.rawValue).filter(\.$state == FileState.failed.rawValue)

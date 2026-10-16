@@ -44,6 +44,7 @@ func registerNotificationRoutes(_ app: Application, auth: AuthService, service: 
         let owner = try account(req)
         return try timeResponse(await service.subscribe(owner, timeDecode(PushSubscriptionInput.self, request: req), on: req.db), status: .created)
     }
+    registerPushSubscriptionReplaceRoute(api, service: service, account: account)
     api.delete("me", "push-subscriptions", ":id") { req async throws -> Response in
         try await service.unsubscribe(account(req), id: id(req), on: req.db); return Response(status: .noContent)
     }

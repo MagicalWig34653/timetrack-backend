@@ -129,9 +129,9 @@ Nutzerentscheidung 15.10.: Module abschaltbar durch Betreiber **und** je Konto (
 1. **Kontenverwaltung**: Admin-Liste der Konten, Deaktivieren/Reaktivieren, Rollenwechsel, Sitzungen widerrufen, Konto löschen; Selbstauskunft/Selbstlöschung und Export der eigenen Daten (ZIP aus JSON/CSV + Dateien).
 2. **Backup/Restore**: dokumentiertes und getestetes Verfahren (DB + Dateien + `STORAGE_SECRET_KEY`), Restore-Test auf MariaDB und SQLite; ARCHITEKTUR verlangt gemeinsames Restore.
 3. **Betrieb**: produktionsnahes Compose/Swarm-Stack (bisher nur Dev-Compose), expliziter Migrationsschritt, Healthchecks/Logging/Metriken, vertrauenswürdige Proxy-Header für Client-IP (Rate-Limits), amd64-Nachweis für den aktuellen Stand, CI-Skript `scripts/check-all.sh`.
-4. **Aufräumjobs**: abgelaufene Sitzungen/Challenges/OAuth-/OIDC-States/Codes/Tokens, `rate_limit_events`, `mcp_audit`-Retention, hängende Import-Jobs, Speicher-Cleanup periodisch (bisher nur nach DELETE).
+4. **Aufräumjobs** (umgesetzt in B2, Lead-Prüfung offen, ADR-0017): abgelaufene Sitzungen/Challenges/OAuth-/OIDC-States/Codes/Tokens, `rate_limit_events`, `mcp_audit`-Retention, hängende Import-Jobs, Speicher-Cleanup periodisch (bisher nur nach DELETE).
 5. **Vertragstreue**: automatisierter Abgleich Implementierung ↔ `contracts/openapi.yaml` (Contract-Tests/Linter), Typgenerierung für Clients.
-6. **Restpunkte Review/Tests**: gleichzeitiges Anlegen desselben Lernfelds liefert 500 statt 409; `pushsubscriptionchange`; weitere Push-Dienste (`PUSH_ALLOWED_HOSTS`); Import mit 20 000 Zeilen und Blobs nahe 64 MiB auf MariaDB messen; globale `auth_lock`-Serialisierung bewerten.
+6. **Restpunkte Review/Tests** (B2 umgesetzt, Lead-Prüfung offen: Lernfeld-409, `pushsubscriptionchange`, `PUSH_ALLOWED_HOSTS`-Vorschlag, `auth_lock`-Bewertung samt MariaDB-Isolationsfix; Import mit 20 000 Zeilen/Blobs nahe 64 MiB weiter offen): gleichzeitiges Anlegen desselben Lernfelds liefert 500 statt 409; `pushsubscriptionchange`; weitere Push-Dienste (`PUSH_ALLOWED_HOSTS`); Import mit 20 000 Zeilen und Blobs nahe 64 MiB auf MariaDB messen; globale `auth_lock`-Serialisierung bewerten.
 7. **Fachlich/Produkt**: IHK-Ausgabeformat, Rechtsprofile (Jugendliche), Onboarding (Ausbildungsstichtag, Pausenfenster), Profilpflege (Anzeigename, E-Mail), Selbstständigenfunktionen (Kunden/Projekte/Sätze), Kalenderbrücke und KI-Worker-Schnittstellen (Job-Queue) für Etappe 5/6.
 
 ## Etappe 4e: Arbeitszeit-Tabelle als Import-/Exportprofil (15.10.2026)
@@ -167,4 +167,10 @@ Etappe 5 (Native Apps, Repo timetrack-apple), Start 16.10.2026:
 | A2 | Backend: `/.well-known/apple-app-site-association` (`APPLE_APP_IDS`), WebAuthn-Origin für native Apps | Claude-Agent (Branch a2-aasa) | 4 | integriert (v0.10.4); 236 Tests auf SQLite vom Lead nachgelaufen, MariaDB und Linux-Build laut Agent; echter Apple-Passkey und AASA hinter dem Proxy ungeprüft (Handoff `handoffs/A2.md`) | A1 |
 | A3 | iOS/iPadOS-App (Heute, Zeit, Urlaub read-only, Einstellungen, App Intents) | Claude-Agent | 8 | integriert (Apple `4ab26a2`); 50 Package-Tests und Mac-/iOS-Build vom Lead nachgelaufen, UI-Smoke-Test auf iPhone- und iPad-Simulator laut Agent; Passkey, Intents, Echtgerät, VoiceOver, Dark Mode/Dynamic Type ungeprüft | A1, A2 |
 | A4 | watchOS-App (direkt zum Server, Sitzung per WatchConnectivity vom iPhone) | Claude-Agent | 6 | integriert (Apple `Merge A4`); 59 Package-Tests und Watch-/iOS-/Mac-Build vom Lead nachgelaufen; Simulator-Lauf mit Wegwerf-Backend laut Agent (3 Screenshots); WatchConnectivity nur gegen Mock, nie auf Gerät/Simulator-Paar; Komplikation und Art-Auswahl offen | A3 |
+
+Backend-Wartung (Start 16.10.2026):
+
+| Paket | Inhalt | Verantwortlich | Punkte | Status | Abhängigkeiten |
+| --- | --- | --- | --- | --- | --- |
+| B2 | Aufräumjob (Lease, CLI `maintenance`), Lernfeld-409, `pushsubscriptionchange`-Endpunkt, `PUSH_ALLOWED_HOSTS`-Vorschlag, `auth_lock`-Messung, MariaDB-READ-COMMITTED-Fix (ADR-0017, Vertrag v0.10.5) | Claude-Agent (Branch b2-cleanup) | 8 | umgesetzt, Lead-Prüfung offen | ADR-0011 |
 

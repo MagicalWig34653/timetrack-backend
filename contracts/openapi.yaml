@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.10.4
+  version: 0.10.5
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -41,6 +41,8 @@ info:
     Stage 2 decisions (v0.2.1): a work model `validFrom` may lie in the past but must be later than the previous version's `validFrom` (else 409 model_overlap);
     days on or after it are then evaluated by the new version (explicit user act). Future days are never `provisional`; today and days with a running segment are.
     A second accept of a suggestion returns 409 `suggestion_resolved`. Further codes: timer_already_running, no_running_timer, segment_overlap, stale_version, model_overlap.
+    --- B2 (v0.10.5, additiv; eigene Zeile, damit der Merge mit v0.11.0 einfach bleibt) ---
+    v0.10.5 (B2, ADR-0017): POST /api/v1/me/push-subscriptions/replace für `pushsubscriptionchange` (ersetzt ein Abo atomar, behält Id und wartende Pushes). Gleichzeitiges Anlegen desselben Lernfelds liefert 409 `learning_field_exists` statt 500. Kein Schemawechsel; Aufräumjob (`MAINTENANCE_INTERVAL_MINUTES`, CLI `maintenance`) ohne API-Änderung.
 servers:
   - url: /
 paths:
@@ -1142,6 +1144,19 @@ paths:
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [endpoint, keys], properties: { endpoint: { type: string, format: uri }, keys: { type: object, required: [p256dh, auth], properties: { p256dh: { type: string }, auth: { type: string } } }, userAgent: { type: string, maxLength: 200 } } } } } }
       responses: { '201': { description: registriert, content: { application/json: { schema: { $ref: '#/components/schemas/PushSubscriptionInfo' } } } }, '501': { $ref: '#/components/responses/NotImplemented' } }
+  /api/v1/me/push-subscriptions/replace:
+    post:
+      operationId: replacePushSubscription
+      description: |
+        Für das `pushsubscriptionchange`-Ereignis des Service Workers (B2, ADR-0017). Tauscht das Abo mit `previousEndpoint`
+        (= `oldSubscription.endpoint`, nur im eigenen Konto gesucht) atomar gegen das neue aus: gleiche Id, neue Endpunkt-Adresse und Schlüssel,
+        wartende Pushes bleiben erhalten (200). Ist der neue Endpunkt bereits registriert, bleibt diese Zeile bestehen und die alte wird entfernt (200).
+        Fehlt `previousEndpoint` oder ist er unbekannt, wird wie bei POST /me/push-subscriptions neu registriert (201, Limit 10 Abos, sonst 409
+        too_many_subscriptions). Endpunkt-Regeln und Schlüsselprüfung wie bei der Registrierung (400 bad_request); 501 push_unavailable ohne VAPID.
+        Schreibende Anfrage: Sitzung und `X-CSRF-Token` (der Service Worker liest ihn über GET /api/v1/auth/session).
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [endpoint, keys], properties: { previousEndpoint: { type: string, maxLength: 2048, description: alter Endpunkt (oldSubscription.endpoint), optional }, endpoint: { type: string, format: uri }, keys: { type: object, required: [p256dh, auth], properties: { p256dh: { type: string }, auth: { type: string } } }, userAgent: { type: string, maxLength: 200 } } } } } }
+      responses: { '200': { description: ersetzt, content: { application/json: { schema: { $ref: '#/components/schemas/PushSubscriptionInfo' } } } }, '201': { description: neu registriert, content: { application/json: { schema: { $ref: '#/components/schemas/PushSubscriptionInfo' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '409': { $ref: '#/components/responses/Conflict' }, '501': { $ref: '#/components/responses/NotImplemented' } }
   /api/v1/me/push-subscriptions/{id}:
     delete:
       operationId: deletePushSubscription
