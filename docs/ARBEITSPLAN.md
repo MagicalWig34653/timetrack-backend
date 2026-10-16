@@ -138,7 +138,7 @@ Nutzerentscheidung 15.10.: Module abschaltbar durch Betreiber **und** je Konto (
 
 | ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
 | --- | --- | --- | --- | --- | --- |
-| B1 | Kontenverwaltung: Admin-API (Liste, deaktivieren, Rolle, Sitzungen, löschen), `GET /me/export`, `DELETE /me`, Kaskade inkl. Dateien, Vertrag v0.11.0, ADR-0016 | Claude-Agent | 8 | umgesetzt, Lead-Prüfung offen (Branch `b1-accounts`, nicht gemerged; Handoff `handoffs/B1.md`) | – |
+| B1 | Kontenverwaltung: Admin-API (Liste, deaktivieren, Rolle, Sitzungen, löschen), `GET /me/export`, `DELETE /me`, Kaskade inkl. Dateien, Vertrag v0.11.0, ADR-0016 | Claude-Agent | 8 | integriert (Vertrag v0.11.0); 250 Tests auf SQLite vom Lead nachgelaufen, MariaDB (250) und Linux-Build laut Agent; S3-Löschung, sehr große Exporte und PWA-Oberfläche ungeprüft/offen (Branch `b1-accounts`, nicht gemerged; Handoff `handoffs/B1.md`) | – |
 
 ## Etappe 4e: Arbeitszeit-Tabelle als Import-/Exportprofil (15.10.2026)
 
