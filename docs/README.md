@@ -45,4 +45,7 @@ und keine Nutzerentscheidungen (siehe jeweilige Statuszeile). Nummer 0004 existi
 | 0009 | MCP-Server, OAuth-Server, persönliche Tokens | akzeptiert (Lead 15.10.); ergänzt durch ADR-0011 | [ADR-0009](decisions/ADR-0009-mcp-oauth-tokens.md) |
 | 0010 | Hinweise, Web Push, PWA-Installierbarkeit | akzeptiert (Lead 15.10.); ergänzt durch ADR-0011 | [ADR-0010](decisions/ADR-0010-benachrichtigungen-push-pwa.md) |
 | 0011 | C19: Speicherbindung, OAuth- und Push-Härtung | akzeptiert (Reparaturauftrag 15.10.) | [ADR-0011](decisions/ADR-0011-c19-review-haertung.md) |
-| 0012 | Abschaltbare Module (Server und Konto) | akzeptiert (Nutzerentscheidung 15.10.); Umsetzung C20/L17 noch offen | [ADR-0012](decisions/ADR-0012-modulschalter.md) |
+| 0012 | Abschaltbare Module (Server und Konto) | akzeptiert (Nutzerentscheidung 15.10.); umgesetzt (C20/L17) | [ADR-0012](decisions/ADR-0012-modulschalter.md) |
+| 0013 | Arbeitszeit-Tabelle (Import/Export) | akzeptiert (inkl. Nachträge) | [ADR-0013](decisions/ADR-0013-arbeitszeit-tabelle.md) |
+| 0014 | Designsprache | akzeptiert | [ADR-0014](decisions/ADR-0014-designsprache.md) |
+| 0015 | Native Clients: Anmeldung und API-Zugriff | Entwurf (A1); offene Fragen im ADR | [ADR-0015](decisions/ADR-0015-native-clients.md) |

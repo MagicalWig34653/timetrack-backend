@@ -158,3 +158,13 @@ Nutzerwunsch 15.10.: Gestaltung eines bereitgestellten UI-Entwurfs festhalten un
 | L21 | PWA: Designsprache umsetzen (Tokens, Shell, Seitenkopf, Karten, Glas, Akzent, Barrierefreiheit) | Claude-Agent | 10 | integriert (PWA `b86cb77`); 500 Unit, 69 Mock-E2E, 6 PWA-Build-Specs, 156 Echt-E2E vom Lead (Last ~250 verursacht einzelne Timeouts bei Gesamtläufen); Screenshots Heute/Kalender gesichtet | ADR-0014 |
 | C23 | Import-Verfeinerung nach Diagnose: Feiertagszeiten verwerfen (`holidayTimes`), Teilgutschriften als Arbeit (`partialCredit`), getrennte Tabellensalden, `firstContentDate` | Codex | 6 | integriert (Merge `b02a2c3`); 231 Tests inkl. MariaDB (Lead) | L20, Nutzerentscheidung 15.10. |
 | L22 | PWA-Import-Assistent für C23 (Optionen, Warnungen, Salden, Modellbeginn-Hinweis) im neuen Design | Claude-Agent | 4 | integriert (PWA e734ea5; check 0 Fehler, 522 Unit, 71 Mock-E2E, 6 PWA-Build, 158 Echt-E2E; live auf der Testinstanz) | C23, L21 |
+
+Etappe 5 (Native Apps, Repo timetrack-apple), Start 16.10.2026:
+
+| Paket | Inhalt | Verantwortlich | Punkte | Status | Abhängigkeiten |
+| --- | --- | --- | --- | --- | --- |
+| A1 | Swift-Paket TimetrackCore (API-Client, Auth, Stores) + macOS-App (Heute, Zeit, Einstellungen, Menüleiste) | Claude-Agent | 10 | integriert (Apple `fade61a`); 43 Tests inkl. Integrationslauf gegen Wegwerf-Backend, macOS- und iOS-Build vom Lead nachgelaufen; Oberfläche nie gesichtet (kein Screenshot möglich) | ADR-0015 |
+| A2 | Backend: `/.well-known/apple-app-site-association` (`APPLE_APP_IDS`), WebAuthn-Origin für native Apps | offen | – | geplant; braucht Domain mit TLS | A1 |
+| A3 | iOS/iPadOS-App | offen | – | geplant | A1 |
+| A4 | watchOS-App | offen | – | geplant | A3 |
+
