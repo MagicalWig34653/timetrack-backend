@@ -207,4 +207,4 @@ Claude-Agent in den Worktrees `timetrack-backend-wt/p1` und `timetrack-pwa-wt/p1
 
 | ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
 | --- | --- | --- | --- | --- | --- |
-| P1 | Profilbearbeitung (Name, E-Mail per Code), Einrichtungsmerker, Vertrag v0.13.0, ADR-0019; PWA: Profilseite, Einrichtungsassistent, gruppierte Einstellungsnavigation, Mock, Unit-/Mock-/Echt-E2E | Claude-Agent | 8 | umgesetzt, Lead-Prüfung offen | B1, C20 |
+| P1 | Profilbearbeitung (Name, E-Mail per Code), Einrichtungsmerker, Vertrag v0.13.0, ADR-0019; PWA: Profilseite, Einrichtungsassistent, gruppierte Einstellungsnavigation, Mock, Unit-/Mock-/Echt-E2E | Claude-Agent | 8 | integriert (Backend Vertrag v0.13.0; PWA-Merge); Lead: PWA check 0 Fehler, 575 Unit, 81 Mock-E2E, 6 PWA-Build, Echt-E2E profile+stage1 23/23 gegen frisch gebautes Backend; Backend 296 Tests SQLite (bis auf die 2 bekannten lastempfindlichen Push-Tests grün); echte E-Mail-Zustellung ungeprüft; Live-Instanz aktualisiert | B1, C20 |
