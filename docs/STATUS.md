@@ -40,3 +40,7 @@ In Colima laufen fremde Projekte: nur `timetrack-dev-*` anfassen.
 C19 (zwölf Reviewkorrekturen, Zahlen-/Datums-Sweep) ist laut Arbeitsplan integriert (Merge `94bfb1e`); der Lead lief 193 Tests inkl. MariaDB nach.
 Neue Migrationen `BindStorageLocations` und `HardenPushOutbox`. Details: `handoffs/C19.md`, ADR-0011. Der Handoff
 beschreibt noch den Sandbox-Stand vor der Integration (Socket-blockierte Tests); maßgeblich sind die Zahlen oben.
+
+## B1-Prüfstand (Stand 16.10.2026, Branch `b1-accounts`, nicht gemerged)
+
+Kontenverwaltung (Admin-API, Deaktivieren, Rollen, Sitzungen widerrufen, Löschen mit Kaskade inkl. Dateien), `GET /me/export` und `DELETE /me`; Vertrag v0.11.0, ADR-0016, `handoffs/B1.md`. 14 neue Tests (SQLite und MariaDB). Lead-Prüfung und PWA-Oberfläche offen; S3-Löschpfad nur über den gemeinsamen `purge`, nicht gegen S3Mock getestet.
