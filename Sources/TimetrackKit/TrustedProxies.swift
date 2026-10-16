@@ -71,7 +71,8 @@ struct CIDR: Equatable, Sendable {
             written = value
         }
         let length = mapped ? written - 96 : written
-        guard length >= 0 else { throw CIDRError(entry: raw) }
+        // A /0 network would trust every peer and defeat the spoofing protection, so it is rejected.
+        guard length > 0 else { throw CIDRError(entry: raw) }
         network = Self.masked(address.bytes, prefix: length)
         prefix = length
     }

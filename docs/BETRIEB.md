@@ -238,7 +238,7 @@ Regeln der Auflösung:
 - Gegenstelle vertrauenswürdig: `X-Forwarded-For` wird **von rechts** gelesen; vertrauenswürdige Hops werden übersprungen, die erste nicht vertrauenswürdige Adresse ist der Client.
   Vom Angreifer vorangestellte Einträge links davon werden nie gelesen. Fehlt der Header, ist ein Eintrag keine IP (Ports `1.2.3.4:5` und `[v6]:5` werden toleriert) oder sind alle Hops vertrauenswürdig, gilt die Gegenstelle.
 - IPv4-gemappte IPv6-Adressen (`::ffff:a.b.c.d`) werden zu IPv4. Für das Rate-Limit werden IPv6-Clients nach **/64** zusammengefasst (ein Anschluss besitzt üblicherweise ein ganzes /64; sonst ließe sich die Grenze mit beliebigen Adressen umgehen). IPv4 bleibt pro Adresse. Hinter CGNAT teilen sich viele Nutzer eine IPv4-Adresse und damit einen Zähler; das ist hier nicht lösbar.
-- `0.0.0.0/0` ist erlaubt, hebt den Schutz aber auf (jeder könnte den Header setzen). Nicht verwenden.
+- `/0`-Netze (`0.0.0.0/0`, `::/0`) werden abgelehnt (Startfehler), weil sie jeden Absender als Proxy behandeln würden.
 - Im Swarm kann das Routing Mesh die Quelladresse verändern (SNAT); der Proxy sollte im Overlay-Netz direkt angesprochen werden, sonst sieht das Backend nur eine Mesh-Adresse.
 
 Weiterhin sinnvoll: zusätzliches Rate-Limit am Proxy für `/api/v1/auth/`, `/api/v1/me/recovery/`, `/oauth/`, und das Backend nicht öffentlich veröffentlichen.

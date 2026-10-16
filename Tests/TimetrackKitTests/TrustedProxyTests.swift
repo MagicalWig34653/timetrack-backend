@@ -14,7 +14,7 @@ final class TrustedProxyTests: XCTestCase, @unchecked Sendable {
     // MARK: CIDR parsing
 
     func testCIDRParsingAcceptsAndRejects() throws {
-        for good in ["10.0.0.0/8", "10.1.2.3", "0.0.0.0/0", "192.168.1.7/32", "fd00::/8", "::1", "::1/128", "2001:db8::/32", "::ffff:10.0.0.0/104", "::/0"] {
+        for good in ["10.0.0.0/8", "10.1.2.3", "192.168.1.7/32", "fd00::/8", "::1", "::1/128", "2001:db8::/32", "::ffff:10.0.0.0/104"] {
             XCTAssertNoThrow(try CIDR(parsing: good), good)
         }
         for bad in ["", "/8", "10.0.0.0/", "10.0.0.0/33", "10.0.0.0/-1", "10.0.0.0/8/8", "10.0.0/8", "300.1.1.1", "10.0.0.1/ 8",
@@ -34,8 +34,8 @@ final class TrustedProxyTests: XCTestCase, @unchecked Sendable {
         let single = try CIDR(parsing: "172.18.0.5")
         XCTAssertTrue(single.contains(IPAddressValue("172.18.0.5")!))
         XCTAssertFalse(single.contains(IPAddressValue("172.18.0.6")!))
-        let any = try CIDR(parsing: "0.0.0.0/0")
-        XCTAssertTrue(any.contains(IPAddressValue("8.8.8.8")!))
+        // A /0 network would trust every peer and is rejected.
+        XCTAssertThrowsError(try CIDR(parsing: "0.0.0.0/0")); XCTAssertThrowsError(try CIDR(parsing: "::/0"))
         // Non-byte-aligned prefix.
         let odd = try CIDR(parsing: "192.168.4.0/22")
         XCTAssertTrue(odd.contains(IPAddressValue("192.168.7.255")!)); XCTAssertFalse(odd.contains(IPAddressValue("192.168.8.0")!))
