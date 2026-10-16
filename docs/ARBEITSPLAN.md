@@ -138,7 +138,7 @@ Claude-Agent im Worktree `timetrack-backend-wt/b4`, Branch `b4-proxy`.
 
 | ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
 | --- | --- | --- | --- | --- | --- |
-| B4 | `TRUSTED_PROXY_CIDRS`/`TRUSTED_PROXY_HEADER`, zentrale Client-Adresse für alle Rate-Limits, Tests, ADR-0018, Betriebsdoku | Claude-Agent | 3 | umgesetzt, Lead-Prüfung offen | B3 |
+| B4 | `TRUSTED_PROXY_CIDRS`/`TRUSTED_PROXY_HEADER`, zentrale Client-Adresse für alle Rate-Limits, Tests, ADR-0018, Betriebsdoku | Claude-Agent | 3 | integriert; Lead: 12 neue Tests grün, /0-Netze nachträglich abgelehnt; zwei Push-Timing-Tests (C19) schlugen bei Systemlast ~230 fehl, auch in Einzelläufen (Ursache offen, siehe STATUS); kein Test mit echtem Proxy | B3 |
 
 ## Backlog Backend (Stand 15.10.2026, nicht begonnen)
 
@@ -189,6 +189,7 @@ Etappe 5 (Native Apps, Repo timetrack-apple), Start 16.10.2026:
 | A2 | Backend: `/.well-known/apple-app-site-association` (`APPLE_APP_IDS`), WebAuthn-Origin für native Apps | Claude-Agent (Branch a2-aasa) | 4 | integriert (v0.10.4); 236 Tests auf SQLite vom Lead nachgelaufen, MariaDB und Linux-Build laut Agent; echter Apple-Passkey und AASA hinter dem Proxy ungeprüft (Handoff `handoffs/A2.md`) | A1 |
 | A3 | iOS/iPadOS-App (Heute, Zeit, Urlaub read-only, Einstellungen, App Intents) | Claude-Agent | 8 | integriert (Apple `4ab26a2`); 50 Package-Tests und Mac-/iOS-Build vom Lead nachgelaufen, UI-Smoke-Test auf iPhone- und iPad-Simulator laut Agent; Passkey, Intents, Echtgerät, VoiceOver, Dark Mode/Dynamic Type ungeprüft | A1, A2 |
 | A4 | watchOS-App (direkt zum Server, Sitzung per WatchConnectivity vom iPhone) | Claude-Agent | 6 | integriert (Apple `Merge A4`); 59 Package-Tests und Watch-/iOS-/Mac-Build vom Lead nachgelaufen; Simulator-Lauf mit Wegwerf-Backend laut Agent (3 Screenshots); WatchConnectivity nur gegen Mock, nie auf Gerät/Simulator-Paar; Komplikation und Art-Auswahl offen | A3 |
+| L23 | PWA: Konten-Verwaltung, Daten & Datenschutz (Export, Selbstlöschung), `pushsubscriptionchange` im Service Worker | Claude-Agent | 8 | integriert (PWA `714aa09`); check 0 Fehler, 551 Unit, 77 Mock-E2E, 6 PWA-Build (Lead), 10 neue Echt-E2E (Lead, gegen frisch gebautes Backend), Agent: 168 Echt-E2E gesamt; `reauth_required`/503 nur Mock | B1, B2 |
 
 Backend-Wartung (Start 16.10.2026):
 

@@ -44,3 +44,9 @@ beschreibt noch den Sandbox-Stand vor der Integration (Socket-blockierte Tests);
 ## B1-Prüfstand (Stand 16.10.2026, Branch `b1-accounts`, nicht gemerged)
 
 Kontenverwaltung (Admin-API, Deaktivieren, Rollen, Sitzungen widerrufen, Löschen mit Kaskade inkl. Dateien), `GET /me/export` und `DELETE /me`; Vertrag v0.11.0, ADR-0016, `handoffs/B1.md`. 14 neue Tests (SQLite und MariaDB). Lead-Prüfung und PWA-Oberfläche offen; S3-Löschpfad nur über den gemeinsamen `purge`, nicht gegen S3Mock getestet.
+
+## Stand 16.10.2026 (abends)
+
+- Integriert seit dem letzten Stand: Kontenverwaltung B1 (Vertrag 0.11.0), Wartung B2 (0.12.0, inkl. MariaDB-Isolationskorrektur unter `auth_lock`), Betrieb B3 (Backup/Restore bewiesen, Swarm-Stack-Vorlage, `check-all.sh`), vertrauenswürdige Proxys B4, PWA L23. Testinstanz läuft mit diesem Stand (AASA noch aus: `APPLE_APP_IDS` nicht gesetzt).
+- **Offen/bekannt**: `testC19PushClaimsAndHeartbeatSQLite` und `testC19PushStopsAfterLeaseOwnershipLoss` (Lease 0,2 s, Sleeps 350 ms) schlagen auf dem Hauptzweig derzeit fehl, bei Systemlast ~230 auch einzeln; vorher (Merge B2) grün. Ursache nicht abschließend geklärt (Last oder echte Regression durch B3/B4/A2) — nach Lastabfall erneut prüfen, sonst eigenes Paket.
+- amd64-Build nur nativ nachweisbar (Emulation > 60 min unfertig). Echter Swarm, Last, Restore auf anderem Host, echter Apple-Passkey ungeprüft.
