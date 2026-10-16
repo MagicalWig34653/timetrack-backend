@@ -165,6 +165,6 @@ Etappe 5 (Native Apps, Repo timetrack-apple), Start 16.10.2026:
 | --- | --- | --- | --- | --- | --- |
 | A1 | Swift-Paket TimetrackCore (API-Client, Auth, Stores) + macOS-App (Heute, Zeit, Einstellungen, Menüleiste) | Claude-Agent | 10 | integriert (Apple `fade61a`); 43 Tests inkl. Integrationslauf gegen Wegwerf-Backend, macOS- und iOS-Build vom Lead nachgelaufen; Oberfläche nie gesichtet (kein Screenshot möglich) | ADR-0015 |
 | A2 | Backend: `/.well-known/apple-app-site-association` (`APPLE_APP_IDS`), WebAuthn-Origin für native Apps | Claude-Agent (Branch a2-aasa) | 4 | integriert (v0.10.4); 236 Tests auf SQLite vom Lead nachgelaufen, MariaDB und Linux-Build laut Agent; echter Apple-Passkey und AASA hinter dem Proxy ungeprüft (Handoff `handoffs/A2.md`) | A1 |
-| A3 | iOS/iPadOS-App | offen | – | geplant | A1 |
-| A4 | watchOS-App | offen | – | geplant | A3 |
+| A3 | iOS/iPadOS-App (Heute, Zeit, Urlaub read-only, Einstellungen, App Intents) | Claude-Agent | 8 | integriert (Apple `4ab26a2`); 50 Package-Tests und Mac-/iOS-Build vom Lead nachgelaufen, UI-Smoke-Test auf iPhone- und iPad-Simulator laut Agent; Passkey, Intents, Echtgerät, VoiceOver, Dark Mode/Dynamic Type ungeprüft | A1, A2 |
+| A4 | watchOS-App (direkt zum Server, Sitzung per WatchConnectivity vom iPhone) | Claude-Agent | – | in Arbeit (Apple-Worktree `../timetrack-apple-wt/a4`) | A3 |
 

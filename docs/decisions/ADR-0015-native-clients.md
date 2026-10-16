@@ -41,3 +41,7 @@ Die nativen Apps (macOS zuerst, danach iOS/iPadOS und watchOS) nutzen dieselbe R
 ## Folgen
 
 Backend-Paket A2 (AASA, `APPLE_APP_IDS`, Origin-Prüfung, Vertrag v0.10.4) ist umgesetzt; echte Passkey-Anmeldungen in den Apps hängen noch an Domain mit TLS, Deployment mit gesetztem `APPLE_APP_IDS` und Associated-Domains-Entitlement. Der Lead pflegt den ADR-Index.
+
+## Nachtrag A3 (16.10.2026): Personal Team
+
+Das Team `ABCDE12345` ist ein **persönliches** Entwicklungsteam. Apple erlaubt dort die Capability *Associated Domains* nicht („Personal development teams … do not support the Associated Domains capability"); ein signierter Build damit scheitert. Folgen: Echte Passkeys in den Apps brauchen die bezahlte Apple Developer Program-Mitgliedschaft. Bis dahin: Debug-Konfiguration von iOS ohne Associated Domains (signiert mit Personal Team, Anmeldung per Debug-Cookie-Import; Recovery-Sitzungen sind backendseitig auf Passkey-Einrichtung beschränkt). Release und `TimetrackDebug.entitlements` enthalten die Domains (`timetrack.example.org`, Testdomain mit `?mode=developer`) für den Betrieb mit bezahltem Team. Entscheidung über die Mitgliedschaft liegt beim Nutzer.
