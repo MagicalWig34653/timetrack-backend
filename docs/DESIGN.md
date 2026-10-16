@@ -1,6 +1,6 @@
 # Designsprache Timetrack
 
-Stand: 15.10.2026. Kanonisch für **alle** Oberflächen (PWA jetzt, native Apps später sinngemäß; dort gelten zusätzlich Apple HIG und Liquid Glass). Entscheidung: `decisions/ADR-0014-designsprache.md`. Umsetzungsstand: `STATUS.md`.
+Stand: 15.10.2026. Kanonisch für **alle** Oberflächen (PWA jetzt, native Apps später sinngemäß; dort gelten zusätzlich Apple HIG und Liquid Glass). Entscheidung: `decisions/ADR-0014-designsprache.md`. Native Umsetzung (Swift-Paket TimetrackDesign, Akzent-System, Icons): Apple-Repo `docs/DESIGN-NATIVE.md` und `docs/ICONS.md`; Akzent dort je Gerät wählbar, getrennt vom App-Symbol. Umsetzungsstand: `STATUS.md`.
 
 ## Herkunft und Einordnung
 
