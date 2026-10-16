@@ -481,7 +481,7 @@ paths:
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Profile' } } } }, '403': { $ref: '#/components/responses/Forbidden' } }
     patch:
       operationId: updateMyProfile
-      description: Ändert den Anzeigenamen (1 bis 80 Zeichen nach dem Trimmen). Andere Felder, insbesondere handle, werden abgelehnt (400).
+      description: Ändert den Anzeigenamen (1 bis 80 Zeichen nach dem Trimmen). Unbekannte Felder (insbesondere handle) werden ignoriert; der Handle ändert sich nie.
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [displayName], properties: { displayName: { type: string, minLength: 1, maxLength: 80 } } } } } }
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Profile' } } } }, '400': { $ref: '#/components/responses/BadRequest' } }

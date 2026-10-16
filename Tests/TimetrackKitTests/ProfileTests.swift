@@ -25,8 +25,9 @@ extension AuthTests {
             // Display name: trimmed, 1...80 characters, handle is not editable.
             try await self.api(app, member, .PATCH, "me/profile", ["displayName": "  "], .badRequest)
             try await self.api(app, member, .PATCH, "me/profile", ["displayName": String(repeating: "x", count: 81)], .badRequest)
-            try await self.api(app, member, .PATCH, "me/profile", ["handle": "other"], .badRequest)
-            let renamed = try self.object(await self.api(app, member, .PATCH, "me/profile", ["displayName": "  Neuer Name "]))
+            try await self.api(app, member, .PATCH, "me/profile", [:], .badRequest)
+            // Unknown fields are ignored; the handle never changes.
+            let renamed = try self.object(await self.api(app, member, .PATCH, "me/profile", ["displayName": "  Neuer Name ", "handle": "other"]))
             XCTAssertEqual(renamed["displayName"] as? String, "Neuer Name"); XCTAssertEqual(renamed["handle"] as? String, "member")
             // Account isolation: the other account is untouched and sees only itself.
             try await self.eq(try await self.profileField(app, admin, "displayName"), "Test")
