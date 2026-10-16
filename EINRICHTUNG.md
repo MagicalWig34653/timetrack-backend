@@ -186,8 +186,22 @@ Nie ein echtes `.env` committen. Ungültige Werte brechen den Start mit klarer M
 | `STORAGE_SECRET_KEY` | – | Base64 von 32 Zufallsbytes; verschlüsselt S3-Secrets. Ohne ihn wird S3-Konfiguration abgelehnt; Verlust macht gespeicherte Secrets unbrauchbar |
 | `NOTIFICATIONS_ENABLED` | `true` | `false` schaltet den Erinnerungs-Runner ab (Liste und REST bleiben) |
 | `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | – | Web Push; beide nötig, sonst `available:false` |
-| `PUSH_ALLOWED_HOSTS` | Standard-Allowlist | kommagetrennt, erweitert die erlaubten Push-Dienste (ADR-0011) |
+| `PUSH_ALLOWED_HOSTS` | Standard-Allowlist (ADR-0011) | kommagetrennt, **ersetzt** die Standardliste (`fcm.googleapis.com`, `*.push.services.mozilla.com`, `*.notify.windows.com`, `web.push.apple.com`, `*.push.apple.com`); `*.` erlaubt Subdomains, nicht die Hauptdomain. Getesteter Vorschlag mit je einem echten Muster pro Dienst siehe unten |
+| `MAINTENANCE_INTERVAL_MINUTES` | `60` | Abstand des periodischen Aufräumjobs in Minuten (0 bis 10080); `0` schaltet ihn ab. Der CLI-Befehl `maintenance` läuft unabhängig davon (ADR-0017) |
+| `MCP_AUDIT_RETENTION_DAYS` | `90` | Aufbewahrung der `mcp_audit`-Zeilen in Tagen (1 bis 3650) |
+| `IMPORT_JOB_TIMEOUT_HOURS` | `168` | offene Importe (hochgeladen/zugeordnet) älter als dies werden verworfen (1 bis 8760) |
+| `STORAGE_ORPHAN_GRACE_HOURS` | `168` | Karenzzeit, bevor verwaiste Objekte im lokalen Speicher gelöscht werden (1 bis 8760) |
 | `MODULES_DISABLED` | – | **geplant** (ADR-0012, Paket C20, noch nicht im Code): kommagetrennt, z. B. `reports,mcp`; schaltet Module serverweit ab |
+
+Vorschlag für `PUSH_ALLOWED_HOSTS` (ein echtes Muster je Push-Dienst; Chrome/Edge/Samsung über FCM, Firefox über Mozilla, Safari und installierte
+iOS-PWAs über Apple, Windows/Edge über WNS). Das ist enger als die Standardliste und im Test belegt (`B2ReviewTests`); die Standardliste bleibt wie in ADR-0011:
+
+```sh
+PUSH_ALLOWED_HOSTS=fcm.googleapis.com,updates.push.services.mozilla.com,web.push.apple.com,*.notify.windows.com
+```
+
+Aufräumjob (ADR-0017): läuft im Backend-Prozess (Sperre über `job_leases`, beliebig viele Replikate), einmalig für Betrieb/Cron mit
+`App maintenance` bzw. im Container `docker compose --project-name timetrack-dev --profile app run --rm -T backend maintenance` (Ausgabe: nur Zähler; Exit-Code ungleich 0, wenn ein Schritt scheiterte).
 
 Schlüssel erzeugen:
 

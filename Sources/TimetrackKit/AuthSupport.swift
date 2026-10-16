@@ -1,6 +1,7 @@
 import Vapor
 import Fluent
 import FluentSQL
+import FluentMySQLDriver
 import Crypto
 import WebAuthn
 
@@ -84,9 +85,19 @@ struct AuthService: Sendable {
         return webAuthn
     }
     func transaction<T: Sendable>(on db: any Database, _ operation: @escaping @Sendable (any Database) async throws -> T) async throws -> T {
-        try await db.transaction { tx in
+        let locked: @Sendable (any Database) async throws -> T = { tx in
             try await requireSQL(tx).raw("UPDATE auth_lock SET value = 1 - value WHERE id = 1").run()
             return try await operation(tx)
+        }
+        guard db is any MySQLDatabase else { return try await db.transaction(locked) }
+        // MariaDB 11.6.2+ defaults to innodb_snapshot_isolation=ON: under REPEATABLE READ the read view opens with the
+        // first statement, i.e. before this transaction has waited for the lock. Once the holder commits, the waiter
+        // fails with "Record has changed since last read" (HTTP 500 for parallel requests of one session) and
+        // would also read stale data. READ COMMITTED makes every statement after the lock see the committed state
+        // (ADR-0017). The statement only applies to the next transaction; it is a no-op error inside an open one.
+        return try await db.withConnection { connection in
+            _ = try? await requireSQL(connection).raw("SET TRANSACTION ISOLATION LEVEL READ COMMITTED").run()
+            return try await connection.transaction(locked)
         }
     }
     enum RateLimitSubject: Sendable {

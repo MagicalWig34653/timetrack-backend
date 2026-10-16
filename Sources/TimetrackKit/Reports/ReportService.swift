@@ -5,6 +5,13 @@ import Vapor
 
 enum ReportErrors {
     static let nameExists = APIError(.conflict, "learning_field_exists")
+
+    /// Maps a unique-key violation (SQLite and MariaDB report it as a constraint failure) to 409. The pre-check in
+    /// `apply` cannot see a concurrent writer whose insert commits in between (e.g. without the global auth lock).
+    static func mappingNameClash<T>(_ operation: () async throws -> T) async throws -> T {
+        do { return try await operation() }
+        catch let error as any DatabaseError where error.isConstraintFailure { throw nameExists }
+    }
 }
 
 /// Berichtsheft logic. Every query is scoped to `accountId`; foreign ids behave like missing ones (404).
@@ -67,7 +74,7 @@ struct ReportService: Sendable {
         let row = LearningFieldRecord()
         try await apply(input, to: row)
         row.createdAt = Date()
-        try await row.create(on: db)
+        try await ReportErrors.mappingNameClash { try await row.create(on: db) }
         return try LearningFieldDTO(row)
     }
 
@@ -75,7 +82,7 @@ struct ReportService: Sendable {
     func updateLearningField(_ id: UUID, _ input: LearningFieldInput) async throws -> LearningFieldDTO {
         let row = try await learningField(id)
         try await apply(input, to: row)
-        try await row.update(on: db)
+        try await ReportErrors.mappingNameClash { try await row.update(on: db) }
         return try LearningFieldDTO(row)
     }
 

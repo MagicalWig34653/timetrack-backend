@@ -139,8 +139,10 @@ extension Application {
         }
         var policy = PushEndpointPolicy()
         policy.pushAllowInsecureLoopback = options.pushAllowInsecureLoopback
+        // A blank value (compose passes an unset variable as empty) keeps the ADR-0011 default list.
         if let hosts = options.environment["PUSH_ALLOWED_HOSTS"] {
-            policy.allowedHosts = hosts.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            let parsed = hosts.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            if !parsed.isEmpty { policy.allowedHosts = parsed }
         }
         let transport = options.transport ?? HTTPPushTransport(group: eventLoopGroup)
         let service = NotificationService(auth: auth, vapid: vapid, transport: transport, policy: policy)
