@@ -81,8 +81,8 @@ struct AuthRateLimitMiddleware: AsyncMiddleware {
         let limited = path.hasPrefix("/api/v1/auth/register/") || path.hasPrefix("/api/v1/auth/login/") ||
             path.hasPrefix("/api/v1/auth/recovery/") || path.hasPrefix("/api/v1/me/recovery/email")
         if limited && [.POST, .PUT].contains(request.method) {
-            // Forwarded headers are untrusted. Charge the peer before decoding request bodies.
-            try await service.limited(ip: request.remoteAddress?.ipAddress ?? "unknown", on: request.db)
+            // Forwarded headers count only from configured trusted proxies (ADR-0018). Charge before decoding request bodies.
+            try await service.limited(ip: request.clientRateLimitKey, on: request.db)
         }
         return try await next.respond(to: request)
     }

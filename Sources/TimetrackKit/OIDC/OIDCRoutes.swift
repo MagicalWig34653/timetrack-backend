@@ -14,7 +14,7 @@ func registerOIDCRoutes(_ app: Application, auth: AuthService) {
         .init(string: value ?? "", expires: value == nil ? .distantPast : Date().addingTimeInterval(OIDCService.lifetime), maxAge: value == nil ? 0 : Int(OIDCService.lifetime),
               path: "/api/v1/auth/oidc", isSecure: secure, isHTTPOnly: true, sameSite: .lax)
     }
-    @Sendable func ip(_ req: Request) -> String { req.remoteAddress?.ipAddress ?? "unknown" }
+    @Sendable func ip(_ req: Request) -> String { req.clientRateLimitKey }
 
     open.get("auth", "oidc", "config") { req async throws -> Response in
         struct Body: Content { let enabled: Bool; let name: String? }

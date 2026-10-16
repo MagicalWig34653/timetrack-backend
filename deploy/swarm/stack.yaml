@@ -60,6 +60,8 @@ services:
       WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN:?set WEBAUTHN_ORIGIN (https://host)}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL (https://host)}
       APPLE_APP_IDS: ${APPLE_APP_IDS:-}
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}
+      TRUSTED_PROXY_HEADER: ${TRUSTED_PROXY_HEADER:-X-Forwarded-For}
       SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-336}
       STORAGE_SECRET_KEY_FILE: /run/secrets/tt_storage_secret_key
       VAPID_PRIVATE_KEY_FILE: /run/secrets/tt_vapid_private_key
