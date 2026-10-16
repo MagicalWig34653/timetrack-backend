@@ -32,3 +32,7 @@ PhpStorm mit Noctule öffnen, die PWA separat in PhpStorm; Apple-Projekt: `Timet
 nicht versioniert. Der Brainstorm-Ordner bleibt als historische Vorbereitung erhalten und ist nicht mehr kanonisch.
 Parallele Schreiber arbeiten in eigenen Worktrees (`../timetrack-backend-wt/<paket>`, `../timetrack-pwa-wt/<paket>`),
 Regeln in `ENTWICKLUNGSABLAUF.md`.
+
+## Apple-Kennungen (16.10.2026, vom Nutzer)
+
+Team-ID `ABCDE12345` (kein Geheimnis); Bundle-ID `com.example.timetrack` für iOS/iPadOS und macOS (Universal Purchase), watchOS-App `com.example.timetrack.watchkitapp`. App-ID für `apple-app-site-association`: `ABCDE12345.com.example.timetrack`. Details: ADR-0015 (Entwurf durch Paket A1).
