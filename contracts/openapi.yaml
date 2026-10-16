@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.10.3
+  version: 0.10.4
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -20,6 +20,7 @@ info:
     (4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form
     `<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.
     (6) No session listing endpoint in stage 1; only revoking other sessions.
+    v0.10.4: GET /.well-known/apple-app-site-association (additiv, ADR-0015; 404 ohne APPLE_APP_IDS). Native Apple-Passkeys melden den Origin `https://<rpId>` (ohne Port); das Backend akzeptiert ihn zusätzlich zu WEBAUTHN_ORIGIN (exakter Abgleich, RP-ID-Hash unverändert), sofern die RP-ID eine echte Domain ist.
     v0.10.3: ImportResult.warnings (additiv, wie in der Vorschau); school_on_holiday für Schulzeilen an Feiertagen neben holiday_times_discarded für Arbeitszeilen.
     v0.10.2: Import-Profil: holidayTimes/partialCredit, Warnungen holiday_times_discarded/credit_partial_as_work (zusammengefasst mit count), Vorschau sheetBalanceUpToTodaySeconds/sheetBalanceFutureSeconds/firstContentDate (Befund L20: Abweichung Tabelle/App erklärt sich aus Feiertagszeilen, Teilgutschriften, Modellbeginn und Zeilen nach heute).
     v0.10.1: Klarstellungen C21: rules leer = keine Regeln; Vorschau-warnings (pause_exceeds_day); Zeilenfehler planning_disabled (Abwesenheits-/Feiertagsaktionen bei ausgeschaltetem Modul planning, Arbeit/Schule bleiben importierbar); ImportResult.conflictItems; Notizen über 500 bzw. Feiertagsnamen über 80 Zeichen → note_too_long (keine stille Kürzung). Export worktime-xlsx ist kein verlustfreies Sicherungsformat (siehe docs/handoffs/C22.md).
@@ -53,6 +54,30 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Status' }
+  /.well-known/apple-app-site-association:
+    get:
+      operationId: appleAppSiteAssociation
+      description: |
+        Associated Domains für native Passkeys (ADR-0015). Öffentlich, ohne Sitzung/CSRF, ohne Weiterleitung.
+        Inhalt aus der Umgebungsvariable APPLE_APP_IDS (kommagetrennt, `<TeamID>.<BundleID>`); ohne Einträge 404.
+        Native Clients senden in clientDataJSON den Origin `https://<rpId>` (ohne Port), der zusätzlich zu WEBAUTHN_ORIGIN
+        akzeptiert wird (exakter Abgleich, nur bei RP-ID mit Punkt).
+      security: []
+      responses:
+        '200':
+          description: AASA-Datei
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [webcredentials]
+                properties:
+                  webcredentials:
+                    type: object
+                    required: [apps]
+                    properties:
+                      apps: { type: array, items: { type: string, example: ABCDE12345.com.example.timetrack } }
+        '404': { description: APPLE_APP_IDS nicht gesetzt, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   /ready:
     get:
       operationId: ready

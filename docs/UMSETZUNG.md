@@ -1,6 +1,6 @@
 # Umsetzung in Etappen
 
-Stand: 15.10.2026. Etappen 0–4 sind im Backend und in der PWA umgesetzt, Etappe 5–6 nicht begonnen.
+Stand: 15.10.2026. Etappen 0–4 sind im Backend und in der PWA umgesetzt, Etappe 5 begonnen (A1, A2), Etappe 6 nicht begonnen.
 Die Etappen setzen den bestätigten Umfang schrittweise um; **maßgeblich für geprüfte Zahlen und offene Punkte ist `STATUS.md`**,
 Pakete und Belege stehen in `ARBEITSPLAN.md` und `handoffs/`. Die Abnahmekriterien unten sind der ursprüngliche Maßstab;
 je Etappe steht darunter, welche davon belegt sind. „Belegt“ heißt: automatisierte Tests (SQLite und MariaDB, soweit
@@ -17,7 +17,7 @@ Offene fachliche Details jeweils vor dem betroffenen Schritt klären, nicht das 
 | 3 Planung und Datenaustausch | erledigt bis auf Restore | C8–C13, L6–L9, L12 | gemeinsames DB/Datei-Restore ungeprüft; XLSX/PDF nicht in Excel/Viewer geöffnet; S3 nur gegen S3Mock |
 | 4 Berichtsheft, Hinweise, MCP | Backend und PWA umgesetzt, Geräteprüfung offen | C15–C19, L13–L16, X1 | IHK-Format nur Standardprofil; Push nur gegen Fake-Dienst; Connector in ChatGPT/Claude; Alt-PDF nur als Archivdatei |
 | 4d Modulschalter (neu, ADR-0012) | in Arbeit | C20 Backend, L17 PWA | beides offen (Stand 15.10.) |
-| 5 Native Apps | nicht begonnen | – | alles; nur XcodeGen-Grundgerüst im Apple-Repo |
+| 5 Native Apps | begonnen (16.10.2026) | A1 (integriert), A2 (Backend umgesetzt, Lead-Prüfung offen) | iOS/watchOS (A3/A4); echter Plattform-Passkey auf Gerät; Produktionsdomain `timetrack.example.org` und AASA-Auslieferung |
 | 6 Später | nicht begonnen | – | alles |
 
 Zusätzlich offen (Etappen-übergreifend, `ARBEITSPLAN.md` Backlog): Kontenverwaltung, Backup/Restore, Produktions-/Swarm-Stack,

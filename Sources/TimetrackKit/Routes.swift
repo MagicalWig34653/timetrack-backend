@@ -14,6 +14,16 @@ func registerRoutes(_ app: Application, service: AuthService) {
     registerMCPRoutes(app, auth: service)
     registerOAuthRoutes(app, auth: service)
     app.get("health") { _ in StatusResponse(status: "ok") }
+    // Associated Domains for native passkeys: public, no redirect, no auth. Apple's CDN fetches it without cookies.
+    let appIDs = service.configuration.appleAppIDs
+    app.get(".well-known", "apple-app-site-association") { _ -> Response in
+        guard !appIDs.isEmpty else { throw Abort(.notFound) }
+        let body = try JSONSerialization.data(withJSONObject: ["webcredentials": ["apps": appIDs]], options: [.sortedKeys])
+        var headers = HTTPHeaders()
+        headers.replaceOrAdd(name: .contentType, value: "application/json")
+        headers.replaceOrAdd(name: .cacheControl, value: "public, max-age=3600")
+        return Response(status: .ok, headers: headers, body: .init(data: body))
+    }
     app.get("ready") { request async -> Response in
         do {
             try await requireSQL(request.db).raw("SELECT 1").run()

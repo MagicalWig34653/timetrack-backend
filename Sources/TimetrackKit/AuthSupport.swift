@@ -70,9 +70,18 @@ struct CreateAuthLock: AsyncMigration {
 struct AuthService: Sendable {
     let configuration: Configuration
     let mailSender: (any MailSender)?
-    var webAuthn: WebAuthnManager {
-        .init(configuration: .init(relyingPartyID: configuration.webAuthnRPID, relyingPartyName: configuration.webAuthnRPName,
-                                  relyingPartyOrigin: configuration.webAuthnOrigin.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))))
+    var webAuthn: WebAuthnManager { webAuthn(origin: configuration.webAuthnOrigin.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))) }
+    func webAuthn(origin: String) -> WebAuthnManager {
+        .init(configuration: .init(relyingPartyID: configuration.webAuthnRPID, relyingPartyName: configuration.webAuthnRPName, relyingPartyOrigin: origin))
+    }
+    /// Picks the manager whose expected origin equals the client-reported origin, but only from the exact-match allow-list.
+    /// Any other origin falls back to the web manager, whose verification rejects it.
+    func webAuthn(clientDataJSON bytes: [UInt8]) -> WebAuthnManager {
+        struct Origin: Decodable { let origin: String? }
+        if let origin = (try? JSONDecoder().decode(Origin.self, from: Data(bytes)))?.origin, configuration.webAuthnAllowedOrigins.contains(origin) {
+            return webAuthn(origin: origin)
+        }
+        return webAuthn
     }
     func transaction<T: Sendable>(on db: any Database, _ operation: @escaping @Sendable (any Database) async throws -> T) async throws -> T {
         try await db.transaction { tx in
