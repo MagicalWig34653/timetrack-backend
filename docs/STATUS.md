@@ -50,3 +50,7 @@ Kontenverwaltung (Admin-API, Deaktivieren, Rollen, Sitzungen widerrufen, Lösche
 - Integriert seit dem letzten Stand: Kontenverwaltung B1 (Vertrag 0.11.0), Wartung B2 (0.12.0, inkl. MariaDB-Isolationskorrektur unter `auth_lock`), Betrieb B3 (Backup/Restore bewiesen, Swarm-Stack-Vorlage, `check-all.sh`), vertrauenswürdige Proxys B4, PWA L23. Testinstanz läuft mit diesem Stand (AASA noch aus: `APPLE_APP_IDS` nicht gesetzt).
 - Die zwei zeitabhängigen Push-Tests (`testC19PushClaimsAndHeartbeatSQLite`, `testC19PushStopsAfterLeaseOwnershipLoss`) sind in B5 behoben (Lead-Prüfung offen): eigentliche Ursache war nicht nur Last, sondern die tagesabhängige `report_gap`-Erinnerung (ab Freitag), die eine zusätzliche Outbox-Zeile erzeugte; die Tests nutzen jetzt festes Datum und Torsteuerung statt Schlafzeiten (`handoffs/B5.md`).
 - amd64-Build nur nativ nachweisbar (Emulation > 60 min unfertig). Echter Swarm, Last, Restore auf anderem Host, echter Apple-Passkey ungeprüft.
+
+## P2-Prüfstand (Stand 16.10.2026, Branch `p2-accent`, nicht gemergt)
+
+Darstellung je Konto: `GET/PATCH /me/preferences`, `account.preferences` in der Sitzung, Export `preferences.json`; Vertrag v0.14.0, ADR-0020, `handoffs/P2.md` (mit Vertrag für die nativen Apps, deren Umstellung offen ist). Lead-Prüfung offen; Zahlen im Handoff.

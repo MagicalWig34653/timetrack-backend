@@ -45,6 +45,10 @@ extension AuthTests {
             try await check(.GET, "auth/session")
             try await check(.GET, "me/passkeys")
             try await check(.GET, "modules")
+            try await check(.GET, "me/preferences")
+            try await check(.PATCH, "me/preferences", nil, ["accent": "custom", "accentCustomHex": "#12ab9f", "colorScheme": "dark"])
+            try await check(.GET, "auth/session")
+            try await check(.PATCH, "me/preferences", nil, ["accent": "teal"])
             try await check(.PUT, "me/modules", nil, ["modules": ["reports": true]])
             // Work models and time.
             let model = try await self.contractCheck(app, admin, document, .POST, template: "work-models", path: "work-models", body: modelBody("2026-01-01"), status: .created, problems: &problems)

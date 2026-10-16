@@ -137,10 +137,10 @@ struct AuthService: Sendable {
     }
 }
 
-struct AccountDTO: Content { let id: UUID; let handle: String; let displayName: String; let role: AccountRole; let onboardingState: String
+struct AccountDTO: Content { let id: UUID; let handle: String; let displayName: String; let role: AccountRole; let onboardingState: String; let preferences: AccountPreferences
     init(_ account: Account) throws {
         id = try account.requireID(); handle = account.handle; displayName = account.displayName; role = account.role
-        onboardingState = account.onboardingState ?? "pending"
+        onboardingState = account.onboardingState ?? "pending"; preferences = account.preferences ?? .defaults
     }
 }
 struct SessionDTO: Content { let account: AccountDTO; let csrfToken: String; let recovery: Bool; let expiresAt: Date }

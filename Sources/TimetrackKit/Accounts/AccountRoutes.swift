@@ -62,6 +62,12 @@ func registerProfileRoutes(_ app: Application, auth: AuthService) {
     api.delete("me", "profile", "email") { req async throws -> HTTPStatus in
         try await auth.removeEmail(req.authContext, on: req.db); return .noContent
     }
+    api.get("me", "preferences") { req async throws -> AccountPreferences in try await auth.preferences(req.authContext, on: req.db) }
+    api.patch("me", "preferences") { req async throws -> AccountPreferences in
+        // Tiny payloads only: three short fields today, room for a few more later (ADR-0020).
+        guard (req.body.data?.readableBytes ?? 0) <= AccountPreferences.maxBodyBytes else { throw APIError(.payloadTooLarge, "payload_too_large") }
+        return try await auth.updatePreferences(req.content.decode([String: JSONValue].self), context: req.authContext, on: req.db)
+    }
     api.put("me", "onboarding") { req async throws -> ProfileDTO in
         try await auth.setOnboarding(req.content.decode(OnboardingInput.self).state, context: req.authContext, on: req.db)
     }

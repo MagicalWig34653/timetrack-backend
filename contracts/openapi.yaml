@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.13.0
+  version: 0.14.0
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -20,6 +20,7 @@ info:
     (4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form
     `<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.
     (6) No session listing endpoint in stage 1; only revoking other sessions.
+    v0.14.0: Darstellung je Konto (P2, ADR-0020, additiv): GET/PATCH /me/preferences (accent, accentCustomHex, colorScheme, updatedAt; Standard blue/system ohne gespeicherte Zeile; Merge-Patch, unbekannte Schlüssel 400, Body über 1 KiB 413) und Account.preferences in der Sitzungsantwort; GET /me/export enthält preferences.json. App-Icon und Transparenz bleiben gerätelokal. Keine Modulbindung; Recovery-Sitzungen erhalten 403.
     v0.13.0: Profil und Einrichtung (P1, ADR-0019, additiv): GET/PATCH /me/profile (Anzeigename; Handle nur lesend), E-Mail-Adresse ändern per Bestätigungscode (PUT /me/profile/email, POST /me/profile/email/verify, DELETE /me/profile/email; frische Sitzung, 501 ohne SMTP, 409 email_taken, Versuchsgrenze 5, Gültigkeit 10 Minuten, Rate-Limit wie Recovery-E-Mail) und der Einrichtungsmerker PUT /me/onboarding (pending|completed|skipped). Account.onboardingState in der Sitzungsantwort. Keine Modulbindung; Recovery-Sitzungen erhalten 403.
     v0.11.0: Kontenverwaltung und Datenschutz (ADR-0016, additiv): Admin-API /admin/accounts (Liste, Deaktivieren/Reaktivieren, Rollenwechsel, Sitzungen widerrufen, Löschen), GET /me/export (ZIP der eigenen Daten), DELETE /me (Selbstlöschung). Fehlercodes: self_lockout (409), last_admin (409), confirmation_mismatch (400), account_deletion_incomplete (503). Löschen/Rollenwechsel verlangen eine frische Sitzung (403 reauth_required). Die Endpunkte sind keinem Modul zugeordnet.
     v0.10.4: GET /.well-known/apple-app-site-association (additiv, ADR-0015; 404 ohne APPLE_APP_IDS). Native Apple-Passkeys melden den Origin `https://<rpId>` (ohne Port); das Backend akzeptiert ihn zusätzlich zu WEBAUTHN_ORIGIN (exakter Abgleich, RP-ID-Hash unverändert), sofern die RP-ID eine echte Domain ist.
@@ -507,6 +508,19 @@ paths:
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [code], properties: { code: { type: string } } } } } }
       responses: { '200': { description: übernommen, content: { application/json: { schema: { $ref: '#/components/schemas/Profile' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '403': { $ref: '#/components/responses/Forbidden' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/v1/me/preferences:
+    get:
+      operationId: getMyPreferences
+      description: Darstellungseinstellungen des Kontos (Akzentfarbe, Farbschema), gemeinsam für PWA und native Apps. Ohne gespeicherten Wert die Standardwerte (accent=blue, colorScheme=system, updatedAt fehlt). App-Icon und Transparenz sind gerätelokal und nicht Teil davon. Nicht für Recovery-Sitzungen (403).
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Preferences' } } } }, '403': { $ref: '#/components/responses/Forbidden' } }
+    patch:
+      operationId: updateMyPreferences
+      description: |
+        Merge-Patch: nur die gesendeten Schlüssel ändern sich, `accentCustomHex: null` löscht. Erlaubte Schlüssel: accent, accentCustomHex, colorScheme; jeder andere Schlüssel und ein leerer Body ergeben 400. `accent=custom` verlangt einen gültigen `accentCustomHex` (`#RRGGBB`, wird in Großbuchstaben gespeichert); bei jedem anderen Akzent ist der Wert null (ein Wechsel auf eine Voreinstellung löscht ihn, ein mitgesendeter Wert ist 400). Body über 1 KiB: 413 payload_too_large. Letzter Schreiber gewinnt; keine frische Sitzung nötig.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, minProperties: 1, additionalProperties: false, properties: { accent: { $ref: '#/components/schemas/AccentId' }, accentCustomHex: { type: [string, 'null'], pattern: '^#[0-9A-Fa-f]{6}$' }, colorScheme: { $ref: '#/components/schemas/ColorSchemeId' } } } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Preferences' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '403': { $ref: '#/components/responses/Forbidden' } }
   /api/v1/me/onboarding:
     put:
       operationId: setMyOnboarding
@@ -1407,6 +1421,16 @@ components:
           properties:
             state: { type: string, enum: [pending, completed, skipped] }
             updatedAt: { type: [string, 'null'], format: date-time }
+    AccentId: { type: string, enum: [blue, teal, violet, green, orange, pink, graphite, custom] }
+    ColorSchemeId: { type: string, enum: [system, light, dark] }
+    Preferences:
+      type: object
+      required: [accent, colorScheme]
+      properties:
+        accent: { $ref: '#/components/schemas/AccentId' }
+        accentCustomHex: { type: [string, 'null'], pattern: '^#[0-9A-F]{6}$', description: 'nur bei accent=custom, sonst null oder fehlend' }
+        colorScheme: { $ref: '#/components/schemas/ColorSchemeId' }
+        updatedAt: { type: [string, 'null'], format: date-time, description: 'Zeitpunkt der letzten Änderung; fehlt, solange die Standardwerte gelten' }
     Account:
       type: object
       required: [id, handle, displayName, role]
@@ -1416,6 +1440,7 @@ components:
         displayName: { type: string }
         role: { type: string, enum: [admin, member] }
         onboardingState: { type: string, enum: [pending, completed, skipped] }
+        preferences: { $ref: '#/components/schemas/Preferences' }
     Session:
       type: object
       required: [account, csrfToken, recovery]

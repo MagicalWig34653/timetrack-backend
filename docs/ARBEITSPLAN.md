@@ -218,3 +218,12 @@ Claude-Agent in den Worktrees `timetrack-backend-wt/p1` und `timetrack-pwa-wt/p1
 | ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
 | --- | --- | --- | --- | --- | --- |
 | P1 | Profilbearbeitung (Name, E-Mail per Code), Einrichtungsmerker, Vertrag v0.13.0, ADR-0019; PWA: Profilseite, Einrichtungsassistent, gruppierte Einstellungsnavigation, Mock, Unit-/Mock-/Echt-E2E | Claude-Agent | 8 | integriert (Backend Vertrag v0.13.0; PWA-Merge); Lead: PWA check 0 Fehler, 575 Unit, 81 Mock-E2E, 6 PWA-Build, Echt-E2E profile+stage1 23/23 gegen frisch gebautes Backend; Backend 296 Tests SQLite (bis auf die 2 bekannten lastempfindlichen Push-Tests grün); echte E-Mail-Zustellung ungeprüft; Live-Instanz aktualisiert | B1, C20 |
+
+
+## P2 – Darstellung je Konto (16.10.2026)
+
+Claude-Agent in den Worktrees `timetrack-backend-wt/p2` und `timetrack-pwa-wt/p2`, Branch `p2-accent` (beide Repos), nicht gemergt. Nutzerentscheidung 16.10.2026: Akzent und Farbschema je Konto, App-Symbol bleibt Gerätewahl; native Apps folgen in einem späteren Paket.
+
+| ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
+| --- | --- | --- | --- | --- | --- |
+| P2 | `GET/PATCH /me/preferences` (Akzent, eigene Farbe, Farbschema), `account.preferences` in der Sitzung, Export `preferences.json`, Vertrag v0.14.0, ADR-0020; PWA: Darstellungsseite am Konto mit localStorage-Cache und Abgleich, Mock, Unit-/Mock-/Echt-E2E; Vertrag für native Clients in `handoffs/P2.md` | Claude-Agent | 3 | umgesetzt, Lead-Prüfung offen | P1 |
