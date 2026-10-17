@@ -146,7 +146,7 @@ Claude-Agent im Worktree `timetrack-backend-wt/d2`, Branch `d2-deployment-guide`
 
 | ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
 | --- | --- | --- | --- | --- | --- |
-| D2 | `docs/DEPLOYMENT.md` (Schritt-für-Schritt für `timetrack.example.org`), Stack ohne DB-Container mit allen Variablen, `deploy/swarm/create-secrets.sh` (`--dry-run`), Abgleich BETRIEB/deploy-README | Claude-Agent | 3 | umgesetzt, Lead-Prüfung offen (nicht auf echtem Swarm/Proxy erprobt) | B3, B4 |
+| D2 | `docs/DEPLOYMENT.md` (Schritt-für-Schritt für `timetrack.example.org`), Stack ohne DB-Container mit allen Variablen, `deploy/swarm/create-secrets.sh` (`--dry-run`), Abgleich BETRIEB/deploy-README | Claude-Agent | 3 | integriert; Lead: `check-all.sh --fast` im Merge, Stack-Validierung und Skript-Trockenlauf laut Agent; nie auf echtem Swarm/Proxy/MariaDB 12.3.3 getestet; Lücke: `DB_TLS=required` ohne eigene CA | B3, B4 |
 
 ## Backlog Backend (Stand 15.10.2026, nicht begonnen)
 
@@ -243,4 +243,4 @@ Claude-Agent in den Worktrees `timetrack-backend-wt/w1` (Branch `w1-ci-pages`), 
 
 | ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
 | --- | --- | --- | --- | --- | --- |
-| W1 | Workflows (CI, Docker multi-arch, Pages, Release, CodeQL, Dependency Review, Dependabot), Vorlagen, `SECURITY.md`, `CODEOWNERS` in allen drei Repos; Website `site/` (VitePress, Landingpage, Doku aus Repo-Dokumenten, API-Referenz); `docs/CI.md` | Claude-Agent | 5 | umgesetzt, Lead-Prüfung offen; nur statisch (actionlint) und lokal geprüft, auf GitHub nie gelaufen (`docs/CI.md`, `handoffs/W1.md`) | – |
+| W1 | Workflows (CI, Docker multi-arch, Pages, Release, CodeQL, Dependency Review, Dependabot), Vorlagen, `SECURITY.md`, `CODEOWNERS` in allen drei Repos; Website `site/` (VitePress, Landingpage, Doku aus Repo-Dokumenten, API-Referenz); `docs/CI.md` | Claude-Agent | 5 | integriert (alle drei Repos); actionlint ohne Befund (Lead), Workflows nie auf GitHub gelaufen; Seite lokal gebaut und gesichtet (Agent); Veröffentlichung/Push durch den Nutzer | – |
