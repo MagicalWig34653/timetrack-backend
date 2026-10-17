@@ -11,7 +11,7 @@ das produktionsnahe Swarm-Stack-File `swarm/stack.yaml` (Paket B3) ist als Vorla
 | `../Dockerfile` | Mehrstufiger Build (`swift:*-noble` → `-noble-slim`), Healthcheck `/health`, Einstieg `/app/App serve` auf Port 8080 |
 | `../scripts/dev-env.sh` | Start/Stopp/Status/Multi-Arch-Build der Dev-Umgebung (nie `-v`, nie `prune`) |
 | `../.env.example` | Vorlage der Konfiguration; `scripts/dev-env.sh init` erzeugt `.env` |
-| `swarm/stack.yaml`, `swarm/stack.env.example`, `swarm/create-secrets.sh` | Swarm-Stack ohne Datenbank-Container (Backend + einmaliger Migrationsjob, Docker-Secrets, Healthcheck, Update/Rollback, Limits), alle Variablen mit Beispielwerten, Skript zum Anlegen der Docker-Secrets (`--dry-run`); per `docker stack config` geprüft. Anleitung: [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md) |
+| `swarm/stack.yaml`, `swarm/stack.env.example`, `swarm/create-secrets.sh` | Swarm-Stack ohne Datenbank-Container (Backend + einmaliger Migrationsjob, Docker-Secrets, Healthcheck, Update/Rollback, Limits), alle Variablen mit Beispielwerten, Skript zum Anlegen der Docker-Secrets (`--dry-run`); per `docker stack config` geprüft. Anleitung: [../docs/installation/swarm.md](../docs/installation/swarm.md), Referenz [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md) |
 | `../scripts/backup.sh`, `restore.sh`, `test-restore.sh` | Sicherung/Wiederherstellung und Beweislauf (`../docs/BETRIEB.md`) |
 | `../scripts/docker-entrypoint.sh` | Image-Einstiegspunkt: `VAR_FILE` (Docker-Secrets) nach `VAR`, dann `/app/App` |
 | `../scripts/check-all.sh`, `test-image-smoke.sh` | Gesamtprüfung; Container-Smoke-Test des Produktions-Images |

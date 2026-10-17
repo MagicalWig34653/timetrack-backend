@@ -31,7 +31,9 @@ Swift 6 / Vapor / Fluent als modularer Monolith (`Sources/TimetrackKit`, Einstie
 
 Ablage nebeneinander: `<workspace>/timetrack-backend`, `<workspace>/timetrack-pwa`, `<workspace>/timetrack-apple` (siehe [docs/REPOSITORIES.md](docs/REPOSITORIES.md)).
 
-## Selbst betreiben (Schnellinstallation)
+## Installation
+
+Das fertige, öffentliche Image `ghcr.io/magicalwig34653/timetrack-backend` (amd64 und arm64, enthält die Web-App) wird standardmäßig verwendet; selbst bauen ist optional.
 
 ```sh
 mkdir timetrack && cd timetrack     # Dateien aus deploy/compose/ holen, .env anpassen, dann:
@@ -39,7 +41,16 @@ mkdir timetrack && cd timetrack     # Dateien aus deploy/compose/ holen, .env an
 docker compose run --rm --no-deps -T backend bootstrap-admin --env production   # Einladungslink für den ersten Admin
 ```
 
-Schritt für Schritt mit Reverse Proxy: [docs/INSTALLATION.md](docs/INSTALLATION.md). Ausführlich (Swarm, MariaDB-Rechte): [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+| Seite | Inhalt |
+| --- | --- |
+| [Überblick und Auswahl](docs/INSTALLATION.md) | Voraussetzungen, Compose oder Swarm, Image und Tags |
+| [Docker Compose](docs/installation/compose.md) / [Docker Swarm](docs/installation/swarm.md) | Schritt für Schritt |
+| [Eigene MariaDB](docs/installation/mariadb.md), [Reverse Proxy und TLS](docs/installation/proxy.md) | Datenbank und Proxy vorbereiten |
+| [Ersteinrichtung](docs/installation/ersteinrichtung.md) | Admin, Passkey, Onboarding, Einladungen, Apps, Import, MCP |
+| [Aktualisieren](docs/UPDATE.md), [Sichern](docs/installation/backup.md), [Probleme](docs/installation/probleme.md), [Konfiguration](docs/installation/konfiguration.md) | Betrieb |
+| [Image selbst bauen](docs/IMAGE-BAUEN.md) | nur bei eigenen Änderungen |
+
+Ausführliche Referenz für den Swarm mit Checklisten: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Schnellstart (Entwicklung)
 
@@ -53,7 +64,7 @@ docker compose --project-name timetrack-dev --profile app run --rm -T backend bo
 swift test --build-system native   # Tests (SQLite; MariaDB-Läufe brauchen die Variablen aus `scripts/dev-env.sh test-db`)
 ```
 
-Die PWA wird im Repository timetrack-pwa gebaut (`npm run build`) und über `PWA_STATIC_DIR` vom Backend ausgeliefert. Produktionsbetrieb: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) und [docs/BETRIEB.md](docs/BETRIEB.md).
+Die PWA wird im Repository timetrack-pwa gebaut (`npm run build`) und über `PWA_STATIC_DIR` vom Backend ausgeliefert. Produktionsbetrieb: [docs/INSTALLATION.md](docs/INSTALLATION.md), [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) und [docs/BETRIEB.md](docs/BETRIEB.md).
 
 ## Dokumentation
 

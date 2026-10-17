@@ -68,12 +68,13 @@ Details stehen in der [Architektur](/docs/architektur) und in den [Architekturen
 
 <div class="install-cta">
   <div>
-    <strong>In 10 Minuten zum Laufen</strong>
-    <p>Docker Compose, mitgelieferte Datenbank, Reverse Proxy und erster Admin mit Passkey. Eine Seite, Schritt für Schritt zum Kopieren.</p>
+    <strong>Fertiges Image, ein Server, eine Anleitung</strong>
+    <p>Das öffentliche Docker-Image für amd64 und arm64 genügt: Compose oder Swarm wählen, Proxy einrichten, ersten Admin mit Passkey anlegen und die App einrichten.</p>
   </div>
   <div class="install-cta-actions">
-    <a class="install-btn" href="./docs/installation">Installationsanleitung</a>
-    <a class="install-link" href="./docs/deployment">Ausführliche Deployment-Anleitung (Swarm, MariaDB-Rechte, Checklisten)</a>
+    <a class="install-btn" href="./docs/installation">Installation starten</a>
+    <a class="install-link" href="./docs/installation/ersteinrichtung">Ersteinrichtung</a>
+    <a class="install-link" href="./docs/image-bauen">Image selbst bauen</a>
   </div>
 </div>
 
@@ -81,7 +82,7 @@ Details stehen in der [Architektur](/docs/architektur) und in den [Architekturen
 
 <div class="link-grid">
   <a href="./docs/einrichtung">Entwicklung<span>Lokal starten, Tests, Konfiguration</span></a>
-  <a href="./docs/betrieb">Betrieb<span>Backup, Restore, Swarm, Reverse Proxy</span></a>
+  <a href="./docs/installation/backup">Sichern<span>Backup, Restore, Aktualisieren</span></a>
   <a href="./docs/mcp">MCP-Anbindung<span>ChatGPT, Claude und eigene Clients</span></a>
   <a href="./api/" target="_self">API-Referenz<span>OpenAPI-Vertrag, durchsuchbar</span></a>
   <a href="./docs/konzept">Konzept<span>Anforderungen und offene Details</span></a>

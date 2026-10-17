@@ -19,8 +19,17 @@ const gh = `https://github.com/${repo}`;
 
 /** Pages: repo path -> site route. Optional pages are skipped when the source file does not exist. */
 const pages = [
-  ['docs/INSTALLATION.md', '/docs/installation'],
+  ['docs/INSTALLATION.md', '/docs/installation'], // overview; the sub pages live below /docs/installation/
+  ['docs/installation/compose.md', '/docs/installation/compose'],
+  ['docs/installation/swarm.md', '/docs/installation/swarm'],
+  ['docs/installation/mariadb.md', '/docs/installation/mariadb'],
+  ['docs/installation/proxy.md', '/docs/installation/proxy'],
+  ['docs/installation/ersteinrichtung.md', '/docs/installation/ersteinrichtung'],
   ['docs/UPDATE.md', '/docs/update'],
+  ['docs/installation/backup.md', '/docs/installation/backup'],
+  ['docs/installation/probleme.md', '/docs/installation/probleme'],
+  ['docs/installation/konfiguration.md', '/docs/installation/konfiguration'],
+  ['docs/IMAGE-BAUEN.md', '/docs/image-bauen'],
   ['docs/KONZEPT.md', '/docs/konzept'],
   ['docs/ARCHITEKTUR.md', '/docs/architektur'],
   ['docs/UMSETZUNG.md', '/docs/umsetzung'],
@@ -44,6 +53,7 @@ routeOf.set(path.normalize('docs/README.md'), '/adr/');
 
 // Guard: private-network addresses, local paths and personal data must never reach the public site.
 const redactions = [];
+const unresolved = [];
 const forbidden = /192\.168\.|\/Users\/|@icloud\.com|Az-Laske/i;
 
 function escapeOutsideCode(markdown) {
@@ -83,7 +93,12 @@ function rewriteLinks(markdown, srcRel) {
         const route = routeOf.get(resolved);
         if (route) return `](${route}${anchor})`;
         const abs = path.join(root, resolved);
-        if (resolved.startsWith('..') || !fs.existsSync(abs)) return `](${gh})`;
+        if (resolved.startsWith('..') || !fs.existsSync(abs)) {
+          // Link check: a relative link to a file that does not exist is a documentation bug, not something to hide.
+          // Only the installation pages and main guides are enforced (older documents may still carry stale paths).
+          unresolved.push(`${srcRel}: ${target}`);
+          return `](${gh})`;
+        }
         const kind = fs.statSync(abs).isDirectory() ? 'tree' : 'blob';
         return `](${gh}/${kind}/${branch}/${resolved.split(path.sep).join('/')}${anchor})`;
       });
@@ -123,4 +138,8 @@ if (adrStart >= 0) {
   fs.writeFileSync(path.join(out, 'adr/index.md'), index);
   written++;
 }
+const enforced = /^docs\/(installation\/|INSTALLATION|UPDATE|IMAGE-BAUEN|DEPLOYMENT)/;
+const broken = unresolved.filter((entry) => enforced.test(entry));
+if (unresolved.length) console.warn(`sync-docs: ${unresolved.length} relative link(s) point to missing files:\n  ${unresolved.join('\n  ')}`);
+if (broken.length) throw new Error(`sync-docs: broken links in the installation docs:\n  ${broken.join('\n  ')}`);
 console.log(`sync-docs: ${written} pages written to docs-src/${skipped.length ? `; optional/missing skipped: ${skipped.join(', ')}` : ''}`);
