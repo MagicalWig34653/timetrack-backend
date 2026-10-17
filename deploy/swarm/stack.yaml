@@ -14,7 +14,7 @@
 #
 # Legend: REQUIRED = the stack refuses to render without it. OPTIONAL = has a safe default or can stay empty.
 # Not provided by this file (operator): the MariaDB database + user, the image in a registry the nodes can pull from,
-# the external overlay network shared with the reverse proxy, the Docker secrets, and the reverse proxy itself.
+# the Docker secrets, and the reverse proxy itself (it connects to the published port on any node).
 
 services:
   # One-shot schema migration (Swarm job, runs once per service create/update). Order, see docs/DEPLOYMENT.md:
@@ -109,15 +109,21 @@ services:
       - tt_vapid_private_key
       # - tt_smtp_password
       # - tt_oidc_client_secret
-    # No volumes at all: the PWA is built into the image and uploaded files are stored in the database (admin UI:
-    # storage rule "everything -> database" plus a global upload limit). The local-path storage backend is therefore
-    # not available in this stack (/data/files does not exist as a writable path; the root filesystem is read-only).
-    networks: [proxy, default]
-    # No published ports: the reverse proxy reaches http://backend:8080 on the shared overlay network.
-    # Proxy outside Swarm (on the host or another machine)? Uncomment (host mode keeps the TCP source address,
-    # which is then the proxy's address) and firewall the port so only the proxy can reach it:
-    # ports:
-    #   - { target: 8080, published: 18080, protocol: tcp, mode: host }
+    # Default: NO volumes. The PWA is built into the image and uploaded files are stored in the database (admin UI: storage
+    # rule "everything -> database" plus a global upload limit). S3 storage also needs no volume (admin UI, secret in the DB).
+    # OPTIONAL local-path file storage (the admin then sets the path /data/files in a storage rule). Uncomment BOTH this block
+    # and the top-level `volumes:` block at the end, and PIN the backend to one node via BACKEND_PLACEMENT (a node-local
+    # volume exists only there), or use a shared volume driver (NFS etc.). The root filesystem stays read-only otherwise.
+    # volumes:
+    #   - type: volume
+    #     source: timetrack-files
+    #     target: /data/files
+    # The port is published on EVERY node (Swarm routing mesh, mode ingress): any node IP:PUBLISHED_PORT reaches a healthy replica.
+    # Point the reverse proxy (outside or inside Swarm) at one or more node addresses on this port and firewall the port so
+    # that only the proxy can reach it. Behind the routing mesh the backend sees the ingress network as the TCP peer: put
+    # the ingress subnet (docker network inspect ingress) into TRUSTED_PROXY_CIDRS so that X-Forwarded-For is honoured.
+    ports:
+      - { target: 8080, published: "${PUBLISHED_PORT:-18080}", protocol: tcp, mode: ingress }
     # The container check uses /ready (database reachable AND all migrations applied): a new image whose schema has
     # not been migrated never becomes healthy, so the rolling update stops and rolls back instead of serving errors.
     healthcheck:
@@ -159,11 +165,9 @@ services:
         failure_action: pause
         monitor: 30s
 
-networks:
-  # The overlay network the reverse proxy is attached to (create it before: docker network create --driver overlay --attachable NAME).
-  proxy:
-    external: true
-    name: ${PROXY_NETWORK:-timetrack-proxy}
+# OPTIONAL (only with the local-path file storage above):
+# volumes:
+#   timetrack-files:
 
 secrets:
   tt_db_password:

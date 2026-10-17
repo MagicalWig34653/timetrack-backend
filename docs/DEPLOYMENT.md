@@ -11,7 +11,7 @@ Zielbild:
 
 ```
 Internet ──TLS──> Reverse Proxy (nginx/Traefik, eigene Verwaltung)
-                      │  Overlay-Netz  timetrack-proxy
+                      │  http://<Knoten>:18080  (Routing Mesh, auf jedem Knoten)
                       ▼
                 Swarm-Dienst  timetrack_backend  (Port 8080, liefert API + PWA)
                       │  TCP 3306 (TLS)
@@ -142,16 +142,21 @@ Das Skript erzeugt ihn mit dem dokumentierten openssl-Verfahren: `openssl ecpara
 
 Secrets sind unveränderlich. Rotation: neues Secret mit anderem Namen (`--prefix`), `stack.yaml` anpassen (`secrets:` und `*_FILE`-Pfade), neu ausrollen, altes entfernen.
 
-## 5. Netzwerk anlegen
+## 5. Port und Netzwerk
 
-Das Overlay-Netz, an dem der Reverse Proxy hängt (bei Traefik/nginx im Swarm gemeinsam genutzt). Existiert es schon, überspringen Sie den Befehl und setzen `PROXY_NETWORK`.
+> **Dateispeicher:** Standard ohne Volumes: Dateien in der Datenbank (oder S3). Für lokale Dateiablage enthält `stack.yaml` einen auskommentierten Volume-Block (Dienst und Ende der Datei), dazu `BACKEND_PLACEMENT` auf einen festen Knoten setzen.
+
+Der Stack veröffentlicht den Port des Backends auf **jedem Swarm-Knoten** (Routing Mesh, `mode: ingress`, Standard `PUBLISHED_PORT=18080`). Jeder Knoten leitet an ein gesundes Replikat weiter, egal auf welchem Knoten es läuft. Ein vorab angelegtes Overlay-Netz ist **nicht** nötig; der Stack nutzt nur sein eigenes Standardnetz.
+
+- Der Reverse Proxy (außerhalb oder innerhalb von Swarm) verbindet sich mit `http://<Knoten-IP>:18080` (mehrere Knoten: als Upstream-Liste oder über eine virtuelle IP).
+- **Firewall:** Erlauben Sie den Port nur Ihrem Proxy. Wer ihn direkt erreicht, könnte `X-Forwarded-For` fälschen (siehe Abschnitt 9).
+- Das Subnetz für `TRUSTED_PROXY_CIDRS` ist hier das des `ingress`-Netzes (Abschnitt 9):
 
 ```sh
-docker network create --driver overlay --attachable timetrack-proxy
-docker network inspect timetrack-proxy --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'   # Subnetz für TRUSTED_PROXY_CIDRS
+docker network inspect ingress --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'
 ```
 
-Der Standard (`default`-Netz des Stacks) wird nur für interne Zwecke genutzt; die Datenbank liegt außerhalb des Swarms und wird über das Host-Netz des Knotens erreicht (ausgehende Verbindung genügt).
+Sie können den Stack alternativ an ein gemeinsames Overlay-Netz mit einem Proxy im Swarm hängen. Dafür ergänzen Sie im Stack ein externes Netz und `networks:` am Dienst; das ist nicht die Voreinstellung und nicht erprobt.
 
 ## 6. Variablen eintragen (`stack.env`)
 
@@ -169,7 +174,7 @@ Die Datei wird von der Shell eingelesen (`set -a; . stack.env; set +a`): keine L
 | `WEBAUTHN_ORIGIN` | ja | `https://timetrack.example.org` | Muss exakt dem Browser-Origin entsprechen (Schema + Host, kein Pfad); der Host muss RP-ID oder deren Subdomain sein. |
 | `WEBAUTHN_RP_NAME` | nein | `Timetrack` | Anzeigename im Passkey-Dialog. |
 | `VAPID_SUBJECT` | im Stack ja | `mailto:admin@example.org` | Kontakt für Push-Dienste: `mailto:` oder `https://`. Ungültig oder fehlend: Push bleibt aus (Warnung im Log). |
-| `PROXY_NETWORK` | nein | `timetrack-proxy` | Name des externen Overlay-Netzes. |
+| `PUBLISHED_PORT` | nein | `18080` | TCP-Port, der auf jedem Knoten veröffentlicht wird (Routing Mesh). Proxy-Upstream: `http://<Knoten-IP>:<Port>`. |
 | `TRUSTED_PROXY_CIDRS` | dringend empfohlen | `10.0.1.0/24` | Netze der Proxys, deren `X-Forwarded-For` geglaubt wird (Abschnitt 9). Leer = niemand. `/0` wird abgelehnt, ungültige Einträge verhindern den Start. |
 | `TRUSTED_PROXY_HEADER` | nein | `X-Forwarded-For` | Oder `X-Real-IP`. |
 | `APPLE_APP_IDS` | für die iOS/macOS-App | `ABCDE12345.com.example.timetrack` | Komma-getrennt, jeder Eintrag `<10-stellige Team-ID>.<Bundle-ID>`; ungültige Einträge verhindern den Start. Leer = AASA-Endpunkt antwortet 404. **`ABCDE12345` ist ein Platzhalter.** |
@@ -228,7 +233,7 @@ docker exec "$(docker ps -q -f name=timetrack_backend)" curl -fsS http://127.0.0
 
 ## 8. Reverse Proxy
 
-Der Proxy terminiert TLS und leitet **alles** an das Backend (es liefert auch die PWA aus). Ziel im Overlay-Netz: `http://timetrack_backend:8080`.
+Der Proxy terminiert TLS und leitet **alles** an das Backend (es liefert auch die PWA aus). Ziel: `http://<Knoten-IP>:18080` (der veröffentlichte Port, `PUBLISHED_PORT`).
 Der Name `backend` ist ebenfalls als Alias vorhanden, kann aber mit Diensten anderer Stacks kollidieren; der volle Name `timetrack_backend` ist eindeutig.
 
 Anforderungen (aus Code und BETRIEB.md Abschnitt 6):
@@ -275,7 +280,7 @@ server {
     proxy_send_timeout 300s;
 
     resolver 127.0.0.11 valid=10s;              # Docker-DNS (nur nginx IM Swarm); auf dem Host weglassen
-    set $upstream http://timetrack_backend:8080;
+    set $upstream http://192.0.2.10:18080;     # Knoten-IP und PUBLISHED_PORT
 
     location = /health { return 404; }
     location = /ready  { return 404; }
@@ -313,13 +318,14 @@ Anmerkung: Der `location /`-Block liefert auch `/oauth/*`, `/mcp` und `/.well-kn
 
 ### 8.2 Traefik (v3, Swarm-Provider)
 
+**Hinweis:** Die Label-Variante unten setzt voraus, dass Traefik im selben Swarm läuft und mit dem Backend ein Netz teilt (nicht Teil dieses Stacks). Mit dem veröffentlichten Port ist die dynamische Datei-Konfiguration einfacher: Router `Host(`timetrack.example.org`)` und ein Service mit `servers: - url: "http://192.0.2.10:18080"` (mehrere Knoten: mehrere `url`-Einträge).
+
 Traefik liest Labels aus dem **Dienst** (im Swarm unter `deploy.labels`). Ergänzen Sie im Dienst `backend` in `stack.yaml` den vorhandenen `deploy:`-Block um `labels:` (Entrypoint- und Resolver-Namen an Ihre Traefik-Konfiguration anpassen):
 
 ```yaml
     deploy:
       labels:
         - traefik.enable=true
-        - traefik.docker.network=timetrack-proxy                 # = PROXY_NETWORK
         - traefik.http.services.timetrack.loadbalancer.server.port=8080
         - traefik.http.routers.timetrack.rule=Host(`timetrack.example.org`) && !Path(`/health`) && !Path(`/ready`)
         - traefik.http.routers.timetrack.entrypoints=websecure
@@ -354,9 +360,9 @@ Damit Traefik die echte Client-IP sieht: Ports 80/443 des Traefik-Dienstes im **
 
 ## 9. `TRUSTED_PROXY_CIDRS` bestimmen
 
-1. Subnetz des Overlay-Netzes: `docker network inspect timetrack-proxy --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'` (z. B. `10.0.1.0/24`).
+1. Subnetz des `ingress`-Netzes (das Backend sieht hinter dem Routing Mesh diese Adresse als Verbindungspartner): `docker network inspect ingress --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'` (z. B. `10.0.0.0/24`).
 2. Zugriffsrechte beachten: Vertrauen Sie nur dem Netz, in dem **ausschließlich der Proxy** Verbindungen zum Backend aufbauen kann. Hängen weitere Dienste im selben Netz, legen Sie ein eigenes Netz nur für Proxy und Backend an, oder tragen Sie die feste Proxy-Adresse als `/32` ein.
-3. In `stack.env`: `TRUSTED_PROXY_CIDRS=10.0.1.0/24`, `TRUSTED_PROXY_HEADER=X-Forwarded-For`, neu ausrollen (Abschnitt 13).
+3. In `stack.env`: `TRUSTED_PROXY_CIDRS=10.0.0.0/24`, `TRUSTED_PROXY_HEADER=X-Forwarded-For`, neu ausrollen (Abschnitt 13).
 4. Prüfen: Rate-Limit-Verhalten, siehe BETRIEB.md Abschnitt 6, Schritt 3. Ohne die Einstellung teilen sich **alle** Clients einen Zähler (60 Ereignisse je 5 Minuten): ein Angreifer sperrt die Anmeldung für alle. Pro Konto gilt zusätzlich eine eigene Grenze (15 je 5 Minuten).
 
 ## 10. Passkeys und Domainregeln
@@ -413,7 +419,7 @@ Der Befehl schreibt den Link nur auf die Konsole; das Backend protokolliert Einl
 Alternative, wenn das Backend nicht läuft oder auf einem anderen Knoten: einen einmaligen Dienst starten, der das Secret einhängt (Link steht dann in `docker service logs`; danach sofort den Dienst entfernen):
 
 ```sh
-docker service create --name tt-bootstrap --restart-condition none --network timetrack-proxy \
+docker service create --name tt-bootstrap --restart-condition none \
   --secret tt_db_password \
   -e DATABASE_DRIVER=mariadb -e DB_HOST="$DB_HOST" -e DB_PORT="${DB_PORT:-3306}" -e DB_NAME="${DB_NAME:-timetrack}" \
   -e DB_USER="${DB_USER:-timetrack}" -e DB_TLS="${DB_TLS:-required}" -e DB_PASSWORD_FILE=/run/secrets/tt_db_password \
@@ -495,7 +501,7 @@ Das ist der tatsächliche Stand, nicht das Wunschbild:
 
 | Symptom | Wahrscheinliche Ursache | Abhilfe |
 | --- | --- | --- |
-| Browser zeigt 502/503 vom Proxy | Backend nicht gestartet oder nicht im selben Netz; falscher Upstream-Name; Replikate 0 | `docker service ps timetrack_backend`; Netz `PROXY_NETWORK` gleich beim Proxy und im Stack; Ziel `timetrack_backend:8080`; `docker service scale timetrack_backend=1`. |
+| Browser zeigt 502/503 vom Proxy | Backend nicht gestartet oder Port nicht erreichbar (Firewall, falsche Knoten-IP/`PUBLISHED_PORT`); Replikate 0 | `docker service ps timetrack_backend`; Netz `PROXY_NETWORK` gleich beim Proxy und im Stack; Ziel `timetrack_backend:8080`; `docker service scale timetrack_backend=1`. |
 | Dienst startet nicht, Log: `Invalid configuration for X` | Variable ungültig (RP-ID mit Großbuchstaben, Origin mit Pfad, ungültiges CIDR, `OIDC_ISSUER` ohne HTTPS ...) | Wert in `stack.env` korrigieren, neu ausrollen. |
 | Dienst ist „unhealthy“, `/ready` = 503 | Migration nicht gelaufen oder DB nicht erreichbar | `docker service logs timetrack_migrate`; Migration ausführen (Abschnitt 13); DB-Erreichbarkeit, Passwort, TLS prüfen. |
 | Migrationsjob `Failed`: Verbindung/TLS-Fehler | Falscher `DB_HOST`, Firewall, Zertifikatsname passt nicht, private CA | Abschnitt 3.3; Verbindung mit dem `mariadb`-Client testen; `REQUIRE SSL` ohne TLS am Client. |

@@ -140,8 +140,7 @@ Swarm nicht vorgesehen (eine Datei darf nicht von Replikaten geteilt werden).
 # Image bauen und in eine vom Swarm erreichbare Registry legen (Beispiel; Multi-Arch siehe Abschnitt 7)
 docker buildx build --platform linux/amd64,linux/arm64 -t registry.example.test/timetrack-backend:1.0.0 --push .
 
-# Overlay-Netz, an dem auch der Reverse Proxy hängt (Name per PROXY_NETWORK änderbar)
-docker network create --driver overlay --attachable timetrack-proxy
+# (kein vorab angelegtes Netz nötig: der Port wird per Routing Mesh auf jedem Knoten veröffentlicht, PUBLISHED_PORT)
 
 # Secrets: bequemer und mit Prüfungen per deploy/swarm/create-secrets.sh (--dry-run, überschreibt nie). Manuell (Werte über stdin, nie als Argument):
 openssl rand -base64 32                    | docker secret create tt_storage_secret_key -
@@ -184,7 +183,7 @@ abwärtskompatibel (additiv) sind. Das ist **keine geprüfte Zusage** des Projek
 - **Update/Rollback**: siehe 5.2; `rollback_config` mit `start-first`.
 - **Logging**: `json-file` mit Rotation (10 MiB × 5), Backend loggt auf stdout. Für zentrale Logs Treiber (z. B. `gelf`, `syslog`) pro Dienst austauschen. Invite-URLs werden nicht protokolliert (Backend ersetzt die Standard-Logging-Middleware).
 - **Volumes**: keine. Die PWA ist im Image (`/srv/pwa`), Dateien liegen in der Datenbank (Admin: Speicherregel „alles → Datenbank“, globales Upload-Limit). Die Speicherart „Lokal“ ist im Stack nicht verfügbar; wer sie braucht, ergänzt selbst einen Bind-Mount (dann knotenfeste Platzierung über `BACKEND_PLACEMENT`). Keine Knotenbindung nötig.
-- **Härtung**: `read_only: true` mit `tmpfs /tmp`, Benutzer uid 10001 (aus dem Image). Keine veröffentlichten Ports; der Proxy erreicht `http://backend:8080` über das Overlay-Netz `PROXY_NETWORK`.
+- **Härtung**: `read_only: true` mit `tmpfs /tmp`, Benutzer uid 10001 (aus dem Image). Der Port 8080 wird als `PUBLISHED_PORT` (Standard 18080) auf allen Knoten veröffentlicht (Firewall: nur der Proxy); der Proxy erreicht `http://backend:8080` über das Overlay-Netz `PROXY_NETWORK`.
 - **Replikate**: Standard 1. MariaDB erlaubt mehrere; der Erinnerungs-Scheduler nutzt eine Lease. Eine globale `auth_lock`-Serialisierung begrenzt den Durchsatz der Anmeldung (bekannt, `STATUS.md`).
 
 ### 5.4 Secrets: `*_FILE`-Konvention
@@ -207,7 +206,7 @@ Nicht geprüft: echter Swarm (Secrets-Einhängung, `replicated-job`, Rollback-Ve
 
 ## 6. Reverse Proxy (nicht provisioniert; Anforderungen)
 
-Der Proxy terminiert TLS und leitet an `http://backend:8080` (Overlay `timetrack-proxy`). Anforderungen:
+Der Proxy terminiert TLS und leitet an `http://<Knoten-IP>:18080` (`PUBLISHED_PORT`, Routing Mesh). Anforderungen:
 
 | Thema | Anforderung |
 | --- | --- |
@@ -226,8 +225,8 @@ einen Zähler (60 Ereignisse je 5 Minuten, Schlüssel `ip:<Hash>`) und ein Angre
 
 Einrichtung:
 
-1. Netz des Proxys bestimmen, so eng wie möglich. Im Swarm ist das das Subnetz des Overlay-Netzes `PROXY_NETWORK`:
-   `docker network inspect timetrack-proxy --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'`. Ein ganzes Netz zu vertrauen ist nur dann sicher, wenn dort ausschließlich der Proxy (und keine
+1. Netz des Proxys bestimmen, so eng wie möglich. Hinter dem Routing Mesh ist das das Subnetz des `ingress`-Netzes:
+   `docker network inspect ingress --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'`. Ein ganzes Netz zu vertrauen ist nur dann sicher, wenn dort ausschließlich der Proxy (und keine
    anderen, von Angreifern erreichbaren Dienste) Verbindungen zum Backend aufbauen kann. Besser ist ein eigenes Netz nur für Proxy und Backend oder die feste Proxy-Adresse als `/32`.
 2. `TRUSTED_PROXY_CIDRS=<Netz>[,<Netz>...]` in `stack.env` (bzw. `.env`) setzen; optional `TRUSTED_PROXY_HEADER`. Ein ungültiger Eintrag verhindert den Start (Fehler nennt den Schlüssel).
 3. Prüfen: Zwei Clients nacheinander gegen den Proxy (`POST /api/v1/auth/login/options`, mehr als 60-mal von Client A) dürfen Client B nicht sperren.
