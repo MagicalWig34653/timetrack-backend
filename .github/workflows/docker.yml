@@ -52,6 +52,8 @@ jobs:
       contents: read
       packages: write
     steps:
+      - name: Lower-case image name (registry names must be lower case)
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/timetrack-backend" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - name: Check out the PWA (built into the image)
         uses: actions/checkout@v4
@@ -114,6 +116,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
+      - name: Lower-case image name (registry names must be lower case)
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/timetrack-backend" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - name: Check out the PWA (built into the image)
         uses: actions/checkout@v4
@@ -149,6 +153,8 @@ jobs:
       contents: read
       packages: write
     steps:
+      - name: Lower-case image name (registry names must be lower case)
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/timetrack-backend" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
