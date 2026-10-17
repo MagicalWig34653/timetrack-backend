@@ -30,3 +30,10 @@ Die PWA speicherte Akzentfarbe, Farbschema und Transparenz nur im Browser (ADR-0
 - Native Apps: Umstellung auf diese Endpunkte ist ein späteres Paket (Vertrag in `docs/handoffs/P2.md`); bis dahin bleiben ihre lokalen Werte unabhängig vom Konto.
 - Wer die PWA mit einem älteren Server nutzt (ohne `account.preferences`), behält das alte, rein lokale Verhalten.
 - Das Gerät, das zuerst nach dem Update anmeldet, überträgt seine bisherige lokale Wahl ins Konto, falls das Konto noch nie gesetzt wurde (nur wenn der lokale Cache nicht für ein anderes Konto geschrieben wurde). Mehrere Geräte mit unterschiedlichen lokalen Altwerten: das erste gewinnt, die übrigen übernehmen das Kontoergebnis.
+
+## Nachtrag G1 (17.10.2026, Vertrag v0.15.0): Leuchteffekt und weitere Akzentfarben
+
+- **Neues Feld `glow`** (`off|subtle|medium|strong`, Standard `subtle`) im selben Dokument; per `PATCH /me/preferences` schreibbar, in `GET /me/preferences` und `account.preferences` immer enthalten (auch für zuvor gespeicherte Konten, die das Feld nicht tragen: Dekodierung mit Standardwert). Der Schlüssel `glow` steht in der Whitelist; alles andere bleibt 400. Keine Migration (JSON-Spalte).
+- **Acht weitere Voreinstellungs-IDs** mit dunkler Fläche und weißer Schrift: `indigo`, `navy`, `purple`, `magenta`, `crimson`, `forest`, `petrol`, `bronze` (Farbwerte im Handoff G1). Wie bisher sind die IDs Namen; jeder Client wählt seine Farbtöne.
+- **Verträglichkeit**: Ein Server vor v0.15.0 lehnt `glow` und die neuen IDs mit 400 ab. Die PWA erkennt das (Antwort ohne `glow`, bzw. 400) und speichert die neuen Farben dort als `custom` plus Hex; den Leuchteffekt behält sie dann nur lokal. Native Apps zeigen unbekannte IDs als Blau.
+
