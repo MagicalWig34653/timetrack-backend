@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.16.0
+  version: 0.17.0
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -20,6 +20,7 @@ info:
     (4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form
     `<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.
     (6) No session listing endpoint in stage 1; only revoking other sessions.
+    v0.17.0: Wochenplanung und Wochenübersicht (K1, ADR-0021, additiv): PlanDayInput/PlanDay erhalten optional plannedStart/plannedEnd (lokale Uhrzeit "HH:mm" in der Zeitzone des Arbeitsmodells; beide oder keine; Beginn < Ende am selben Tag, keine Nachtschicht), plannedBreakMinutes (0..600, nur mit Zeiten) und schreibgeschützt plannedSeconds (Ende − Beginn − Pause, nie negativ; feste Pausen des Arbeitsmodells werden nicht abgezogen); Modus off ignoriert Zeiten. Alte Clients ohne die Felder funktionieren unverändert. Neue Pfade: GET/PUT /plan/weeks/{isoWeek} (Modul planning; PUT höchstens 7 Tage in einer Transaktion, replace=true löscht nicht genannte Tage der Woche; Antwort Soll je Tag aus dem Arbeitsmodell, plannedSeconds, blockedBy bei Feiertag/Abwesenheit, Summen) und GET /time/weeks/{isoWeek} (Kern; Wochenübersicht in einem Aufruf). Die Freigabe plan enthält nun auch die geplanten Zeiten (nie Notiz oder Ort). Neue Fehlercodes (400): plan_time_invalid, plan_break_invalid, invalid_week, week_day_invalid.
     v0.16.0: Arbeitsmodell-Korrektur (M1, ADR-0004-Nachtrag, additiv): PUT /work-models/{id} ersetzt alle bearbeitbaren Felder einer Version (optional If-Match mit `version`, sonst 412 stale_version; 409 model_overlap bei Überschneidung; die Vorversion wird am Vortag von validFrom neu begrenzt), POST /work-models/{id}/preview liefert dieselbe Prüfung als Vorschau ohne Speichern (Zeitkonto vorher/nachher, betroffene Tage, geänderte Felder). WorkModel.version (additiv). Auswertungen werden beim Lesen berechnet; die Korrektur ändert sie bewusst nur auf ausdrücklichen Nutzerwunsch.
     v0.15.0: Leuchteffekt und weitere Akzentfarben (G1, ADR-0020 Nachtrag, additiv): Preferences.glow (off|subtle|medium|strong, Standard subtle, auch bei zuvor gespeicherten Konten) ist per PATCH /me/preferences schreibbar; AccentId um indigo, navy, purple, magenta, crimson, forest, petrol, bronze erweitert (dunkle Töne mit weißer Schrift). Ältere Clients ignorieren das neue Feld; unbekannte Akzent-IDs zeigen sie als Blau.
     v0.14.0: Darstellung je Konto (P2, ADR-0020, additiv): GET/PATCH /me/preferences (accent, accentCustomHex, colorScheme, updatedAt; Standard blue/system ohne gespeicherte Zeile; Merge-Patch, unbekannte Schlüssel 400, Body über 1 KiB 413) und Account.preferences in der Sitzungsantwort; GET /me/export enthält preferences.json. App-Icon und Transparenz bleiben gerätelokal. Keine Modulbindung; Recovery-Sitzungen erhalten 403.
@@ -660,6 +661,15 @@ paths:
         - { name: from, in: query, required: true, schema: { type: string, format: date } }
         - { name: to, in: query, required: true, schema: { type: string, format: date } }
       responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/DayEvaluation' } } } } } }
+  /api/v1/time/weeks/{isoWeek}:
+    get:
+      operationId: getTimeWeek
+      description: |
+        Wochenübersicht in einem Aufruf (K1, ADR-0021): sieben Tage Montag..Sonntag mit Markierung, Soll, Ist, Saldo, Plan und Wochensumme samt Zeitkontostand vor und nach der Woche.
+        Alles stammt aus der Tagesbewertung; für Tage nach heute ist balanceSeconds null, die Wochen-balanceSeconds summiert nur Tage bis heute. Kontostände: wie GET /time/account mit asOf = Vortag der Woche bzw. Sonntag (laufende Woche: bis heute).
+      security: [ { session: [] } ]
+      parameters: [ { $ref: '#/components/parameters/IsoWeek' } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/TimeWeek' } } } }, '400': { $ref: '#/components/responses/BadRequest' } }
   /api/v1/time/days/{date}:
     get:
       operationId: getDayEvaluation
@@ -856,6 +866,20 @@ paths:
       security: [ { session: [], csrf: [] } ]
       parameters: [ { name: date, in: path, required: true, schema: { type: string, format: date } } ]
       responses: { '204': { description: gelöscht } }
+  /api/v1/plan/weeks/{isoWeek}:
+    get:
+      operationId: getPlanWeek
+      description: Wochenplan (K1, ADR-0021, Modul planning). Sieben Tage mit Plan, Soll aus dem Arbeitsmodell (ohne Ist), effektiv geplanten Sekunden und blockedBy (holiday, vacation, sick, excused), wenn Feiertag oder Abwesenheit den Plan überstimmt (ein halber Urlaubstag blockiert nicht). Summen der Woche.
+      security: [ { session: [] } ]
+      parameters: [ { $ref: '#/components/parameters/IsoWeek' } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/PlanWeek' } } } }, '400': { $ref: '#/components/responses/BadRequest' } }
+    put:
+      operationId: putPlanWeek
+      description: Schreibt bis zu 7 Tagespläne der Woche in einer Transaktion (alles oder nichts). Jeder Eintrag ersetzt den Tag vollständig. replace=true löscht zusätzlich alle nicht genannten Pläne der Woche. Antwort wie GET.
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/IsoWeek' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PlanWeekInput' } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/PlanWeek' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/v1/shares:
     get:
       operationId: listShares
@@ -1375,6 +1399,7 @@ components:
     csrf: { type: apiKey, in: header, name: X-CSRF-Token }
   parameters:
     Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    IsoWeek: { name: isoWeek, in: path, required: true, description: 'ISO-Woche, z. B. 2026-W44 (Montag bis Sonntag)', schema: { type: string, pattern: '^[0-9]{4}-W[0-9]{2}$', example: 2026-W44 } }
   responses:
     BadRequest: { description: ungültige Anfrage, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     Unauthorized: { description: nicht angemeldet oder Nachweis ungültig, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -1710,12 +1735,111 @@ components:
         mode: { type: string, enum: [office, home, customer, school, off] }
         placeId: { type: [string, 'null'], format: uuid }
         note: { type: [string, 'null'], maxLength: 200 }
+        plannedStart: { type: [string, 'null'], pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$', description: 'Geplanter Beginn, lokale Uhrzeit HH:mm; zusammen mit plannedEnd, kleiner als plannedEnd. Bei mode off ignoriert.' }
+        plannedEnd: { type: [string, 'null'], pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$', description: 'Geplantes Ende, lokale Uhrzeit HH:mm am selben Tag.' }
+        plannedBreakMinutes: { type: [integer, 'null'], minimum: 0, maximum: 600, description: 'Geplante Pause; nur zusammen mit Zeiten.' }
     PlanDay:
       allOf:
         - $ref: '#/components/schemas/PlanDayInput'
         - type: object
           required: [date]
-          properties: { date: { type: string, format: date } }
+          properties:
+            date: { type: string, format: date }
+            plannedSeconds: { type: [integer, 'null'], readOnly: true, description: 'Ende − Beginn − Pause, nie negativ; null ohne Zeiten.' }
+    PlanWeekInput:
+      type: object
+      required: [days]
+      properties:
+        replace: { type: boolean, default: false }
+        days:
+          type: array
+          maxItems: 7
+          items:
+            allOf:
+              - $ref: '#/components/schemas/PlanDayInput'
+              - { type: object, required: [date], properties: { date: { type: string, format: date } } }
+    PlanWeekDay:
+      type: object
+      required: [date, weekday, targetSeconds, plannedSeconds, blockedBy, plan]
+      properties:
+        date: { type: string, format: date }
+        weekday: { type: integer, minimum: 1, maximum: 7, description: 'ISO, Montag = 1' }
+        targetSeconds: { type: integer }
+        plannedSeconds: { type: [integer, 'null'], description: 'Effektiv: 0 bei blockiertem Tag, null ohne Plan oder ohne Zeiten.' }
+        blockedBy: { type: [string, 'null'], enum: [holiday, vacation, sick, excused, null] }
+        plan: { oneOf: [ { $ref: '#/components/schemas/PlanDay' }, { type: 'null' } ] }
+    PlanWeek:
+      type: object
+      required: [week, from, to, days, totals]
+      properties:
+        week: { type: string, example: 2026-W44 }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        days: { type: array, items: { $ref: '#/components/schemas/PlanWeekDay' }, minItems: 7, maxItems: 7 }
+        totals:
+          type: object
+          required: [targetSeconds, plannedSeconds, differenceSeconds]
+          properties: { targetSeconds: { type: integer }, plannedSeconds: { type: integer }, differenceSeconds: { type: integer, description: plannedSeconds − targetSeconds } }
+    TimeWeekDay:
+      type: object
+      required: [date, weekday, mark, markSource, targetSeconds, plannedSeconds, planMode, workSeconds, creditSeconds, rawWorkSeconds, breakSeconds, breakDeductionSeconds, travelSeconds, schoolSeconds, balanceSeconds, firstStart, lastEnd, segmentsCount, absences, provisional, isToday, isFuture]
+      properties:
+        date: { type: string, format: date }
+        weekday: { type: integer, minimum: 1, maximum: 7 }
+        mark: { type: string, enum: [work, school, vacation, sick, holiday, excused, off], description: 'off = kein Arbeitstag und nichts gebucht (auch Abwesenheit am Wochenende).' }
+        markSource: { type: string, enum: [none, explicit, absence, holiday] }
+        targetSeconds: { type: integer }
+        plannedSeconds: { type: [integer, 'null'] }
+        planMode: { type: [string, 'null'], enum: [office, home, customer, school, off, null] }
+        workSeconds: { type: integer, description: bewertete Arbeitszeit (evaluatedWorkSeconds) }
+        creditSeconds: { type: integer }
+        rawWorkSeconds: { type: integer }
+        breakSeconds: { type: integer, description: tatsächliche Lücken zwischen den Abschnitten des Tages }
+        breakDeductionSeconds: { type: integer, description: abgezogene feste Pausen des Arbeitsmodells }
+        travelSeconds: { type: integer }
+        schoolSeconds: { type: integer }
+        balanceSeconds: { type: [integer, 'null'], description: 'work + credit − target (deltaSeconds); null nach heute' }
+        firstStart: { type: [string, 'null'], format: date-time }
+        lastEnd: { type: [string, 'null'], format: date-time }
+        segmentsCount: { type: integer }
+        absences:
+          type: array
+          items: { type: object, required: [kind, status, halfDay], properties: { kind: { type: string, enum: [vacation, sick, excused, other] }, status: { type: string, enum: [planned, requested, approved, rejected, cancelled, taken] }, halfDay: { type: boolean } } }
+        provisional: { type: boolean }
+        isToday: { type: boolean }
+        isFuture: { type: boolean }
+    TimeWeek:
+      type: object
+      required: [week, from, to, days, summary]
+      properties:
+        week: { type: string }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        days: { type: array, items: { $ref: '#/components/schemas/TimeWeekDay' }, minItems: 7, maxItems: 7 }
+        summary:
+          type: object
+          required: [targetSeconds, targetToDateSeconds, workSeconds, creditSeconds, balanceSeconds, plannedSeconds, accountBalanceBeforeSeconds, accountBalanceAfterSeconds, accountBalanceAsOf, vacationDays, sickDays, schoolDays, holidayDays, workDays, travelSeconds, breakSeconds, averageStart, averageEnd, longestDay, provisional]
+          properties:
+            targetSeconds: { type: integer }
+            targetToDateSeconds: { type: integer, description: Soll der Tage bis einschließlich heute }
+            workSeconds: { type: integer }
+            creditSeconds: { type: integer }
+            balanceSeconds: { type: integer, description: Summe der Tagessalden bis heute }
+            plannedSeconds: { type: [integer, 'null'], description: null ohne jeden geplanten Tag }
+            accountBalanceBeforeSeconds: { type: integer }
+            accountBalanceAfterSeconds: { type: integer }
+            accountBalanceAsOf: { type: string, format: date, description: 'Sonntag der Woche, höchstens heute' }
+            vacationDays: { type: number, description: 'halbe Tage zählen 0.5' }
+            sickDays: { type: integer }
+            schoolDays: { type: integer }
+            holidayDays: { type: integer }
+            workDays: { type: integer, description: Tage mit bewerteter Arbeitszeit }
+            travelSeconds: { type: integer }
+            breakSeconds: { type: integer }
+            averageStart: { type: [string, 'null'], description: 'HH:mm lokal' }
+            averageEnd: { type: [string, 'null'], description: 'HH:mm lokal' }
+            longestDay: { oneOf: [ { type: object, required: [date, seconds], properties: { date: { type: string, format: date }, seconds: { type: integer } } }, { type: 'null' } ] }
+            provisional: { type: boolean }
     ShareScopes:
       type: object
       properties:
@@ -1740,7 +1864,7 @@ components:
     SharedView:
       type: object
       properties:
-        plan: { type: array, items: { type: object, required: [date, mode], properties: { date: { type: string, format: date }, mode: { type: string, enum: [office, home, customer, school, off] } } } }
+        plan: { type: array, items: { type: object, required: [date, mode], properties: { date: { type: string, format: date }, mode: { type: string, enum: [office, home, customer, school, off] }, plannedStart: { type: [string, 'null'] }, plannedEnd: { type: [string, 'null'] }, plannedBreakMinutes: { type: [integer, 'null'] }, plannedSeconds: { type: [integer, 'null'] } } } }
         actual: { type: array, items: { type: object, required: [date, evaluatedWorkSeconds], properties: { date: { type: string, format: date }, evaluatedStart: { type: [string, 'null'], format: date-time }, evaluatedEnd: { type: [string, 'null'], format: date-time }, evaluatedWorkSeconds: { type: integer } } } }
         vacation: { type: array, items: { type: object, required: [startDate, endDate], properties: { startDate: { type: string, format: date }, endDate: { type: string, format: date } } } }
     ImportJob:

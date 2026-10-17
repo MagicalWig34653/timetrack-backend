@@ -264,19 +264,80 @@ struct PlanService: Sendable {
             .filter(\.$date >= from.description).filter(\.$date <= to.description).sort(\.$date).all()
     }
     func list(from: LocalDate, to: LocalDate) async throws -> [PlanDayDTO] {
-        try await rows(from: from, to: to).map { .init(date: try LocalDate($0.date), mode: $0.mode, placeId: $0.placeId, note: $0.note) }
+        try await rows(from: from, to: to).map { try PlanDayDTO($0) }
     }
-    func put(_ date: LocalDate, _ input: PlanDayInput) async throws -> PlanDayDTO {
+    /// Normalised planned times of one entry: both or neither of start/end, start < end within the day, break 0...600
+    /// only together with times. Mode `off` ignores all times.
+    static func normalizedTimes(_ input: PlanDayInput) throws -> (start: String?, end: String?, breakMinutes: Int?) {
+        if input.mode == "off" { return (nil, nil, nil) }
+        switch (input.plannedStart, input.plannedEnd) {
+        case (nil, nil):
+            guard input.plannedBreakMinutes == nil else { throw APIError(.badRequest, "plan_break_invalid") }
+            return (nil, nil, nil)
+        case let (start?, end?):
+            guard let from = PlanTimes.minutes(start), let to = PlanTimes.minutes(end), from < to else { throw APIError(.badRequest, "plan_time_invalid") }
+            guard (input.plannedBreakMinutes ?? 0) >= 0, (input.plannedBreakMinutes ?? 0) <= PlanTimes.maxBreakMinutes else { throw APIError(.badRequest, "plan_break_invalid") }
+            return (start, end, input.plannedBreakMinutes)
+        default: throw APIError(.badRequest, "plan_time_invalid")
+        }
+    }
+    private func validate(_ input: PlanDayInput) async throws -> (start: String?, end: String?, breakMinutes: Int?) {
         guard Self.modes.contains(input.mode), input.note?.fitsColumn(200) ?? true else { throw APIError.invalid }
+        let times = try Self.normalizedTimes(input)
         if let place = input.placeId {
             // Archived places are treated like foreign ones.
             let row = try await scope.places.record(place)
             guard row.payload.archived != true else { throw APIError.missing }
         }
-        let row = try await PlanDayRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).filter(\.$date == date.description).first() ?? PlanDayRecord()
+        return times
+    }
+    private func assign(_ row: PlanDayRecord, date: LocalDate, input: PlanDayInput, times: (start: String?, end: String?, breakMinutes: Int?)) {
         row.accountId = scope.accountId; row.date = date.description; row.mode = input.mode; row.placeId = input.placeId; row.note = input.note
+        row.plannedStart = times.start; row.plannedEnd = times.end; row.plannedBreakMinutes = times.breakMinutes
+    }
+    func put(_ date: LocalDate, _ input: PlanDayInput) async throws -> PlanDayDTO {
+        let times = try await validate(input)
+        let row = try await PlanDayRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).filter(\.$date == date.description).first() ?? PlanDayRecord()
+        assign(row, date: date, input: input, times: times)
         try await row.save(on: scope.db)
-        return .init(date: date, mode: row.mode, placeId: row.placeId, note: row.note)
+        return try PlanDayDTO(row)
+    }
+    /// Stores up to seven entries of one ISO week in the surrounding unit of work (all or nothing).
+    func putWeek(_ week: ISOWeek, _ input: PlanWeekInput) async throws -> PlanWeekDTO {
+        guard input.days.count <= 7 else { throw APIError(.badRequest, "week_day_invalid") }
+        let dates = input.days.map(\.date)
+        guard Set(dates).count == dates.count, dates.allSatisfy({ $0 >= week.monday && $0 <= week.sunday }) else { throw APIError(.badRequest, "week_day_invalid") }
+        var validated: [(PlanWeekDayInput, (start: String?, end: String?, breakMinutes: Int?))] = []
+        for entry in input.days { validated.append((entry, try await validate(entry.day))) }
+        let existing = Dictionary(try await rows(from: week.monday, to: week.sunday).map { ($0.date, $0) }, uniquingKeysWith: { first, _ in first })
+        if input.replace == true {
+            let kept = Set(dates.map(\.description))
+            for (date, row) in existing where !kept.contains(date) { try await row.delete(on: scope.db) }
+        }
+        for (entry, times) in validated {
+            let row = existing[entry.date.description] ?? PlanDayRecord()
+            assign(row, date: entry.date, input: entry.day, times: times)
+            try await row.save(on: scope.db)
+        }
+        return try await self.week(week)
+    }
+    /// The seven days with plan, rule-derived target (work model, holidays, absences; no actuals) and totals.
+    func week(_ week: ISOWeek) async throws -> PlanWeekDTO {
+        let plans = Dictionary(try await rows(from: week.monday, to: week.sunday).map { ($0.date, $0) }, uniquingKeysWith: { first, _ in first })
+        let prepared = try await scope.days.snapshot(window: week.monday...week.sunday, includeSegments: false).prepared()
+        let now = Date()
+        var days: [PlanWeekDayDTO] = []
+        for date in week.dates {
+            let evaluation = try prepared.evaluate(date, now: now)
+            let plan = try plans[date.description].map { try PlanDayDTO($0) }
+            let halfDay = evaluation.mark == .vacation && evaluation.targetOverrideSeconds != nil
+            let blocked = [DayMarkKind.holiday, .vacation, .sick, .excused].contains(evaluation.mark) && !halfDay ? evaluation.mark.rawValue : nil
+            days.append(.init(date: date, weekday: date.isoWeekday, targetSeconds: evaluation.targetSeconds,
+                              plannedSeconds: blocked != nil && plan != nil ? 0 : plan?.plannedSeconds, blockedBy: blocked, plan: plan))
+        }
+        let target = days.reduce(0) { $0 + $1.targetSeconds }, planned = days.reduce(0) { $0 + ($1.plannedSeconds ?? 0) }
+        return .init(week: week.label, from: week.monday, to: week.sunday, days: days,
+                     totals: .init(targetSeconds: target, plannedSeconds: planned, differenceSeconds: planned - target))
     }
     func delete(_ date: LocalDate) async throws {
         try await PlanDayRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).filter(\.$date == date.description).delete()
@@ -347,7 +408,11 @@ struct ShareService: Sendable {
         let ownerScope = TimeServices(accountId: share.ownerId, db: scope.db, disabledModules: scope.disabledModules)
         var view = SharedViewDTO()
         if share.scopePlan {
-            view.plan = try await ownerScope.plans.rows(from: from, to: to).map { .init(date: try LocalDate($0.date), mode: $0.mode) }
+            view.plan = try await ownerScope.plans.rows(from: from, to: to).map { row in
+                .init(date: try LocalDate(row.date), mode: row.mode, plannedStart: row.plannedStart, plannedEnd: row.plannedEnd,
+                      plannedBreakMinutes: row.plannedBreakMinutes,
+                      plannedSeconds: PlanTimes.seconds(start: row.plannedStart, end: row.plannedEnd, breakMinutes: row.plannedBreakMinutes))
+            }
         }
         if share.scopeActual {
             view.actual = try await ownerScope.days.range(from: from, to: to, limit: PlanningLimits.planningRangeDays)

@@ -91,6 +91,10 @@ func registerTimeRoutes(_ app: Application, auth: AuthService) {
         let day = try date(req); let input = try timeDecode(DayInput.self, request: req)
         return try await run(req) { try timeResponse(await $0.days.set(day, input: input)) }
     }
+    api.get("time", "weeks", ":week") { req async throws -> Response in
+        let value = try ISOWeek(req.parameters.get("week") ?? "")
+        return try await runRead(req) { try timeResponse(await $0.weeks.week(value)) }
+    }
     api.get("time", "account") { req async throws -> Response in
         let asOf = try req.query[String.self, at: "asOf"].map(LocalDate.init)
         return try await runRead(req) { try timeResponse(await $0.account.balance(asOf: asOf)) }

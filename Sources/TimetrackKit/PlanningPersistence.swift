@@ -75,6 +75,10 @@ final class PlanDayRecord: Model, @unchecked Sendable {
     @Field(key: "mode") var mode: String
     @OptionalField(key: "place_id") var placeId: UUID?
     @OptionalField(key: "note") var note: String?
+    /// K1: rough planned working window as local wall-clock "HH:mm" and a planned break; all NULL when no times are planned.
+    @OptionalField(key: "planned_start") var plannedStart: String?
+    @OptionalField(key: "planned_end") var plannedEnd: String?
+    @OptionalField(key: "planned_break_minutes") var plannedBreakMinutes: Int?
     init() {}
 }
 
@@ -189,5 +193,22 @@ struct CreatePlanningPersistence: AsyncMigration {
         try await db.schema("vacation_adjustments").delete()
         try await db.schema("vacation_snapshots").delete()
         try await db.schema("vacation_settings").delete()
+    }
+}
+
+/// K1: additive columns for planned times on plan days (ADR-0021). Existing rows keep NULL.
+struct AddPlanDayTimes: AsyncMigration {
+    let name = "k1.add_plan_day_times"
+    func prepare(on db: any Database) async throws {
+        // One statement per column: SQLite cannot add several columns in a single ALTER TABLE.
+        try await db.schema("plan_days").field("planned_start", .string).update()
+        try await db.schema("plan_days").field("planned_end", .string).update()
+        try await db.schema("plan_days").field("planned_break_minutes", .int).update()
+    }
+    func revert(on db: any Database) async throws {
+        // One statement per column: SQLite cannot drop several columns in a single ALTER TABLE.
+        try await db.schema("plan_days").deleteField("planned_break_minutes").update()
+        try await db.schema("plan_days").deleteField("planned_end").update()
+        try await db.schema("plan_days").deleteField("planned_start").update()
     }
 }

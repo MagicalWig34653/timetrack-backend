@@ -90,7 +90,9 @@ struct AccountExportService: Sendable {
         let calendar = try await CustomCalendarDayRecord.query(on: db).filter(\.$accountId == id).sort(\.$startDate).all()
         try table("calendar-days", calendar.map { ["kind": .string($0.kind), "startDate": .string($0.startDate), "endDate": .string($0.endDate), "name": .string($0.name)] })
         let plan = try await PlanDayRecord.query(on: db).filter(\.$accountId == id).sort(\.$date).all()
-        try table("plan-days", plan.map { ["date": .string($0.date), "mode": .string($0.mode), "placeId": Self.uuid($0.placeId), "note": Self.opt($0.note)] })
+        try table("plan-days", plan.map { ["date": .string($0.date), "mode": .string($0.mode), "placeId": Self.uuid($0.placeId), "note": Self.opt($0.note),
+                                          "plannedStart": Self.opt($0.plannedStart), "plannedEnd": Self.opt($0.plannedEnd),
+                                          "plannedBreakMinutes": $0.plannedBreakMinutes.map { JSONValue.number(Double($0)) } ?? .null] })
         // Only the caller's own outgoing shares; the plans of others that are shared with the caller are not part of this account's data.
         let shares = try await ShareRecord.query(on: db).filter(\.$ownerId == id).sort(\.$createdAt).all()
         var shareRows: [Row] = []

@@ -105,15 +105,79 @@ struct CustomDayInput: Decodable, Sendable { var kind: CalendarDayKind; var star
 
 struct PlanDayInput: Decodable, Sendable {
     var mode: String; var placeId: UUID?; var note: String?
+    /// K1 (ADR-0021): rough planned working window, local wall-clock "HH:mm" in the work model's time zone.
+    var plannedStart: String?; var plannedEnd: String?; var plannedBreakMinutes: Int?
 }
 struct PlanDayDTO: Encodable, Sendable {
     var date: LocalDate; var mode: String; var placeId: UUID?; var note: String?
+    var plannedStart: String?; var plannedEnd: String?; var plannedBreakMinutes: Int?
+    /// Derived, never stored: (end - start - break), not negative; nil without planned times.
+    var plannedSeconds: Int?
+    init(date: LocalDate, mode: String, placeId: UUID?, note: String?, plannedStart: String? = nil, plannedEnd: String? = nil, plannedBreakMinutes: Int? = nil) {
+        self.date = date; self.mode = mode; self.placeId = placeId; self.note = note
+        self.plannedStart = plannedStart; self.plannedEnd = plannedEnd; self.plannedBreakMinutes = plannedBreakMinutes
+        plannedSeconds = PlanTimes.seconds(start: plannedStart, end: plannedEnd, breakMinutes: plannedBreakMinutes)
+    }
+    init(_ row: PlanDayRecord) throws {
+        self.init(date: try LocalDate(row.date), mode: row.mode, placeId: row.placeId, note: row.note,
+                  plannedStart: row.plannedStart, plannedEnd: row.plannedEnd, plannedBreakMinutes: row.plannedBreakMinutes)
+    }
     func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(date, forKey: .date); try c.encode(mode, forKey: .mode)
         try c.encode(placeId, forKey: .placeId); try c.encode(note, forKey: .note)
+        try c.encode(plannedStart, forKey: .plannedStart); try c.encode(plannedEnd, forKey: .plannedEnd)
+        try c.encode(plannedBreakMinutes, forKey: .plannedBreakMinutes); try c.encode(plannedSeconds, forKey: .plannedSeconds)
     }
-    enum CodingKeys: String, CodingKey { case date, mode, placeId, note }
+    enum CodingKeys: String, CodingKey { case date, mode, placeId, note, plannedStart, plannedEnd, plannedBreakMinutes, plannedSeconds }
+}
+
+/// Planned times are plain wall-clock strings; the plan is rough, so no time zone or DST arithmetic is involved.
+enum PlanTimes {
+    static let maxBreakMinutes = 600
+    /// Strict "HH:mm" (two digits each), 00:00...23:59.
+    static func minutes(_ value: String) -> Int? {
+        let bytes = Array(value.utf8)
+        guard bytes.count == 5, bytes[2] == 58, [0, 1, 3, 4].allSatisfy({ (48...57).contains(bytes[$0]) }) else { return nil }
+        let hour = Int(bytes[0] - 48) * 10 + Int(bytes[1] - 48), minute = Int(bytes[3] - 48) * 10 + Int(bytes[4] - 48)
+        return hour < 24 && minute < 60 ? hour * 60 + minute : nil
+    }
+    static func seconds(start: String?, end: String?, breakMinutes: Int?) -> Int? {
+        guard let start, let end, let from = minutes(start), let to = minutes(end), to > from else { return nil }
+        return max(0, (to - from - (breakMinutes ?? 0)) * 60)
+    }
+}
+
+struct PlanWeekDayInput: Decodable, Sendable {
+    var date: LocalDate; var day: PlanDayInput
+    init(from decoder: any Decoder) throws {
+        date = try decoder.container(keyedBy: CodingKeys.self).decode(LocalDate.self, forKey: .date)
+        day = try PlanDayInput(from: decoder)
+    }
+    enum CodingKeys: String, CodingKey { case date }
+}
+struct PlanWeekInput: Decodable, Sendable { var replace: Bool?; var days: [PlanWeekDayInput] }
+
+/// One day of the week planner: the stored plan plus the rule-derived target and the blocking reason.
+struct PlanWeekDayDTO: Encodable, Sendable {
+    var date: LocalDate; var weekday: Int
+    var targetSeconds: Int
+    /// Effective planned seconds: 0 for a blocked day, nil without a plan or without planned times.
+    var plannedSeconds: Int?
+    /// holiday, vacation, sick or excused when that mark overrides the plan (a half-day vacation does not block).
+    var blockedBy: String?
+    var plan: PlanDayDTO?
+    func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(date, forKey: .date); try c.encode(weekday, forKey: .weekday); try c.encode(targetSeconds, forKey: .targetSeconds)
+        try c.encode(plannedSeconds, forKey: .plannedSeconds); try c.encode(blockedBy, forKey: .blockedBy); try c.encode(plan, forKey: .plan)
+    }
+    enum CodingKeys: String, CodingKey { case date, weekday, targetSeconds, plannedSeconds, blockedBy, plan }
+}
+struct PlanWeekDTO: Encodable, Sendable {
+    struct Totals: Encodable, Sendable { var targetSeconds: Int; var plannedSeconds: Int; var differenceSeconds: Int }
+    var week: String; var from: LocalDate; var to: LocalDate
+    var days: [PlanWeekDayDTO]; var totals: Totals
 }
 
 struct ShareScopesDTO: Codable, Sendable, Equatable {
@@ -132,7 +196,19 @@ struct ShareUpdateInput: Decodable, Sendable { var scopes: ShareScopesDTO }
 struct ShareDTO: Encodable, Sendable { var id: UUID; var recipientHandle: String; var scopes: ShareScopesDTO; var createdAt: Date }
 struct IncomingShareDTO: Encodable, Sendable { var id: UUID; var ownerDisplayName: String; var scopes: ShareScopesDTO }
 struct SharedViewDTO: Encodable, Sendable {
-    struct Plan: Encodable, Sendable { var date: LocalDate; var mode: String }
+    struct Plan: Encodable, Sendable {
+        var date: LocalDate; var mode: String
+        // Planned times belong to the plan scope; notes and places never leave the owner's account.
+        var plannedStart: String?; var plannedEnd: String?; var plannedBreakMinutes: Int?; var plannedSeconds: Int?
+        func encode(to encoder: any Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(date, forKey: .date); try c.encode(mode, forKey: .mode)
+            // Without planned times the entry stays exactly as before (date and mode only).
+            try c.encodeIfPresent(plannedStart, forKey: .plannedStart); try c.encodeIfPresent(plannedEnd, forKey: .plannedEnd)
+            try c.encodeIfPresent(plannedBreakMinutes, forKey: .plannedBreakMinutes); try c.encodeIfPresent(plannedSeconds, forKey: .plannedSeconds)
+        }
+        enum CodingKeys: String, CodingKey { case date, mode, plannedStart, plannedEnd, plannedBreakMinutes, plannedSeconds }
+    }
     struct Actual: Encodable, Sendable {
         var date: LocalDate; var evaluatedStart: Date?; var evaluatedEnd: Date?; var evaluatedWorkSeconds: Int
         func encode(to encoder: any Encoder) throws {

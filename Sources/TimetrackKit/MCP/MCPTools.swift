@@ -216,7 +216,10 @@ enum McpTools {
               "Sets the planned working mode of one day (planning only; it does not record time). Replaces an existing plan for that day.", idempotent: true,
               McpSchema.object(["date": McpSchema.date("Day to plan"),
                                 "mode": McpSchema.string("Planned mode", enumeration: PlanService.modes),
-                                "placeId": McpSchema.uuid("Optional place id"), "note": McpSchema.string("Optional note", maxLength: 200)],
+                                "placeId": McpSchema.uuid("Optional place id"), "note": McpSchema.string("Optional note", maxLength: 200),
+                                "plannedStart": McpSchema.string("Optional planned start, local time HH:mm (with plannedEnd)", maxLength: 5),
+                                "plannedEnd": McpSchema.string("Optional planned end, local time HH:mm, after the start on the same day", maxLength: 5),
+                                "plannedBreakMinutes": McpSchema.integer("Optional planned break in minutes (needs times)", minimum: 0, maximum: PlanTimes.maxBreakMinutes)],
                                required: ["date", "mode"])) { ctx, args in
             try McpJSON.encoding(await ctx.time.plans.put(day(args, "date"), decodeArguments(PlanDayInput.self, args, dropping: ["date"])))
         },
