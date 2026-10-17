@@ -72,3 +72,10 @@ Mit Erlaubnis des Nutzers: `xcodebuild -allowProvisioningUpdates` mit Team `ABCD
 ## Nachtrag A8 (17.10.2026)
 
 Der Widget-Snapshot enthält zusätzlich `accentHex` und `colorScheme` (nicht geheim; aus den Kontoeinstellungen, ADR-0020). Die Apps laden Akzent und Erscheinungsbild aus dem Konto (`/me/preferences`, Session-Objekt) und schreiben Änderungen entprellt zurück; das App-Symbol bleibt geräteweise. Bekannte Einschränkung: ein einziger lokaler Cache — eine nicht gesendete Änderung von Konto A geht verloren, wenn Konto B sich auf demselben Gerät anmeldet.
+
+## Nachtrag A12 (17.10.2026): Watch eigenständig und schneller Start
+
+- Die Uhr zeigt beim Start sofort den zwischengespeicherten Zustand (App-Group-Snapshot) und lädt danach live nach: Inhalt nach rund 0,35–0,45 s (Simulator, auch bei 300 ms künstlicher Latenz), Live-Daten nach 0,5–1,0 s; ein einzelner Kaltstart direkt nach der Installation lag mit etwa 2,9 s über dem Ziel von 2,5 s (Debug-Build, Simulator, ein Lauf).
+- Sitzung: Nur ein 401 meldet die Uhr ab; Netzfehler lassen sie nutzbar. Start und Stopp werden offline in einer persistenten Warteschlange (höchstens 8 Einträge, gleiche `clientEventId`, rückdatiert auf den Tastendruck) zugestellt; 409 verwirft den Eintrag, 401, Netz- und 5xx-Fehler behalten ihn.
+- **Anmeldung auf der Uhr ohne iPhone ist nicht möglich:** `ASAuthorizationPlatformPublicKeyCredential*` und `ASPresentationAnchor` stehen auf watchOS nicht zur Verfügung, und das Backend hat kein REST-Gerätekopplungsverfahren (persönliche Tokens gelten nur für `/mcp`). Die Uhr bleibt auf „Sitzung vom iPhone übernehmen". Mögliche spätere Lösung: Gerätekopplung im Backend (Code auf der Uhr, Bestätigung am iPhone oder in der PWA, die Uhr holt die Sitzung).
+- Hintergrundaktualisierung (`.backgroundTask(.appRefresh)`, etwa alle 20 Minuten) ist eingebaut, aber nicht auf einer echten Uhr beobachtet.

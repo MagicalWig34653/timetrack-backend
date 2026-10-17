@@ -284,9 +284,9 @@ Zusammenarbeit durch Dritte (Pull Requests, Issues) ist über die GitHub-Vorlage
 
 | ID | Paket | Status |
 | --- | --- | --- |
-| K1 | Wochenplanung (Plan mit Beginn/Ende) und Wochenübersicht, Backend + PWA | **pausiert bis 19.10. 8 Uhr** (Claude-Kontingent schonen); Zwischenstand in den Worktrees `timetrack-backend-wt/k1`, `timetrack-pwa-wt/k1` |
+| K1 | Wochenplanung (Plan mit Beginn/Ende) und Wochenübersicht, Backend + PWA | integriert (Vertrag 0.17.0); Backend 315 Tests SQLite, PWA 692 Unit + Echt-E2E 186 vom Lead |
 | REL | Release v0.1.0 (Changelog, Tag in allen drei Repos, Docker-Image 0.1.0) | wartet auf stabile Produktion und K1 |
-| A12 | Apple Watch: schneller Start (Snapshot zuerst), eigenständig (Sitzung, Offline-Warteschlange, Hintergrundaktualisierung) | **pausiert bis 19.10. 8 Uhr**; Zwischenstand im Worktree `timetrack-apple-wt/a12` |
+| A12 | Apple Watch: schneller Start (Snapshot zuerst), eigenständig (Sitzung, Offline-Warteschlange, Hintergrundaktualisierung) | integriert (Apple-Merge A12); 141+22 Paket-Tests und drei Builds vom Lead; Kaltstart-Ziel 2,5 s verfehlt (2,9 s, ein Lauf); Anmeldung auf der Uhr ohne iPhone nicht möglich (watchOS), Gerätekopplung im Backend wäre nötig; echte Uhr ungeprüft |
 | S1 | Sicherheit und Vertragsqualität: `summary` je Operation, Authentifizierung nur einmal pro Anfrage, Pool-Zeitlimit als 503 mit `Retry-After`, Lizenzprüfung vor Release (BoringSSL) | geplant (nach K1, wegen Vertragskonflikten) |
 | N1 | Native Apps auf PWA-Stand: Wochenplanung/-übersicht (K1), Arbeitsmodell bearbeiten und Urlaubskarte (M1), acht neue Akzente und Leuchteffekt (G1), Haptik-Schalter für Uhr/Mac | geplant (nach K1) |
 | F2 | Fokus-Filter (iOS `SetFocusFilterIntent`, Modi aus/Vorschlag/direkt wie bei der Standortautomatik) zusammen mit Wochenplan und -übersicht im nächsten Release | geplant |
@@ -301,7 +301,7 @@ Zusammenarbeit durch Dritte (Pull Requests, Issues) ist über die GitHub-Vorlage
 
 Zurückgestellt (auf Nutzerwunsch): IHK-Berichtsheft-Format, Selbstständigenfunktionen.
 
-Entscheidungen (17.10.2026, Nachtrag): **Pause** = normale Pause (Timer anhalten, Lücke bleibt Pause, kein eigener Typ). **Fokus-Filter** wie vorgeschlagen (Modus aus/Vorschlag/direkt plus Art), muss am Ende selbsterklärend sein. **Claude-Kontingent** bis 19.10.2026, 8 Uhr schonen (Stand 93 %): keine neuen Agent-Pakete bis dahin; K1 und A12 sind pausiert.
+Entscheidungen (17.10.2026, Nachtrag): **Pause** = normale Pause (Timer anhalten, Lücke bleibt Pause, kein eigener Typ). **Fokus-Filter** wie vorgeschlagen (Modus aus/Vorschlag/direkt plus Art), muss am Ende selbsterklärend sein. Das Claude-Kontingent muss nicht mehr geschont werden (Klärung des Nutzers, 18.10.); nur die Mac-App ruht.
 
 ## K1 – Wochenplanung und Wochenübersicht (17.10.2026)
 
