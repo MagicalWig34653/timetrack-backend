@@ -93,3 +93,7 @@ Swift 6.4 (Xcode 27), Node 26.5/npm 11.17, Docker 29.5.2 (Colima arm64), Compose
 4. **CI reparieren**: Linux-Testkompilierung (`FoundationXML`), „Dependency graph“ aktivieren, Apple-Runner mit Xcode 27 oder Apple-CI auf manuell/lokal beschränken; Dependabot-Pull-Requests sichten (große Sprünge wie TypeScript 7 oder Redocly 2 nicht blind mergen).
 5. **Produktpunkte**: IHK-Berichtsheft-Format klären (Beispiel vom Betreiber), Rechtsprofile für Jugendliche, Standortautomatik auf iOS, KI-Entwurfs-Worker, Kalenderbrücke, Selbstständigenfunktionen, visuelle Prüfung des nativen Mac-Clients.
 6. **Qualität**: Codex-Reviews für B1–B5/P1/P2/A2 nachholen (Kontingent prüfen); Lizenz-Release-Prüfung (BoringSSL); Vertrag: `summary` je Operation ergänzen.
+
+## Roadmap
+
+Reihenfolge, Umfang und Entscheidungen vom 17.10.2026: `docs/ARBEITSPLAN.md`, Abschnitt „Roadmap nach Release v0.1.0“.
