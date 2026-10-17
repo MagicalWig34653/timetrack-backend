@@ -1,3 +1,4 @@
+import Foundation
 import Vapor
 import TimetrackKit
 
@@ -5,7 +6,10 @@ import TimetrackKit
 struct TimetrackBackend {
     static func main() async throws {
         var environment = try Environment.detect()
-        try LoggingSystem.bootstrap(from: &environment)
+        let timestamps = ProcessInfo.processInfo.environment["LOG_TIMESTAMPS"]?.lowercased() != "false"
+        try LoggingSystem.bootstrap(from: &environment) { level in
+            { label in TimestampedLogHandler(label: label, level: level, timestamps: timestamps) }
+        }
         let app = try await Application.make(environment)
         do {
             try await configure(app)

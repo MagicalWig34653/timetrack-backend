@@ -231,6 +231,7 @@ Nie ein echtes `.env` committen. Ungültige Werte brechen den Start mit klarer M
 | `DB_POOL_CONNECTIONS_PER_LOOP` | `1` | MariaDB: Verbindungen pro Event-Loop (1 bis 8). Bei vielen Kernen und mehreren Replikaten summiert sich das (Kerne × Wert × Replikate); `max_connections` und `MAX_USER_CONNECTIONS` der Datenbank müssen reichen. |
 | `DB_POOL_TIMEOUT_SECONDS` | `10` | MariaDB: Wartezeit auf eine freie Verbindung (1 bis 120). |
 | `DB_KEEPALIVE_SECONDS` | `45` | MariaDB: Ping-Intervall, hält Leerlaufverbindungen am Leben (0 = aus). |
+| `LOG_TIMESTAMPS` | `true` | Jede Logzeile beginnt mit einem UTC-Zeitstempel (`2026-10-17T14:05:03.123Z [ NOTICE ] …`); `false` lässt ihn weg. Die Stufe steuert `LOG_LEVEL`. |
 | `MAINTENANCE_INTERVAL_MINUTES` | `60` | Abstand des periodischen Aufräumjobs in Minuten (0 bis 10080); `0` schaltet ihn ab. Der CLI-Befehl `maintenance` läuft unabhängig davon (ADR-0017) |
 | `MCP_AUDIT_RETENTION_DAYS` | `90` | Aufbewahrung der `mcp_audit`-Zeilen in Tagen (1 bis 3650) |
 | `IMPORT_JOB_TIMEOUT_HOURS` | `168` | offene Importe (hochgeladen/zugeordnet) älter als dies werden verworfen (1 bis 8760) |

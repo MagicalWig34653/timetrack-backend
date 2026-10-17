@@ -80,6 +80,7 @@ Ohne `SMTP_HOST` ist E-Mail nicht verfügbar. In den mitgelieferten Dateien sind
 | Variable | Standard | Bedeutung |
 | --- | --- | --- |
 | `MODULES_DISABLED` | leer | Betreibersperre, kommagetrennt aus `reports`, `planning`, `transfer`, `automation`, `mcp`. Unbekannte Namen verhindern den Start. |
+| `LOG_TIMESTAMPS` | nein | `true` | UTC-Zeitstempel am Anfang jeder Logzeile (`false` = aus). |
 | `MAINTENANCE_INTERVAL_MINUTES` | `60` (0 bis 10080) | Abstand des Aufräumjobs im Backend; `0` = aus. |
 | `MCP_AUDIT_RETENTION_DAYS` | `90` (1 bis 3650) | Aufbewahrung des MCP-Protokolls in Tagen. |
 | `IMPORT_JOB_TIMEOUT_HOURS` | `168` (1 bis 8760) | Offene, nicht abgeschlossene Importe werden danach verworfen. |

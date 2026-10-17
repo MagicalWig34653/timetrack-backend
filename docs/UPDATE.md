@@ -46,6 +46,18 @@ docker service ps timetrack_backend
 
 `--force` ist beim Migrations-Job nötig, wenn das Image unverändert bleibt (zum Beispiel bei `:latest`). Bei einem neuen Tag startet er auch ohne. Wer lieber `docker stack deploy` benutzt, setzt vorher `BACKEND_REPLICAS=0`, wartet die Migration ab und skaliert danach wieder hoch.
 
+## Neues Image erzwingen (Swarm)
+
+Swarm zieht ein Image nur, wenn sich die Zuordnung ändert. Bei einem beweglichen Tag wie `:latest` oder `:main` erzwingst du es so:
+
+```sh
+docker service update --force --with-registry-auth \
+  --image ghcr.io/magicalwig34653/timetrack-backend:latest timetrack_backend
+docker service inspect timetrack_backend --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}'   # zeigt Tag@sha256:… des neuen Standes
+```
+
+`--image` löst den Tag beim Aufruf neu in einen Digest auf und `--force` startet die Tasks auch dann neu, wenn der Digest gleich bleibt. Bei `docker stack deploy` hilft `--resolve-image always`. Der Stack merkt sich den beim letzten Deploy aufgelösten Digest, deshalb zieht ein erneutes `stack deploy` mit demselben Tag ohne diese Option kein neueres Image. Für Produktion sind feste Tags (`0.1.0`, `sha-<kurz>`) besser, dann ist der Stand immer eindeutig.
+
 ## Prüfen
 
 - `https://deine-domain/ready` antwortet mit `{"status":"ok"}`.

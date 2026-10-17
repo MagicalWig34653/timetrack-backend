@@ -249,3 +249,8 @@ Stand 17.10.2026. Erledigtes ist vermerkt, nicht gelöscht; offen bleibt, was ni
 Kein PostgreSQL, Pflicht-Authentik oder Infrastrukturaufbau. Kein Pflicht-Offline-Sync,
 Pflicht-KI-Abonnement oder Pflicht-Cloud-KI. Keine Team-Genehmigungshierarchie/Lohnabrechnung.
 Konfigurierbare betriebliche Regeln sind keine Zusage allgemeiner rechtlicher Konformität.
+
+
+## Kalenderanbindung (Entscheidung 17.10.2026)
+
+Die Anbindung an Kalender (Apple-Kalender, EventKit) erfolgt **nur über die native App** auf dem Gerät, ohne Server-Zugriff auf Kalenderkonten und damit ohne App-spezifische Passwörter. Das Backend bleibt kalenderfrei. Umsetzung: späteres Paket der Apple-Apps (Opt-in, Standard: lesen; Schreiben nur nach eigener Entscheidung; private Titel werden nicht geteilt).
