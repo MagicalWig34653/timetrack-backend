@@ -71,7 +71,7 @@ Summe der Paketpunkte (Schätzwerte; nur Umsetzungspakete mit Punkten; Reviews, 
 | --- | --- | --- |
 | Codex | C1 5, C2 8, C3 3, C4 1, C5 5, C6 8, C7 2, C8 5, C19 8, C20 8, C21 10, C22 8, C23 6 | **77** |
 | Claude-Agents, bis 15.10. | L1 8, L2 3, L3a 2, L3b 3, L4 8, L5 4, L6 8, L7a 2, L7b 3, C9 8, C10 2, C11 5, C12 8, C13 8, L9 8, L10 3, C14 8, L11 5, L12 5, C15 6, L13 6, L14 4, C16 8, C17 8, L15 5, X1 4, C18 8, L16 8, L17 6, D1 3, L18 8 | 175 |
-| Claude-Agents, ab L19 | L19 4, L20 3, L21 10, L22 4, A1 10, A2 4, A3 8, A4 6, A5 5, A6 10, A6b 4, A6c 4, A6d 3, A7 8, A8 4, L23 8, B1 8, B2 8, B3 6, B4 3, B5 4, P1 8, P2 3, D2 3, W1 5, M1 6 | 149 |
+| Claude-Agents, ab L19 | L19 4, L20 3, L21 10, L22 4, A1 10, A2 4, A3 8, A4 6, A5 5, A6 10, A6b 4, A6c 4, A6d 3, A7 8, A8 4, L23 8, B1 8, B2 8, B3 6, B4 3, B5 4, P1 8, P2 3, D2 3, W1 5, M1 6, MAIL1 6 | 155 |
 | Claude-Agents gesamt | | **318** |
 
 Formel: Codex-Anteil = 77 / (77 + 318) = 77 / 395 ≈ **19,5 %** – deutlich unter dem Richtwert 40–60 % (bis C22: 71 von 246 ≈ 29 %; der Anteil fiel, weil danach fast nur Claude-Pakete folgten, vor allem die gesamten Apple-Apps A1–A8, Betrieb, Dokumentation und Oberflächen).
@@ -311,3 +311,10 @@ Claude-Agent in getrennten Worktrees (Branches `k1-week`), nicht gemergt.
 | --- | --- | --- | --- | --- | --- |
 | K1 | Geplante Zeiten am Plantag, `GET/PUT /plan/weeks/{isoWeek}`, `GET /time/weeks/{isoWeek}`, Vertrag v0.17.0, ADR-0021; PWA: „Woche“ mit Übersicht (Tageskarten, Summen, Icons) und Planer (Schnellaktionen, Speichern, Schutz vor Verlassen); Details `docs/handoffs/K1.md` | Claude-Agent | 8 | umgesetzt, Lead-Prüfung offen | X1, M1 |
 
+## MAIL1 – E-Mail-Prüfung in den Servereinstellungen (17.10.2026)
+
+Claude-Agent in getrennten Worktrees (Branches `mail1-smtp-check`), nicht gemergt.
+
+| ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
+| --- | --- | --- | --- | --- | --- |
+| MAIL1 | `GET /admin/mail`, `POST /admin/mail/check` (Live-Diagnose DNS/TCP/TLS/EHLO/Anmeldung/Absender ohne Nachricht), `POST /admin/mail/test` (feste Testmail, frische Sitzung), Vertrag v0.18.0, ADR-0022; PWA: Seite `/admin/mail` mit Statuskarte, Schrittanzeige, Testmail; Details `docs/handoffs/MAIL1.md` | Claude-Agent | 6 | umgesetzt, Lead-Prüfung offen | B1, P1, K1 |

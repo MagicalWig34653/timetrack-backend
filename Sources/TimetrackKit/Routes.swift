@@ -8,6 +8,7 @@ func registerRoutes(_ app: Application, service: AuthService) {
     registerExportRoutes(app, auth: service)
     registerImportRoutes(app, auth: service)
     registerStorageRoutes(app, auth: service)
+    registerMailRoutes(app, auth: service)
     registerReportRoutes(app, auth: service)
     registerOIDCRoutes(app, auth: service)
     registerAccountRoutes(app, auth: service)

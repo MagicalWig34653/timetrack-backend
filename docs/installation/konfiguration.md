@@ -68,6 +68,8 @@ Ohne `SMTP_HOST` ist E-Mail nicht verfügbar. In den mitgelieferten Dateien sind
 | `SMTP_FROM`, `SMTP_FROM_NAME` | – (Absender Pflicht) | Absenderadresse und -name. |
 | `SMTP_USER`, `SMTP_PASSWORD` | – | Zugangsdaten, nur gemeinsam. Im Container `SMTP_PASSWORD_FILE`. |
 
+**Prüfen:** Als Admin unter Verwaltung, E-Mail (`/admin/mail`) siehst du die wirksamen Werte (ohne Zugangsdaten), kannst die Verbindung Schritt für Schritt prüfen (es wird keine Nachricht gesendet) und eine Testmail senden. Die Werte lassen sich dort nicht ändern; sie stehen nur in der Umgebung.
+
 ## Benachrichtigungen und Push
 
 | Variable | Standard | Bedeutung |
