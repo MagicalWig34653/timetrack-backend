@@ -34,10 +34,10 @@ Dateien: [../deploy/swarm/stack.yaml](../deploy/swarm/stack.yaml) (Stack ohne Da
 | Reverse Proxy (nginx, Traefik o. ä.), den Sie selbst betreiben | Anforderungen und Beispiele: Abschnitt 8. |
 | Vorhandene MariaDB 12.3.3 | Vom Stack aus per TCP erreichbar, TLS empfohlen (Abschnitt 3). Wird nicht verändert außer um eine neue Datenbank und einen neuen Benutzer. |
 | Container-Image des Backends | Z. B. `ghcr.io/<owner>/timetrack-backend:<tag>` (Veröffentlichung durch Paket W1). Jede Registry geht, die die Knoten erreichen; bei privater Registry `docker login` und `--with-registry-auth`. Selbst bauen: BETRIEB.md Abschnitt 5.1 und 7 (nativer amd64-Build empfohlen). |
-| Gebaute PWA (statische Dateien) | Aus dem Repository `timetrack-pwa`: `npm ci && npm run build` ergibt das Verzeichnis `build/`. Auf den Knoten kopieren, z. B. nach `/srv/timetrack/pwa` (`PWA_HOST_DIR`). Node wird nur zum Bauen gebraucht, nicht im Betrieb. |
+| Gebaute PWA | Teil des Container-Images: Die CI baut das Image aus Backend **und** PWA (Repository `timetrack-pwa`, Referenz `PWA_REF`, Standard `main`). Nichts auf den Knoten zu kopieren; Node wird nur beim Bauen gebraucht, nicht im Betrieb. Selbst bauen: `docker build --build-context pwa-src=../timetrack-pwa -t ... .` (EINRICHTUNG.md). |
 | `openssl`, `curl` auf dem Server | Für `create-secrets.sh` und die Prüfungen. |
 
-Das Backend und die PWA müssen zueinander passen (Vertragsversion). Bauen Sie beides aus zusammengehörigen Ständen; der Vertrag steht im Kopf von
+Das Backend und die PWA müssen zueinander passen (Vertragsversion). Das Image enthält beides; der PWA-Stand steht im Image-Label `org.opencontainers.image.pwa.revision`. Bauen Sie aus zusammengehörigen Ständen; der Vertrag steht im Kopf von
 [../contracts/openapi.yaml](../contracts/openapi.yaml), der Stand der PWA in deren Repository.
 
 ## 2. Repository-Dateien auf den Server bringen
@@ -169,7 +169,6 @@ Die Datei wird von der Shell eingelesen (`set -a; . stack.env; set +a`): keine L
 | `WEBAUTHN_ORIGIN` | ja | `https://timetrack.example.org` | Muss exakt dem Browser-Origin entsprechen (Schema + Host, kein Pfad); der Host muss RP-ID oder deren Subdomain sein. |
 | `WEBAUTHN_RP_NAME` | nein | `Timetrack` | Anzeigename im Passkey-Dialog. |
 | `VAPID_SUBJECT` | im Stack ja | `mailto:admin@example.org` | Kontakt für Push-Dienste: `mailto:` oder `https://`. Ungültig oder fehlend: Push bleibt aus (Warnung im Log). |
-| `PWA_HOST_DIR` | ja | `/srv/timetrack/pwa` | Absoluter Pfad der gebauten PWA auf dem Knoten, der das Backend ausführt. |
 | `PROXY_NETWORK` | nein | `timetrack-proxy` | Name des externen Overlay-Netzes. |
 | `TRUSTED_PROXY_CIDRS` | dringend empfohlen | `10.0.1.0/24` | Netze der Proxys, deren `X-Forwarded-For` geglaubt wird (Abschnitt 9). Leer = niemand. `/0` wird abgelehnt, ungültige Einträge verhindern den Start. |
 | `TRUSTED_PROXY_HEADER` | nein | `X-Forwarded-For` | Oder `X-Real-IP`. |
@@ -179,16 +178,15 @@ Die Datei wird von der Shell eingelesen (`set -a; . stack.env; set +a`): keine L
 | `SESSION_TTL_HOURS` | nein | `336` | Sitzungsdauer 1..8760 Stunden (Stack-Standard 336; Code-Standard 720). |
 | `MODULES_DISABLED` | nein | `mcp` | Betreibersperre: `reports,planning,transfer,automation,mcp` (Abschnitt 16). |
 | `MAINTENANCE_INTERVAL_MINUTES` u. a. | nein | `60`, `90`, `168`, `168` | Wartungsjob (ADR-0017): Intervall (0 = aus), `MCP_AUDIT_RETENTION_DAYS`, `IMPORT_JOB_TIMEOUT_HOURS`, `STORAGE_ORPHAN_GRACE_HOURS`. |
-| `BACKEND_REPLICAS` | nein | `1` | Beim ersten Deployment `0` (Abschnitt 7). Mit lokalem Dateispeicher nicht über einen Knoten hinaus erhöhen. |
-| `BACKEND_PLACEMENT` | nein | `"node.role == manager"` | Platzierung; wegen des knotenlokalen Datei-Volumes fest wählen (z. B. `node.hostname == server1`). |
+| `BACKEND_REPLICAS` | nein | `1` | Beim ersten Deployment `0` (Abschnitt 7). |
+| `BACKEND_PLACEMENT` | nein | `"node.platform.os == linux"` | Optionale Platzierungsbedingung. Keine feste Knotenbindung nötig (PWA im Image, Dateien in der Datenbank); z. B. `"node.labels.timetrack == true"` zum Einschränken. |
 | `SMTP_*` | nein | siehe Datei | E-Mail-Wiederherstellung. Alle Zeilen aktivieren (auch Block und Secret in `stack.yaml`): `SMTP_HOST`, `SMTP_PORT`, `SMTP_TLS` (`starttls`/`implicit`), `SMTP_FROM`, `SMTP_FROM_NAME`, `SMTP_USER` + Secret `tt_smtp_password`. `SMTP_USER` und Passwort nur gemeinsam; `SMTP_TLS=off` nur für Loopback-Testhosts. |
 | `OIDC_*` | nein | siehe Datei | Optionales OpenID-Connect (ADR-0007): `OIDC_ISSUER` (HTTPS), `OIDC_CLIENT_ID`, `OIDC_NAME`, `OIDC_SCOPES` (muss `openid` enthalten) + Secret `tt_oidc_client_secret`. Nur zusammen mit dem Block in `stack.yaml`. |
 | S3 | – | – | Wird **nicht** per Variable konfiguriert, sondern im Admin-Bereich der PWA (Speicherregeln); Zugangsdaten liegen verschlüsselt in der Datenbank (`STORAGE_SECRET_KEY`). |
 
 Das Backend loggt bei ungültiger Konfiguration einen Fehler mit dem Namen der Variable (z. B. `Invalid configuration for WEBAUTHN_RP_ID: must be a lowercase hostname`) und startet nicht.
 
-Dateispeicher: Der Stack hängt das Volume `timetrack-files` unter `/data/files` ein. Tragen Sie im Admin-Bereich bei einer Speicherregel „Lokal“ genau den Pfad `/data/files` ein.
-Docker legt es als `timetrack_timetrack-files` an; es liegt auf dem Knoten, der das Backend ausführt.
+Dateispeicher in der Datenbank: Der Stack hat **keine Volumes**. Hochgeladene Dateien liegen in der Datenbank (und damit im DB-Backup). Stellen Sie nach dem ersten Login im Admin-Bereich bei den Speicherregeln „alles → Datenbank“ ein und setzen Sie ein globales Upload-Limit (Beispiel: 50 MiB). Die Speicherart „Lokal“ steht im Stack nicht zur Verfügung (kein beschreibbarer Pfad, Root-Dateisystem schreibgeschützt); S3 ist über den Admin-Bereich weiterhin möglich.
 
 ## 7. Erstes Deployment
 
@@ -451,7 +449,7 @@ Verhalten: Das neue Backend wird erst „healthy“, wenn `/ready` 200 liefert (
 
 Manueller Rollback des Images: `docker service rollback timetrack_backend`. **Das Schema wird nicht zurückgerollt.** Ein Rückgang auf eine ältere Version nach einer angewendeten Migration ist nur sicher, wenn die Migration abwärtskompatibel war (nicht zugesichert); im Zweifel Restore aus dem Backup vor Schritt 1 (BETRIEB.md Abschnitt 3). Bei Migrationen mit zerstörenden Änderungen (Release-Hinweise lesen) das Backend vorher auf 0 skalieren: `docker service scale timetrack_backend=0`.
 
-PWA aktualisieren: neues `build/`-Verzeichnis nach `PWA_HOST_DIR` kopieren (am besten in ein neues Verzeichnis und `PWA_HOST_DIR` umstellen, dann neu deployen, damit alte und neue Dateien nicht gemischt werden). Der Bind-Mount ist schreibgeschützt; das Backend liest bei Anfragen. Browser und Service Worker holen die neue Version beim nächsten Besuch.
+PWA aktualisieren: Die PWA ist Teil des Images, ein Update ist ein neues Image-Tag. In GitHub baut der Docker-Workflow die PWA aus dem Repository `timetrack-pwa` (Referenz: Repository-Variable `PWA_REF`, Standard `main`); für eine neue PWA-Version den Workflow neu starten (Push auf `main`, Tag `v*` oder manuell) und das neue Tag wie ein Backend-Update ausrollen (Abschnitt oben). Browser und Service Worker holen die neue Version beim nächsten Besuch.
 
 ## 14. Backup und Restore
 
@@ -460,7 +458,7 @@ Verbindliche Beschreibung, Archivformat, Nachweise: [BETRIEB.md](BETRIEB.md) Abs
 1. **Backup-Benutzer** (nur lesen) in MariaDB: `CREATE USER 'ttbackup'@'192.0.2.%' IDENTIFIED BY '...' REQUIRE SSL; GRANT SELECT, SHOW VIEW, TRIGGER ON timetrack.* TO 'ttbackup'@'192.0.2.%';` (Rechtemenge nicht gegen den Produktionsserver geprüft; `mariadb-dump --single-transaction` braucht in der Regel `SELECT`).
 2. **Datenbank** sichern (Host-Modus, Client `mariadb-dump` auf dem Backup-Host nötig, Passwort aus Datei):
    `DB_HOST=db.internal.example.test DB_USER=ttbackup DB_PASSWORD_FILE=/root/tt-backup-pw scripts/backup.sh --driver mariadb --db-name timetrack --out /backups`
-3. **Lokale Dateien** (Volume `timetrack_timetrack-files`, Pfad auf dem Host: `docker volume inspect timetrack_timetrack-files --format '{{.Mountpoint}}'`): `--local-files <Mountpoint>`. Achtung, bekannte Lücke: Das Backend speichert den **echten Pfad im Container** (`/data/files`) in der Datenbank. Das Skript prüft gegen den Host-Pfad; Backup und Restore von Dateien aus einem benannten Volume sind **nicht erprobt**. Robuster ist ein Bind-Mount mit **identischem** Pfad auf Host und Container (z. B. `/srv/timetrack/files:/srv/timetrack/files` in `stack.yaml`, im Admin-Bereich Pfad `/srv/timetrack/files`), oder Dateien in S3/der Datenbank zu speichern.
+3. **Dateien**: Liegen sie in der Datenbank (Empfehlung, Stack ohne Volumes), sind sie im Datenbank-Backup enthalten; `--local-files` entfällt. Nur wenn Sie den Stack selbst um einen Bind-Mount für die Speicherart „Lokal“ erweitern, gilt: das Backend speichert den **echten Pfad im Container** in der Datenbank, das Skript prüft gegen den Host-Pfad; nur mit identischem Pfad auf Host und Container sinnvoll, nicht erprobt.
 4. **S3-Objekte** separat sichern (BETRIEB.md Abschnitt 2).
 5. **Nicht im Archiv, getrennt aufbewahren**: `STORAGE_SECRET_KEY`, VAPID-Schlüssel, DB-Passwort, `stack.env`, Proxy-Konfiguration.
 6. Archive verschlüsseln (`age`/`gpg`), außerhalb des Servers ablegen, zeitgesteuert (cron/systemd-Timer) laufen lassen. **Das Projekt liefert keinen Zeitplan.**
@@ -486,7 +484,7 @@ Das ist der tatsächliche Stand, nicht das Wunschbild:
 2. Kein Test gegen einen echten Proxy (nginx/Traefik) und gegen die produktive MariaDB 12.3.3. Die Proxy-Beispiele sind nach Dokumentation geschrieben.
 3. `DB_TLS=required` prüft das Zertifikat mit den Standard-CAs des Images; es gibt keine Variable für eine eigene CA oder zum Abschalten der Namensprüfung. Private CA: eigenes Image oder öffentliches Zertifikat.
 4. `bootstrap-admin` per `docker exec`/`docker service create` auf einem echten Swarm nicht erprobt (Befehl selbst ist belegt).
-5. Backup lokaler Dateien aus einem benannten Volume (Pfadabweichung Host/Container) nicht erprobt (Abschnitt 14). Zeitgesteuerte Backups, Verschlüsselung und S3-Backup gegen echtes S3 fehlen.
+5. Backup lokaler Dateien (nur bei selbst ergänztem Bind-Mount, Pfadabweichung Host/Container) nicht erprobt (Abschnitt 14). Zeitgesteuerte Backups, Verschlüsselung und S3-Backup gegen echtes S3 fehlen.
 6. Docker-Secrets sind im Backend-Image über den Einstiegspunkt gelöst; das Backend selbst kennt `*_FILE` nicht. Eigene Aufrufe, die den Einstiegspunkt umgehen, bekommen die Secrets nicht.
 7. Migrationen sind nicht auf Abwärtskompatibilität für Rolling Updates geprüft (BETRIEB.md Abschnitt 5.2). Schema-Rollback gibt es nur über Restore.
 8. Kein `/metrics`, keine Alarmierung. Der Erinnerungs-Scheduler nutzt eine Lease (mehrere Replikate möglich), die Anmeldung wird durch eine globale `auth_lock` serialisiert.
@@ -513,7 +511,8 @@ Das ist der tatsächliche Stand, nicht das Wunschbild:
 | AASA liefert 301/302 oder HTML | Proxy leitet um oder fängt den Pfad ab | `/.well-known/` ohne Umleitung/Fallback durchreichen (Abschnitt 8). |
 | Apples CDN findet die Datei nicht | Domain nicht öffentlich/zertifikat ungültig/Cache noch alt | Abschnitt 11, Prüfbefehle; später erneut prüfen. |
 | Upload bricht ab (413 oder Verbindungsabbruch) | Proxy-Limit oder -Zeitüberschreitung zu klein | `client_max_body_size 70m`, Timeouts ≥ 120 s (Abschnitt 8). |
-| Dateien nach Neustart weg | Volume nicht eingehängt, anderer Knoten, Speicherregel zeigt auf anderen Pfad | `BACKEND_PLACEMENT` fest; Admin-Pfad `/data/files`; `docker volume ls`. |
+| Datei-Upload scheitert / „Lokal“ nicht nutzbar | Der Stack hat keine Volumes; Speicherregel steht auf „Lokal“ | Im Admin-Bereich „alles → Datenbank“ (oder S3) wählen, Upload-Limit prüfen. |
+| `/` liefert 404 statt PWA | Image ohne PWA gebaut (Build ohne `pwa-src`) | Image aus dem Docker-Workflow verwenden; `docker run --rm --entrypoint ls IMAGE /srv/pwa` muss `index.html` zeigen. |
 | S3-Dateien unlesbar (503 `storage_unavailable`) | Falscher/neuer `STORAGE_SECRET_KEY` | Ursprünglichen Schlüssel als Secret wiederherstellen; sonst S3-Zugangsdaten im Admin-Bereich neu eintragen. |
 | PWA lädt, aber API-Fehler/CORS/Cookie fehlt | `PUBLIC_BASE_URL` ohne `https` (Cookie nicht `Secure`) oder abweichender Host | Alle drei URLs auf die öffentliche HTTPS-Adresse setzen. |
 | `bootstrap-admin` meldet Konflikt | Es existiert schon ein Konto | Weitere Personen per Einladung in der PWA; Verlust des Admin-Zugangs: Wiederherstellungsoptionen des Kontos nutzen. |
@@ -541,12 +540,12 @@ Das ist der tatsächliche Stand, nicht das Wunschbild:
 3. [ ] Secrets angelegt (`docker secret ls` zeigt drei bis fünf `tt_*`), Schlüssel gesichert (Abschnitt 4).
 4. [ ] Overlay-Netz vorhanden, Proxy daran angeschlossen; Subnetz in `TRUSTED_PROXY_CIDRS` (Abschnitte 5, 9).
 5. [ ] `stack.env` ausgefüllt; `docker stack config -c stack.yaml` ohne Fehler (Abschnitte 6, 7).
-6. [ ] PWA gebaut und nach `PWA_HOST_DIR` kopiert.
+6. [ ] Image enthält die PWA (`docker run --rm --entrypoint ls IMAGE /srv/pwa` zeigt `index.html`); keine Volumes, keine Knotenbindung nötig.
 7. [ ] Migrationsjob `Complete`, Backend `healthy`, `/ready` = 200 (Abschnitt 7).
 8. [ ] Proxy-Konfiguration geladen: `https://timetrack.example.org/` zeigt die PWA, `/health` von außen nicht erreichbar.
 9. [ ] AASA und Apples CDN geprüft, falls die App genutzt wird (Abschnitt 11).
 10. [ ] Ersten Admin angelegt, Passkey registriert, zweiter Passkey/Gerät hinzugefügt (Abschnitt 12).
-11. [ ] Speicherregel im Admin-Bereich gesetzt (z. B. lokal `/data/files`), Test-Upload; Push einmal abonniert und ausgelöst.
+11. [ ] Speicherregel im Admin-Bereich gesetzt („alles → Datenbank“, Upload-Limit z. B. 50 MiB), Test-Upload; Push einmal abonniert und ausgelöst.
 12. [ ] Rate-Limit-Test mit zwei Clients (BETRIEB.md Abschnitt 6).
 13. [ ] Erstes Backup gelaufen und ein Restore auf einer Kopie geübt.
 14. [ ] Update-Ablauf einmal trocken durchgegangen (Abschnitt 13), Rollback-Befehl notiert.
