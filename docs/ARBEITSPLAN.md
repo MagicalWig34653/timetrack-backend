@@ -228,3 +228,11 @@ Claude-Agent in den Worktrees `timetrack-backend-wt/p2` und `timetrack-pwa-wt/p2
 | ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
 | --- | --- | --- | --- | --- | --- |
 | P2 | `GET/PATCH /me/preferences` (Akzent, eigene Farbe, Farbschema), `account.preferences` in der Sitzung, Export `preferences.json`, Vertrag v0.14.0, ADR-0020; PWA: Darstellungsseite am Konto mit localStorage-Cache und Abgleich, Mock, Unit-/Mock-/Echt-E2E; Vertrag für native Clients in `handoffs/P2.md` | Claude-Agent | 3 | integriert (Vertrag v0.14.0, ADR-0020); Lead: Backend 305 Tests SQLite, 0 Fehler; PWA check 0 Fehler, 587 Unit, 84 Mock-E2E, Echt-E2E 180/180 gegen frisch gebautes Backend; Live-Instanz aktualisiert (alte Build-Dateien in deploy/pwa-static nicht gelöscht, nur überschrieben); native Apps noch nicht angepasst (A8) | P1 |
+
+## W1 – GitHub Actions und Pages (17.10.2026)
+
+Claude-Agent in den Worktrees `timetrack-backend-wt/w1` (Branch `w1-ci-pages`), `timetrack-pwa-wt/w1` und `timetrack-apple-wt/w1` (Branch `w1-ci`), nicht gemergt, nichts gepusht. Parallel schreibt D2 `deploy/swarm/*`, `docs/DEPLOYMENT.md`, `docs/BETRIEB.md`.
+
+| ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
+| --- | --- | --- | --- | --- | --- |
+| W1 | Workflows (CI, Docker multi-arch, Pages, Release, CodeQL, Dependency Review, Dependabot), Vorlagen, `SECURITY.md`, `CODEOWNERS` in allen drei Repos; Website `site/` (VitePress, Landingpage, Doku aus Repo-Dokumenten, API-Referenz); `docs/CI.md` | Claude-Agent | 5 | umgesetzt, Lead-Prüfung offen; nur statisch (actionlint) und lokal geprüft, auf GitHub nie gelaufen (`docs/CI.md`, `handoffs/W1.md`) | – |

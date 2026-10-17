@@ -1,0 +1,135 @@
+# Continuous integration for the backend: Swift build and tests (SQLite always, MariaDB as a second job),
+# contract checks, shell checks and compose/stack validation. Documentation: docs/CI.md.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call: # used by release.yml (tags v*), so tags do not trigger CI twice
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Same toolchain family as the Dockerfile (ARG SWIFT_VERSION=6.3, image swift:<version>-noble).
+  # Package.swift declares swift-tools-version 6.3. Keep this in sync with the Dockerfile.
+  SWIFT_IMAGE: swift:6.3-noble
+
+jobs:
+  swift-sqlite:
+    name: Swift build and tests (SQLite)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    container: swift:6.3-noble
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache SwiftPM build directory
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: swift-6.3-${{ runner.os }}-${{ hashFiles('Package.resolved', 'Package.swift') }}-${{ github.sha }}
+          restore-keys: |
+            swift-6.3-${{ runner.os }}-${{ hashFiles('Package.resolved', 'Package.swift') }}-
+            swift-6.3-${{ runner.os }}-
+      - name: Build
+        run: swift build --build-system native
+      - name: Test (SQLite; MariaDB variants are skipped without MARIADB_TEST_HOST)
+        run: swift test --build-system native
+
+  swift-mariadb:
+    name: Swift tests (MariaDB 12.3)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    container: swift:6.3-noble
+    services:
+      mariadb:
+        image: mariadb:12.3
+        env:
+          # Throwaway CI database; the value only lives inside this job's network.
+          MARIADB_ROOT_PASSWORD: ci-only-root-password
+          MARIADB_DATABASE: timetrack_test
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      # Variable set from scripts/dev-env.sh test-db; the tests create and drop their own throwaway databases (root).
+      MARIADB_TEST_HOST: mariadb
+      MARIADB_TEST_PORT: "3306"
+      MARIADB_TEST_USER: root
+      MARIADB_TEST_PASSWORD: ci-only-root-password
+      MARIADB_TEST_DB: timetrack_test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache SwiftPM build directory
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: swift-6.3-${{ runner.os }}-${{ hashFiles('Package.resolved', 'Package.swift') }}-${{ github.sha }}
+          restore-keys: |
+            swift-6.3-${{ runner.os }}-${{ hashFiles('Package.resolved', 'Package.swift') }}-
+            swift-6.3-${{ runner.os }}-
+      - name: Test against MariaDB (includes the SQLite variants)
+        run: swift test --build-system native
+
+  contract:
+    name: Contract checks
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PyYAML
+        run: python3 -m pip install --user --break-system-packages pyyaml
+      - name: Parse YAML files (OpenAPI 3.x marker, version, operationIds)
+        run: |
+          python3 - contracts/openapi.yaml deploy/swarm/stack.yaml deploy/dex/config.yaml <<'PY'
+          import sys, yaml
+          bad = 0
+          for path in sys.argv[1:]:
+              try:
+                  doc = yaml.safe_load(open(path))
+              except Exception as exc:
+                  print(f"{path}: {exc}"); bad += 1; continue
+              if path.endswith("openapi.yaml"):
+                  ops = [op["operationId"] for item in doc["paths"].values() for op in item.values()
+                         if isinstance(op, dict) and "operationId" in op]
+                  dup = sorted({o for o in ops if ops.count(o) > 1})
+                  if not str(doc.get("openapi", "")).startswith("3.") or dup:
+                      print(f"{path}: invalid openapi marker or duplicate operationIds {dup}"); bad += 1
+                  print(f"{path}: version {doc['info']['version']}, {len(ops)} operations")
+              else:
+                  print(f"{path}: ok")
+          sys.exit(1 if bad else 0)
+          PY
+      - name: JSON copy of the contract must be up to date
+        run: |
+          scripts/contract-json.sh
+          git diff --exit-code -- Tests/TimetrackKitTests/Contract/openapi.contract.json
+      - name: Lint OpenAPI (Redocly, non-blocking)
+        continue-on-error: true
+        run: npx --yes @redocly/cli@1.34.5 lint contracts/openapi.yaml
+
+  static:
+    name: Shell checks and compose/stack config
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PyYAML (used by check-all.sh)
+        run: python3 -m pip install --user --break-system-packages pyyaml
+      - name: shellcheck and bash -n
+        run: |
+          for f in scripts/*.sh scripts/lib/*.sh; do bash -n "$f"; done
+          shellcheck -x -P SCRIPTDIR -S warning scripts/*.sh scripts/lib/*.sh
+      - name: Compose and Swarm stack configuration
+        run: |
+          DB_ROOT_PASSWORD=x DB_PASSWORD=x docker compose --project-name timetrack-ci -f compose.yaml \
+            --profile app --profile sqlite --profile mail --profile s3 --profile oidc config -q
+          (set -a; . deploy/swarm/stack.env.example; set +a; docker stack config -c deploy/swarm/stack.yaml > /dev/null)
+      - name: scripts/check-all.sh --fast (the same static checks as a local run)
+        run: scripts/check-all.sh --fast

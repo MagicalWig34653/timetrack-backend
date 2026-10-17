@@ -1,0 +1,19 @@
+# Weekly update pull requests. Policy: workflows pin major versions of actions; Dependabot proposes updates.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      actions: { patterns: ["*"] }
+  - package-ecosystem: npm
+    directory: /site
+    schedule: { interval: weekly }
+    groups:
+      site: { patterns: ["*"] }
+  - package-ecosystem: docker
+    directory: /
+    schedule: { interval: weekly }
+  - package-ecosystem: swift
+    directory: /
+    schedule: { interval: weekly }

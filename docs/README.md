@@ -22,6 +22,7 @@ Stand: 15.10.2026. Jede Information hat genau eine maßgebliche Datei; andere Da
 | Arbeitsweise, Sprache, Parallelarbeit, Checks, Definition of Done | [ENTWICKLUNGSABLAUF.md](ENTWICKLUNGSABLAUF.md) |
 | Ergebnisse des Codex-Reviews C9–C18 | [reviews/2026-10-15-codex-review.md](reviews/2026-10-15-codex-review.md) |
 | Betrieb: Backup/Restore, Swarm-Stack, Reverse-Proxy-Anforderungen, amd64 | [BETRIEB.md](BETRIEB.md) |
+| CI, Image-Build, Releases, GitHub Pages (Website `site/`) | [CI.md](CI.md) |
 | Container/Deployment | [../deploy/README.md](../deploy/README.md), [../compose.yaml](../compose.yaml) |
 | Agent-Einstiege | [../AGENTS.md](../AGENTS.md), [../CLAUDE.md](../CLAUDE.md), [../CLAUDE_STARTPROMPT.md](../CLAUDE_STARTPROMPT.md) (historischer Startauftrag) |
 
