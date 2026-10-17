@@ -137,11 +137,13 @@ final class PerformanceTests: XCTestCase {
             let account = try SyntheticAccount.make(planning: planning)
             let now = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-10-16T14:00:00Z"))
             let prepared = account.snapshot.prepared()
+            // Sorted keys: dictionaries encode in a per-process random order, which is not a value difference.
+            let canonical = JSONEncoder(); canonical.outputFormatting = [.sortedKeys]
             var date = account.first; var days = 0
             while date <= account.last {
                 let expected = try referenceEvaluate(account.snapshot, date, now: now)
                 let actual = try prepared.evaluate(date, now: now)
-                XCTAssertEqual(try JSONEncoder().encode(actual), try JSONEncoder().encode(expected), "\(date) planning=\(planning)")
+                XCTAssertEqual(try canonical.encode(actual), try canonical.encode(expected), "\(date) planning=\(planning)")
                 date = date.addingDays(1); days += 1
             }
             XCTAssertGreaterThan(days, 800)
@@ -196,12 +198,15 @@ final class PerformanceTests: XCTestCase {
         }
     }
 
+}
+
+// Lives in an AuthTests extension: XCTestCase cannot be instantiated directly on Linux (needs name/testClosure).
+extension AuthTests {
     /// 900+ working days must cost a constant number of statements, not one set per day.
     func testBalanceQueryBudgetIsIndependentOfHistoryLength() async throws {
         setenv("DB_SQL_LOG", "1", 1); defer { unsetenv("DB_SQL_LOG") }
-        let helper = AuthTests()
-        try await helper.withApp { app, auth in
-            let (context, _) = try await helper.registered(auth, db: app.db)
+        try await withApp { app, auth in
+            let (context, _) = try await registered(auth, db: app.db)
             let accountId = try context.account.requireID()
             let account = try SyntheticAccount.make()
             for model in account.snapshot.models {

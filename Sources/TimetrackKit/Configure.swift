@@ -18,11 +18,11 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
                                        username: config.dbUser, password: config.dbPassword,
                                        database: config.dbName)
         if config.dbTLS == .off { mysql.tlsConfiguration = nil }
-        app.databases.use(.mysql(configuration: mysql, maxConnectionsPerEventLoop: 2, connectionPoolTimeout: .seconds(10), sqlLogLevel: sqlLog), as: .mysql)
+        app.databases.use(.mysql(configuration: mysql, maxConnectionsPerEventLoop: config.dbPoolConnectionsPerLoop, connectionPoolTimeout: .seconds(Int64(config.dbPoolTimeoutSeconds)), sqlLogLevel: sqlLog), as: .mysql)
         // Idle pooled connections are silently dropped by NAT/IPVS (Swarm routing mesh: 15 min), firewalls and
         // proxies; the next request that drew such a connection failed ("server not ready", fine after reload).
         // A cheap ping per event loop every 45 s keeps them alive and replaces dead ones before users hit them.
-        app.lifecycle.use(DatabaseKeepAlive())
+        if config.dbKeepAliveSeconds > 0 { app.lifecycle.use(DatabaseKeepAlive(intervalSeconds: config.dbKeepAliveSeconds, connectionsPerLoop: config.dbPoolConnectionsPerLoop)) }
     }
     for migration in StageOneSchema.migrations { app.migrations.add(migration) }
     app.migrations.add(CreateAuthLock())
@@ -74,15 +74,18 @@ struct NotReadyResponse: Content {
 /// Pings the MariaDB pool of every event loop periodically (see `configure`).
 final class DatabaseKeepAlive: LifecycleHandler, @unchecked Sendable {
     private var task: Task<Void, Never>?
+    let intervalSeconds: Int, connectionsPerLoop: Int
+    init(intervalSeconds: Int, connectionsPerLoop: Int) { self.intervalSeconds = intervalSeconds; self.connectionsPerLoop = connectionsPerLoop }
     func didBoot(_ application: Application) throws {
         let app = application
         task = Task {
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 45_000_000_000)
+                try? await Task.sleep(nanoseconds: UInt64(intervalSeconds) * 1_000_000_000)
                 for loop in app.eventLoopGroup.makeIterator() {
                     guard let db = app.databases.database(.mysql, logger: app.logger, on: loop) else { continue }
-                    for _ in 0..<2 {   // up to two connections per loop
-                        if (try? await db.withConnection { try await requireSQL($0).raw("SELECT 1").run() }) != nil { break }
+                    for _ in 0..<connectionsPerLoop {
+                        do { try await db.withConnection { try await requireSQL($0).raw("SELECT 1").run() }; break }
+                        catch { app.logger.warning("database keep-alive ping failed: \(String(describing: error))") }
                     }
                 }
             }

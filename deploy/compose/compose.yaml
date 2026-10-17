@@ -52,6 +52,8 @@ services:
       DB_USER: ${DB_USER:-timetrack}
       DB_PASSWORD_FILE: /run/secrets/tt_db_password
       DB_TLS: ${DB_TLS:-required}
+      DB_POOL_CONNECTIONS_PER_LOOP: ${DB_POOL_CONNECTIONS_PER_LOOP:-1}
+      DB_KEEPALIVE_SECONDS: ${DB_KEEPALIVE_SECONDS:-45}
       AUTO_MIGRATE: "false"
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL in .env}
       WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:?set WEBAUTHN_RP_ID in .env}

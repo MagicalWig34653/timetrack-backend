@@ -16,6 +16,10 @@ public struct Configuration: Sendable {
     public let dbUser: String
     public let dbPassword: String
     public let dbTLS: TLS
+    /// MariaDB pool size per event loop (default 1 = the Fluent default), wait timeout and keep-alive ping interval (0 = off).
+    public let dbPoolConnectionsPerLoop: Int
+    public let dbPoolTimeoutSeconds: Int
+    public let dbKeepAliveSeconds: Int
     public let sqlitePath: String
     public let webAuthnRPID: String
     public let webAuthnRPName: String
@@ -84,6 +88,9 @@ public struct Configuration: Sendable {
             throw ConfigurationError(key: "DB_TLS", reason: "expected off or required")
         }
         dbTLS = tls
+        dbPoolConnectionsPerLoop = try integer("DB_POOL_CONNECTIONS_PER_LOOP", "1", 1...8)
+        dbPoolTimeoutSeconds = try integer("DB_POOL_TIMEOUT_SECONDS", "10", 1...120)
+        dbKeepAliveSeconds = try integer("DB_KEEPALIVE_SECONDS", "45", 0...3600)
         sqlitePath = try value("SQLITE_PATH", "timetrack.sqlite")
         webAuthnRPID = try value("WEBAUTHN_RP_ID", "localhost")
         guard webAuthnRPID == webAuthnRPID.lowercased(),

@@ -228,6 +228,9 @@ Nie ein echtes `.env` committen. Ungültige Werte brechen den Start mit klarer M
 | `NOTIFICATIONS_ENABLED` | `true` | `false` schaltet den Erinnerungs-Runner ab (Liste und REST bleiben) |
 | `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | – | Web Push; beide nötig, sonst `available:false` |
 | `PUSH_ALLOWED_HOSTS` | Standard-Allowlist (ADR-0011) | kommagetrennt, **ersetzt** die Standardliste (`fcm.googleapis.com`, `*.push.services.mozilla.com`, `*.notify.windows.com`, `web.push.apple.com`, `*.push.apple.com`); `*.` erlaubt Subdomains, nicht die Hauptdomain. Getesteter Vorschlag mit je einem echten Muster pro Dienst siehe unten |
+| `DB_POOL_CONNECTIONS_PER_LOOP` | `1` | MariaDB: Verbindungen pro Event-Loop (1 bis 8). Bei vielen Kernen und mehreren Replikaten summiert sich das (Kerne × Wert × Replikate); `max_connections` und `MAX_USER_CONNECTIONS` der Datenbank müssen reichen. |
+| `DB_POOL_TIMEOUT_SECONDS` | `10` | MariaDB: Wartezeit auf eine freie Verbindung (1 bis 120). |
+| `DB_KEEPALIVE_SECONDS` | `45` | MariaDB: Ping-Intervall, hält Leerlaufverbindungen am Leben (0 = aus). |
 | `MAINTENANCE_INTERVAL_MINUTES` | `60` | Abstand des periodischen Aufräumjobs in Minuten (0 bis 10080); `0` schaltet ihn ab. Der CLI-Befehl `maintenance` läuft unabhängig davon (ADR-0017) |
 | `MCP_AUDIT_RETENTION_DAYS` | `90` | Aufbewahrung der `mcp_audit`-Zeilen in Tagen (1 bis 3650) |
 | `IMPORT_JOB_TIMEOUT_HOURS` | `168` | offene Importe (hochgeladen/zugeordnet) älter als dies werden verworfen (1 bis 8760) |

@@ -62,6 +62,8 @@ services:
       DB_USER: ${DB_USER:-timetrack}                            # OPTIONAL
       DB_PASSWORD_FILE: /run/secrets/tt_db_password             # secret
       DB_TLS: ${DB_TLS:-required}                               # OPTIONAL: required (default) | off
+      DB_POOL_CONNECTIONS_PER_LOOP: ${DB_POOL_CONNECTIONS_PER_LOOP:-1}   # OPTIONAL (1..8): connections per CPU core and replica
+      DB_KEEPALIVE_SECONDS: ${DB_KEEPALIVE_SECONDS:-45}         # OPTIONAL: 0 = off
       AUTO_MIGRATE: "false"                                     # fixed: migrations run in the migrate job only
       # ---- Public address and passkeys (the RP ID cannot be changed later without invalidating all passkeys) ----
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL (https://host)}      # REQUIRED, for example https://timetrack.example.test
