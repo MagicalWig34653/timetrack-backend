@@ -1,6 +1,6 @@
 # Betrieb: Backup, Restore, Swarm-Stack, Reverse Proxy
 
-Stand: 16.10.2026 (Paket B3). Dieses Dokument ist maßgeblich für Sicherung, Wiederherstellung und den produktionsnahen
+Stand: 17.10.2026 (Paket B3, ergänzt durch D2). Schritt-für-Schritt-Anleitung für die Produktionsinstanz (Datenbank anlegen, Secrets, Proxy-Beispiele, erster Admin, Go-Live): [DEPLOYMENT.md](DEPLOYMENT.md); dieses Dokument bleibt maßgeblich für Backup, Restore und Hintergründe. Dieses Dokument ist maßgeblich für Sicherung, Wiederherstellung und den produktionsnahen
 Stack. Es beschreibt, was die Skripte und die Stack-Datei leisten, was ausgeführt und belegt wurde und was offen bleibt
 (Abschnitt 8). Belegter Stand insgesamt: [STATUS.md](STATUS.md); lokale Entwicklung: [../EINRICHTUNG.md](../EINRICHTUNG.md);
 Architektur der Speicherung: [ARCHITEKTUR.md](ARCHITEKTUR.md), Abschnitt 6.
@@ -127,7 +127,7 @@ gegen einen Host-Pfad oder ein Bind-Mount, für ein benanntes Volume ein Hilfsco
 
 ## 5. Swarm-Stack (`deploy/swarm/stack.yaml`)
 
-Produktionsnahe Vorlage, **nicht in einem Swarm deployt** (kein Swarm vorhanden, nichts provisioniert). Geprüft ist die
+Produktionsvorlage ohne Datenbank-Container (Stand D2: zusätzlich dokumentierte Variablen, Skript `create-secrets.sh`), **nicht in einem Swarm deployt** (kein Swarm vorhanden, nichts provisioniert). Geprüft ist die
 Darstellung per `docker stack config` und das Containerverhalten per `scripts/test-image-smoke.sh` (Abschnitt 5.5).
 
 Dienste: `migrate` (einmaliger Job, `replicated-job`, nur DB-Zugang) und `backend` (`AUTO_MIGRATE=false`).
@@ -143,7 +143,7 @@ docker buildx build --platform linux/amd64,linux/arm64 -t registry.example.test/
 # Overlay-Netz, an dem auch der Reverse Proxy hängt (Name per PROXY_NETWORK änderbar)
 docker network create --driver overlay --attachable timetrack-proxy
 
-# Secrets (Werte über stdin, nie als Argument; hier erzeugt/aus Dateien, nicht in Shell-Verlauf oder Repository)
+# Secrets: bequemer und mit Prüfungen per deploy/swarm/create-secrets.sh (--dry-run, überschreibt nie). Manuell (Werte über stdin, nie als Argument):
 openssl rand -base64 32                    | docker secret create tt_storage_secret_key -
 openssl ecparam -name prime256v1 -genkey -noout | openssl ec -outform DER 2>/dev/null | tail -c +8 | head -c 32 | base64 | tr '+/' '-_' | tr -d '=\n' | docker secret create tt_vapid_private_key -
 docker secret create tt_db_password /pfad/zur/datei-mit-dem-db-passwort
@@ -165,7 +165,7 @@ docker service logs timetrack_migrate                            # je Migration 
 Update auf ein neues Image (empfohlener Ablauf, weil Swarm keine Reihenfolge zwischen Diensten kennt):
 
 1. Backup (Abschnitt 2).
-2. Migration zuerst: `docker service update --force --image "$NEUES_IMAGE" timetrack_migrate` (startet den Job neu; so in der Docker-Dokumentation beschrieben, hier nicht in einem Swarm erprobt), Ende abwarten (`docker service ps timetrack_migrate`: `Complete`). Der Job ist idempotent; ohne offene Migrationen tut er nichts.
+2. Migration zuerst (Erstinstallation: `BACKEND_REPLICAS=0` deployen, Migration abwarten, dann `docker service scale timetrack_backend=1`, siehe DEPLOYMENT.md Abschnitt 7): `docker service update --force --image "$NEUES_IMAGE" timetrack_migrate` (startet den Job neu; so in der Docker-Dokumentation beschrieben, hier nicht in einem Swarm erprobt), Ende abwarten (`docker service ps timetrack_migrate`: `Complete`). Der Job ist idempotent; ohne offene Migrationen tut er nichts.
 3. Dann Backend: `docker service update --image "$NEUES_IMAGE" timetrack_backend` (oder `docker stack deploy` mit neuer `TIMETRACK_IMAGE`).
 
 Das Backend meldet `/ready` = 503, solange Migrationen offen sind oder die DB fehlt; der Container-Healthcheck nutzt `/ready`.

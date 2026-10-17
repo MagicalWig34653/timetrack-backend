@@ -1,6 +1,6 @@
 # Lokale Container und spätere Swarm-Auslieferung
 
-Stand: 15.10.2026. Vorhanden ist ausschließlich die **Entwicklungsumgebung** (Compose-Projekt `timetrack-dev`);
+Stand: 17.10.2026. Vorhanden ist ausschließlich die **Entwicklungsumgebung** (Compose-Projekt `timetrack-dev`);
 das produktionsnahe Swarm-Stack-File `swarm/stack.yaml` (Paket B3) ist als Vorlage vorhanden, aber noch nicht in einem Swarm deployt. Betrieb, Backup, Reverse Proxy: [../docs/BETRIEB.md](../docs/BETRIEB.md).
 
 ## Was vorhanden ist
@@ -11,7 +11,7 @@ das produktionsnahe Swarm-Stack-File `swarm/stack.yaml` (Paket B3) ist als Vorla
 | `../Dockerfile` | Mehrstufiger Build (`swift:*-noble` → `-noble-slim`), Healthcheck `/health`, Einstieg `/app/App serve` auf Port 8080 |
 | `../scripts/dev-env.sh` | Start/Stopp/Status/Multi-Arch-Build der Dev-Umgebung (nie `-v`, nie `prune`) |
 | `../.env.example` | Vorlage der Konfiguration; `scripts/dev-env.sh init` erzeugt `.env` |
-| `swarm/stack.yaml`, `swarm/stack.env.example` | Swarm-Stack (Backend + einmaliger Migrationsjob, Docker-Secrets, Healthcheck, Update/Rollback, Limits); Vorlage, per `docker stack config` geprüft |
+| `swarm/stack.yaml`, `swarm/stack.env.example`, `swarm/create-secrets.sh` | Swarm-Stack ohne Datenbank-Container (Backend + einmaliger Migrationsjob, Docker-Secrets, Healthcheck, Update/Rollback, Limits), alle Variablen mit Beispielwerten, Skript zum Anlegen der Docker-Secrets (`--dry-run`); per `docker stack config` geprüft. Anleitung: [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md) |
 | `../scripts/backup.sh`, `restore.sh`, `test-restore.sh` | Sicherung/Wiederherstellung und Beweislauf (`../docs/BETRIEB.md`) |
 | `../scripts/docker-entrypoint.sh` | Image-Einstiegspunkt: `VAR_FILE` (Docker-Secrets) nach `VAR`, dann `/app/App` |
 | `../scripts/check-all.sh`, `test-image-smoke.sh` | Gesamtprüfung; Container-Smoke-Test des Produktions-Images |
@@ -26,7 +26,8 @@ Befehle und Konfiguration: `../EINRICHTUNG.md`, Testdienste: `../docs/TESTUMGEBU
 ## Offen (Produktionsziel)
 
 - Reales Swarm-Deployment der Vorlage (Secrets-Einhängung, Job, Rollback) ist nicht erprobt.
-- Vertrauenswürdige Proxy-Header für die Client-IP fehlen im Backend (Rate-Limits nutzen die Peer-IP; Risiko und Abhilfe: `../docs/BETRIEB.md`, Abschnitt 6).
+- Vertrauenswürdige Proxy-Header: umgesetzt (`TRUSTED_PROXY_CIDRS`, ADR-0018); ohne Konfiguration nutzen Rate-Limits die Peer-IP (`../docs/BETRIEB.md`, Abschnitt 6). Mit echtem Proxy nicht erprobt.
+- Bekannte Lücken der Produktions-Anleitung: `../docs/DEPLOYMENT.md`, Abschnitt 17.
 - Metriken (kein `/metrics`), zeitgesteuerte Backups, S3-Backup gegen echtes S3, amd64-Nachweis siehe `../docs/handoffs/B3.md`.
 
 Ziele: Linux amd64/arm64, MariaDB empfohlen, statische PWA ohne Node-Laufzeit. Entwurf: `../docs/ARCHITEKTUR.md`.

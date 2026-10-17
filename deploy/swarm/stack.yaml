@@ -1,23 +1,31 @@
-# Timetrack production-like Swarm stack (backend + one-shot migration job).
-# Deploy:   docker stack deploy --with-registry-auth -c deploy/swarm/stack.yaml timetrack
-# Check:    docker stack config -c deploy/swarm/stack.yaml        (renders and validates without deploying)
-# Full procedure, prerequisites and reverse-proxy requirements: docs/BETRIEB.md. Variables: deploy/swarm/stack.env.example.
+# Timetrack production Swarm stack: backend + one-shot migration job. NO database service: the MariaDB is an
+# existing server outside this stack (DB_HOST). Step-by-step guide (German): docs/DEPLOYMENT.md.
 #
-# Not part of this file (the operator provides them, nothing is provisioned here):
-#   - the MariaDB (existing server, DB_HOST) with an empty database and a user for it
-#   - the image (TIMETRACK_IMAGE, built from the Dockerfile and pushed to a registry the nodes can pull from)
-#   - the external overlay network of the reverse proxy and the Docker secrets listed below
-#   - the built PWA directory (bind mount, PWA_HOST_DIR) and the reverse proxy itself
-# No `build:` here: `docker stack deploy` ignores it.
+# Render/validate without deploying:
+#   set -a; . deploy/swarm/stack.env; set +a
+#   docker stack config -c deploy/swarm/stack.yaml
+# Deploy (see docs/DEPLOYMENT.md for the order: secrets -> database -> migrate -> backend):
+#   docker stack deploy --with-registry-auth -c deploy/swarm/stack.yaml timetrack
+#
+# Values come from the shell environment (deploy/swarm/stack.env.example documents every variable with an example).
+# `docker stack deploy` does NOT read .env files by itself: source stack.env as shown above.
+# Passwords and keys are NEVER variables here: they are Docker secrets (deploy/swarm/create-secrets.sh) that the
+# image entrypoint reads through the <NAME>_FILE convention (scripts/docker-entrypoint.sh).
+#
+# Legend: REQUIRED = the stack refuses to render without it. OPTIONAL = has a safe default or can stay empty.
+# Not provided by this file (operator): the MariaDB database + user, the image in a registry the nodes can pull from,
+# the external overlay network shared with the reverse proxy, the Docker secrets, the built PWA directory on the node,
+# and the reverse proxy itself.
 
 services:
-  # One-shot schema migration (Swarm job). Run it BEFORE rolling out a new image:
-  #   docker service update --force --image "$TIMETRACK_IMAGE" timetrack_migrate     # re-run the job with the new image (not tried on a real swarm)
-  # The backend service never migrates (AUTO_MIGRATE=false) and reports /ready = 503 until the schema is current.
+  # One-shot schema migration (Swarm job, runs once per service create/update). Order, see docs/DEPLOYMENT.md:
+  #   first deployment: BACKEND_REPLICAS=0, wait until this job is "Complete", then scale the backend up;
+  #   updates: `docker service update --force --image "$TIMETRACK_IMAGE" timetrack_migrate`, wait, then update the backend.
+  # The backend never migrates (AUTO_MIGRATE=false) and reports /ready = 503 until the schema is current.
   migrate:
     image: ${TIMETRACK_IMAGE:?set TIMETRACK_IMAGE}
     command: ["migrate", "--yes", "--env", "production"]
-    # Least privilege: only what the schema migration needs (database access); no storage or push keys.
+    # Least privilege: only database access; no storage, push or mail keys.
     environment:
       DATABASE_DRIVER: mariadb
       DB_HOST: ${DB_HOST:?set DB_HOST}
@@ -47,36 +55,54 @@ services:
     image: ${TIMETRACK_IMAGE:?set TIMETRACK_IMAGE}
     # Default command of the image: serve --env production --hostname 0.0.0.0 --port 8080
     environment:
-      DATABASE_DRIVER: mariadb
-      DB_HOST: ${DB_HOST:?set DB_HOST}
-      DB_PORT: ${DB_PORT:-3306}
-      DB_NAME: ${DB_NAME:-timetrack}
-      DB_USER: ${DB_USER:-timetrack}
-      DB_PASSWORD_FILE: /run/secrets/tt_db_password
-      DB_TLS: ${DB_TLS:-required}
-      AUTO_MIGRATE: "false"
-      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:?set WEBAUTHN_RP_ID (public host name)}
-      WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-Timetrack}
-      WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN:?set WEBAUTHN_ORIGIN (https://host)}
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL (https://host)}
-      APPLE_APP_IDS: ${APPLE_APP_IDS:-}
-      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}
-      TRUSTED_PROXY_HEADER: ${TRUSTED_PROXY_HEADER:-X-Forwarded-For}
-      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-336}
-      STORAGE_SECRET_KEY_FILE: /run/secrets/tt_storage_secret_key
-      VAPID_PRIVATE_KEY_FILE: /run/secrets/tt_vapid_private_key
-      VAPID_SUBJECT: ${VAPID_SUBJECT:?set VAPID_SUBJECT (mailto or https contact URI)}
-      NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-true}
-      MODULES_DISABLED: ${MODULES_DISABLED:-}
+      # ---- Database (existing MariaDB, not part of this stack) ----
+      DATABASE_DRIVER: mariadb                                  # fixed: SQLite is not supported in a Swarm
+      DB_HOST: ${DB_HOST:?set DB_HOST}                          # REQUIRED. With DB_TLS=required the name must match the server certificate
+      DB_PORT: ${DB_PORT:-3306}                                 # OPTIONAL
+      DB_NAME: ${DB_NAME:-timetrack}                            # OPTIONAL
+      DB_USER: ${DB_USER:-timetrack}                            # OPTIONAL
+      DB_PASSWORD_FILE: /run/secrets/tt_db_password             # secret
+      DB_TLS: ${DB_TLS:-required}                               # OPTIONAL: required (default) | off
+      AUTO_MIGRATE: "false"                                     # fixed: migrations run in the migrate job only
+      # ---- Public address and passkeys (the RP ID cannot be changed later without invalidating all passkeys) ----
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL (https://host)}      # REQUIRED, for example https://timetrack.example.test
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:?set WEBAUTHN_RP_ID (public host name)}     # REQUIRED, lowercase host without scheme/port
+      WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN:?set WEBAUTHN_ORIGIN (https://host)}      # REQUIRED, must equal the browser origin
+      WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-Timetrack}          # OPTIONAL: display name in the passkey dialog
+      APPLE_APP_IDS: ${APPLE_APP_IDS:-}                         # OPTIONAL: <TeamID>.<BundleID>[,...]; empty = AASA endpoint answers 404
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-336}              # OPTIONAL (1..8760; the code default is 720, this stack uses 336 = 14 days)
+      # ---- Reverse proxy: networks that may report the client address (without it all clients share one rate-limit bucket) ----
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}             # OPTIONAL but strongly recommended behind a proxy
+      TRUSTED_PROXY_HEADER: ${TRUSTED_PROXY_HEADER:-X-Forwarded-For}   # OPTIONAL: X-Forwarded-For | X-Real-IP
+      # ---- Encryption of stored S3 credentials; S3 itself is configured in the admin UI, not here ----
+      STORAGE_SECRET_KEY_FILE: /run/secrets/tt_storage_secret_key      # secret
+      # ---- Web Push (VAPID) ----
+      VAPID_PRIVATE_KEY_FILE: /run/secrets/tt_vapid_private_key        # secret
+      VAPID_SUBJECT: ${VAPID_SUBJECT:?set VAPID_SUBJECT (a mailto or https contact URI)}   # REQUIRED here, for example mailto:admin@example.test
+      PUSH_ALLOWED_HOSTS: ${PUSH_ALLOWED_HOSTS:-}               # OPTIONAL: replaces the built-in push-service allow-list (ADR-0011)
+      NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-true}     # OPTIONAL: background reminder runner
+      # ---- Modules and maintenance ----
+      MODULES_DISABLED: ${MODULES_DISABLED:-}                   # OPTIONAL: reports,planning,transfer,automation,mcp
+      MAINTENANCE_INTERVAL_MINUTES: ${MAINTENANCE_INTERVAL_MINUTES:-60}   # OPTIONAL: 0 = off (0..10080)
+      MCP_AUDIT_RETENTION_DAYS: ${MCP_AUDIT_RETENTION_DAYS:-90}            # OPTIONAL (1..3650)
+      IMPORT_JOB_TIMEOUT_HOURS: ${IMPORT_JOB_TIMEOUT_HOURS:-168}           # OPTIONAL (1..8760)
+      STORAGE_ORPHAN_GRACE_HOURS: ${STORAGE_ORPHAN_GRACE_HOURS:-168}       # OPTIONAL (1..8760)
       PWA_STATIC_DIR: /srv/pwa
-      # Mail recovery (optional): set SMTP_HOST and add the commented SMTP secret below.
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_TLS: ${SMTP_TLS:-starttls}
-      SMTP_FROM: ${SMTP_FROM:-}
-      SMTP_USER: ${SMTP_USER:-}
+      # ---- OPTIONAL: e-mail recovery codes (SMTP). To enable, uncomment ALL lines of this block, the secret below and in
+      # the `secrets:` lists, and set the values in stack.env. SMTP_USER and SMTP_PASSWORD must be set together or both
+      # omitted (an empty SMTP_USER is rejected), so this block cannot be empty-valued.
+      # SMTP_HOST: ${SMTP_HOST:?set SMTP_HOST}
+      # SMTP_PORT: ${SMTP_PORT:-587}
+      # SMTP_TLS: ${SMTP_TLS:-starttls}                         # starttls | implicit ("off" only for loopback test hosts)
+      # SMTP_FROM: ${SMTP_FROM:?set SMTP_FROM}
+      # SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Timetrack}
+      # SMTP_USER: ${SMTP_USER:?set SMTP_USER}
       # SMTP_PASSWORD_FILE: /run/secrets/tt_smtp_password
-      # OIDC (optional): OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_NAME, OIDC_SCOPES and
+      # ---- OPTIONAL: OpenID Connect login. Uncomment this block, the secret below and in the `secrets:` lists. ----
+      # OIDC_ISSUER: ${OIDC_ISSUER:?set OIDC_ISSUER}
+      # OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:?set OIDC_CLIENT_ID}
+      # OIDC_NAME: ${OIDC_NAME:-OpenID Connect}
+      # OIDC_SCOPES: ${OIDC_SCOPES:-openid email profile}
       # OIDC_CLIENT_SECRET_FILE: /run/secrets/tt_oidc_client_secret
     secrets:
       - tt_db_password
@@ -85,18 +111,21 @@ services:
       # - tt_smtp_password
       # - tt_oidc_client_secret
     volumes:
-      # Local file storage rule (admin sets the path to /data/files). A node-local named volume only works with
-      # a single node (placement constraint below); for several nodes use a shared volume (NFS driver) or S3/DB.
+      # Local file storage rule (the admin sets the path /data/files in the storage settings). A node-local named
+      # volume only works on a single node (placement constraint below); for several nodes use a shared volume
+      # (NFS driver) or S3/database storage instead.
       - type: volume
         source: timetrack-files
         target: /data/files
+      # Built PWA (static files, no Node at runtime), served by the backend.
       - type: bind
         source: ${PWA_HOST_DIR:?set PWA_HOST_DIR (absolute path of the built PWA on the node)}
         target: /srv/pwa
         read_only: true
     networks: [proxy, default]
     # No published ports: the reverse proxy reaches http://backend:8080 on the shared overlay network.
-    # Proxy outside Swarm? Uncomment (host mode keeps the TCP source address; still the proxy's address):
+    # Proxy outside Swarm (on the host or another machine)? Uncomment (host mode keeps the TCP source address,
+    # which is then the proxy's address) and firewall the port so only the proxy can reach it:
     # ports:
     #   - { target: 8080, published: 18080, protocol: tcp, mode: host }
     # The container check uses /ready (database reachable AND all migrations applied): a new image whose schema has
@@ -140,6 +169,7 @@ services:
         monitor: 30s
 
 networks:
+  # The overlay network the reverse proxy is attached to (create it before: docker network create --driver overlay --attachable NAME).
   proxy:
     external: true
     name: ${PROXY_NETWORK:-timetrack-proxy}
