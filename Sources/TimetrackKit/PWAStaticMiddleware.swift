@@ -24,6 +24,9 @@ struct PWAStaticMiddleware: AsyncMiddleware {
         response.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
         // Vapor has no mapping for .webmanifest; browsers expect the manifest media type.
         if file.pathExtension == "webmanifest" { response.headers.replaceOrAdd(name: .contentType, value: "application/manifest+json") }
+        // Same for favicons: with nosniff a missing or wrong type would make browsers drop the icon.
+        if file.pathExtension == "ico" { response.headers.replaceOrAdd(name: .contentType, value: "image/x-icon") }
+        if file.pathExtension == "svg" { response.headers.replaceOrAdd(name: .contentType, value: "image/svg+xml") }
         return response
     }
 }

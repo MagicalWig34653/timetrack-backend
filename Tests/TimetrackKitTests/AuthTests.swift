@@ -287,6 +287,8 @@ final class AuthTests: XCTestCase, @unchecked Sendable {
         try Data("export {};".utf8).write(to: root.appendingPathComponent("_app/immutable/entry.abcdef12.js"))
         try Data("{}".utf8).write(to: root.appendingPathComponent("manifest.webmanifest"))
         try Data([0x89, 0x50, 0x4e, 0x47]).write(to: root.appendingPathComponent("apple-touch-icon.png"))
+        try Data([0, 0, 1, 0]).write(to: root.appendingPathComponent("favicon.ico"))
+        try Data("<svg xmlns=\"http://www.w3.org/2000/svg\"/>".utf8).write(to: root.appendingPathComponent("favicon.svg"))
         try FileManager.default.createSymbolicLink(atPath: root.appendingPathComponent("escape").path, withDestinationPath: "/etc/passwd")
         try await withApp(environment: ["PWA_STATIC_DIR": root.path]) { app, _ in
             for path in ["/", "/invite/example", "/settings/passkeys"] {
@@ -310,6 +312,13 @@ final class AuthTests: XCTestCase, @unchecked Sendable {
             try await app.test(.GET, "/manifest.webmanifest") { response async throws in
                 XCTAssertEqual(response.headers.first(name: .contentType), "application/manifest+json")
                 XCTAssertEqual(response.headers.first(name: .cacheControl), "no-cache")
+            }
+            // Favicons are served as real files with image types (not the SPA fallback).
+            try await app.test(.GET, "/favicon.ico") { response async throws in
+                XCTAssertEqual(response.status, .ok); XCTAssertEqual(response.headers.first(name: .contentType), "image/x-icon")
+            }
+            try await app.test(.GET, "/favicon.svg") { response async throws in
+                XCTAssertEqual(response.status, .ok); XCTAssertEqual(response.headers.first(name: .contentType), "image/svg+xml")
             }
             for path in ["/%2e%2e/etc/passwd", "/escape", "/api/missing", "/health/missing", "/ready/missing"] {
                 try await app.test(.GET, path) { response async throws in checkEqual(response.status, .notFound) }
