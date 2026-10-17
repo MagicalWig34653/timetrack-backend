@@ -2,7 +2,7 @@
 
 Stand: 17.10.2026 (Paket D2). Diese Anleitung führt Schritt für Schritt zu einer laufenden Instanz unter
 `https://timetrack.example.org`. Sie ersetzt nicht [BETRIEB.md](BETRIEB.md) (Backup, Restore, Hintergründe, Nachweise),
-sondern verweist dorthin. Für den schnellen Einstieg: [INSTALLATION.md](INSTALLATION.md). Beispielwerte (`timetrack.example.test`, `db.internal.example.test`, `ABCDE12345`) sind
+sondern verweist dorthin. Für den Einstieg: [Installation](INSTALLATION.md) (Auswahl Compose oder Swarm, Ersteinrichtung). Diese Seite ist die ausführliche Referenz für den Swarm. Beispielwerte (`timetrack.example.test`, `db.internal.example.test`, `ABCDE12345`) sind
 **Platzhalter**; ersetzen Sie sie. Alles Genannte ist aus dem Code und den Skripten abgeleitet; was **nicht** auf einem echten
 Swarm, einem echten Proxy oder gegen die echte MariaDB 12.3.3 ausprobiert wurde, steht in Abschnitt 17 („Bekannte Lücken“) und ist an den Stellen mit
 „nicht erprobt“ markiert.
@@ -31,8 +31,8 @@ Dateien: [../deploy/swarm/stack.yaml](../deploy/swarm/stack.yaml) (Stack ohne Da
 | Zugriff auf ein **Manager**-Knoten-Terminal | Secrets und Stack werden dort angelegt. |
 | DNS-Eintrag `timetrack.example.org` → Server (A/AAAA) | Muss öffentlich auflösen, wenn die iOS/macOS-App Passkeys nutzen soll (Abschnitt 11). |
 | TLS-Zertifikat für den Host, am Reverse Proxy | Das Backend spricht intern nur HTTP. Browser und Passkeys brauchen HTTPS (Ausnahme nur `localhost`). |
-| Reverse Proxy (nginx, Traefik o. ä.), den Sie selbst betreiben | Anforderungen und Beispiele: Abschnitt 8. |
-| Vorhandene MariaDB 12.3.3 | Vom Stack aus per TCP erreichbar, TLS empfohlen (Abschnitt 3). Wird nicht verändert außer um eine neue Datenbank und einen neuen Benutzer. |
+| Reverse Proxy (nginx, Traefik o. ä.), den Sie selbst betreiben | Anforderungen und Beispiele: [Reverse Proxy und TLS](installation/proxy.md). |
+| Vorhandene MariaDB 12.3.3 | Vom Stack aus per TCP erreichbar, TLS empfohlen ([Eigene MariaDB](installation/mariadb.md)). Wird nicht verändert außer um eine neue Datenbank und einen neuen Benutzer. |
 | Container-Image des Backends | Z. B. `ghcr.io/<owner>/timetrack-backend:<tag>` (Veröffentlichung durch Paket W1). Jede Registry geht, die die Knoten erreichen; bei privater Registry `docker login` und `--with-registry-auth`. Selbst bauen: BETRIEB.md Abschnitt 5.1 und 7 (nativer amd64-Build empfohlen). |
 | Gebaute PWA | Teil des Container-Images: Die CI baut das Image aus Backend **und** PWA (Repository `timetrack-pwa`, Referenz `PWA_REF`, Standard `main`). Nichts auf den Knoten zu kopieren; Node wird nur beim Bauen gebraucht, nicht im Betrieb. Selbst bauen: `docker build --build-context pwa-src=../timetrack-pwa -t ... .` (EINRICHTUNG.md). |
 | `openssl`, `curl` auf dem Server | Für `create-secrets.sh` und die Prüfungen. |
@@ -56,55 +56,7 @@ chmod +x create-secrets.sh
 
 ## 3. Datenbank vorbereiten (vorhandene MariaDB)
 
-Erstellen Sie auf dem MariaDB-Server eine **eigene** Datenbank und einen **eigenen** Benutzer mit den nötigen Rechten nur für diese Datenbank.
-Das Passwort erzeugt das Secret-Skript (Abschnitt 4); Sie tragen es dann einmal in die SQL-Anweisung ein.
-
-### 3.1 Starkes Passwort
-
-Mindestens 32 zufällige Zeichen, keine Wörter. Das Skript aus Abschnitt 4 erzeugt eines (`openssl rand -base64 32`, ersetzt `+/` durch `-_`,
-sodass es in SQL-Strings und Shells ohne Maskierung funktioniert). Bei selbst gewähltem Passwort: keine Anführungszeichen, Backslashes oder Zeilenumbrüche verwenden.
-
-### 3.2 SQL
-
-Als Administrator auf dem MariaDB-Server (`mariadb -u root -p`):
-
-```sql
-CREATE DATABASE `timetrack` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- Host '%' nur, wenn der Zugriff aus dem Swarm-Netz kommt und die Firewall des DB-Servers den Zugriff begrenzt.
--- Besser: die feste Quelladresse/ das Subnetz des Swarm-Knotens, z. B. 'timetrack'@'192.0.2.%'.
-CREATE USER 'timetrack'@'192.0.2.%' IDENTIFIED BY '<PASSWORT-AUS-DER-DATEI>' REQUIRE SSL;
-
-GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, INDEX, REFERENCES
-  ON `timetrack`.* TO 'timetrack'@'192.0.2.%';
-FLUSH PRIVILEGES;
-```
-
-Hinweise zu den Rechten (aus dem Code abgeleitet, nicht gegen den Produktionsserver geprüft):
-
-- Die Migrationen erzeugen und ändern Tabellen (`CREATE`, `ALTER`, `INDEX`, `REFERENCES`) und konvertieren Zeichensätze (`ALTER TABLE ... CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_bin`).
-  `DROP` kommt im Code nur in den Rückwärts-Migrationen (`migrate --revert`) vor; für reine Vorwärts-Updates ist es vermutlich entbehrlich (nicht geprüft), daher bewusst mitgegeben. Der Betrieb selbst braucht nur `SELECT/INSERT/UPDATE/DELETE`. Wer es strenger will, gibt
-  `CREATE/ALTER/DROP/INDEX/REFERENCES` nur für den Zeitraum eines Updates frei (zusätzlicher Aufwand, optional).
-- **Keine** globalen Rechte (`*.*`), kein `GRANT OPTION`, kein `SUPER`/`FILE`. Der Benutzer darf nur `timetrack.*`.
-- Datenbankzeichensatz `utf8mb4`; die Server-Sortierung `utf8mb4_unicode_ci` entspricht der Entwicklungsumgebung. Einzelne Tabellen setzen `utf8mb4_bin` selbst.
-- `max_allowed_packet` des Servers sollte mindestens **70 MiB** betragen, wenn Dateien in der Datenbank gespeichert werden (Speicherregel „Datenbank“; Uploads bis 64 MiB, siehe handoffs/C13.md). Prüfen: `SHOW VARIABLES LIKE 'max_allowed_packet';`.
-  Beispiel „alle Dateien in der Datenbank, höchstens 50 MiB“: im Admin-Bereich (Einstellungen → Dateispeicher) Speicherregel „alles → Datenbank“ (Voreinstellung) und „Größter erlaubter Upload“ = 50 MiB (`maxUploadBytes` = 52428800) setzen; dafür genügt `max_allowed_packet` ≥ 56 MiB, im Proxy `client_max_body_size` ≈ 52m. Weil die Dateien in MariaDB liegen, sehen alle Swarm-Replikate dieselben Dateien (kein verteilter Speicher nötig). Die Grenze ist eine Datenbankeinstellung (kein Umgebungswert); der feste Höchstwert der Software ist 64 MiB, die Voreinstellung 10 MiB.
-- Einen **zweiten** Benutzer für Backups (nur lesen) legen Sie nach Abschnitt 14 an.
-
-### 3.3 TLS zur Datenbank
-
-Das Backend verwendet bei `DB_TLS=required` (Standard) TLS mit Prüfung des Serverzertifikats gegen die Zertifikatsablage des Images (Standard der verwendeten Bibliothek, `TLSConfiguration.makeClientConfiguration()`).
-Folgen:
-
-- `DB_HOST` muss **exakt dem Namen im Zertifikat** entsprechen (CN/SAN), nicht einer IP, wenn das Zertifikat nur Namen enthält.
-- Ein Zertifikat einer **privaten CA** wird nicht akzeptiert, solange diese CA nicht im Image liegt. Das Projekt bietet dafür **keine** Konfiguration (kein `DB_TLS_CA_FILE`); siehe Abschnitt 17. Möglichkeiten: öffentlich vertrauenswürdiges Zertifikat (z. B. Let's Encrypt für den DB-Namen), ein eigenes Image mit installierter CA, oder `DB_TLS=off` **nur** wenn die Verbindung ausschließlich über ein privates, vertrauenswürdiges Netz läuft (Docker-Overlay verschlüsselt nicht von sich aus; WireGuard/VLAN/dieselbe Maschine).
-- Auf dem Server: `ssl_cert`, `ssl_key` (und ggf. `ssl_ca`) in der MariaDB-Konfiguration gesetzt; `REQUIRE SSL` am Benutzer erzwingt die Verschlüsselung.
-
-Verbindung vorab testen (vom Swarm-Knoten, mit dem Image selbst ginge es auch, aber der Client genügt):
-
-```sh
-mariadb -h db.internal.example.test -u timetrack -p --ssl timetrack -e 'SELECT 1, @@version'
-```
+Ausgelagert auf die Seite **[Eigene MariaDB vorbereiten](installation/mariadb.md)**: Datenbank und Benutzer mit minimalen Rechten (SQL), starkes Passwort, `max_allowed_packet`, TLS-Regeln und Verbindungstest.
 
 ## 4. Secrets anlegen
 
@@ -123,7 +75,7 @@ mkdir -m 700 /root/tt-keys
 
 Danach:
 
-1. Passwort für Abschnitt 3.2 aus `/root/tt-db-password.txt` entnehmen (nicht in den Shell-Verlauf kopieren; Editor öffnen und in die SQL-Sitzung einfügen), dann die **Datei löschen**: `shred -u /root/tt-db-password.txt` (oder `rm`).
+1. Passwort für [Eigene MariaDB](installation/mariadb.md) aus `/root/tt-db-password.txt` entnehmen (nicht in den Shell-Verlauf kopieren; Editor öffnen und in die SQL-Sitzung einfügen), dann die **Datei löschen**: `shred -u /root/tt-db-password.txt` (oder `rm`).
 2. `/root/tt-keys/tt_storage_secret_key` und `tt_vapid_private_key` in den Passwortmanager übernehmen und das Verzeichnis löschen. **Docker zeigt Secret-Werte nie wieder an.**
 3. Prüfen: `docker secret ls` zeigt `tt_db_password`, `tt_storage_secret_key`, `tt_vapid_private_key`.
 
@@ -151,8 +103,8 @@ Secrets sind unveränderlich. Rotation: neues Secret mit anderem Namen (`--prefi
 Der Stack veröffentlicht den Port des Backends auf **jedem Swarm-Knoten** (Routing Mesh, `mode: ingress`, Standard `PUBLISHED_PORT=18080`). Jeder Knoten leitet an ein gesundes Replikat weiter, egal auf welchem Knoten es läuft. Ein vorab angelegtes Overlay-Netz ist **nicht** nötig; der Stack nutzt nur sein eigenes Standardnetz.
 
 - Der Reverse Proxy (außerhalb oder innerhalb von Swarm) verbindet sich mit `http://<Knoten-IP>:18080` (mehrere Knoten: als Upstream-Liste oder über eine virtuelle IP).
-- **Firewall:** Erlauben Sie den Port nur Ihrem Proxy. Wer ihn direkt erreicht, könnte `X-Forwarded-For` fälschen (siehe Abschnitt 9).
-- Das Subnetz für `TRUSTED_PROXY_CIDRS` ist hier das des `ingress`-Netzes (Abschnitt 9):
+- **Firewall:** Erlauben Sie den Port nur Ihrem Proxy. Wer ihn direkt erreicht, könnte `X-Forwarded-For` fälschen (siehe [Reverse Proxy und TLS](installation/proxy.md#trusted-proxy-cidrs-bestimmen)).
+- Das Subnetz für `TRUSTED_PROXY_CIDRS` ist hier das des `ingress`-Netzes ([Reverse Proxy und TLS](installation/proxy.md#trusted-proxy-cidrs-bestimmen)):
 
 ```sh
 docker network inspect ingress --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'
@@ -162,38 +114,9 @@ Sie können den Stack alternativ an ein gemeinsames Overlay-Netz mit einem Proxy
 
 ## 6. Variablen eintragen (`stack.env`)
 
-Öffnen Sie `stack.env` und ersetzen Sie die Beispielwerte. **Pflicht** sind die ersten Zeilen; alles andere hat einen sinnvollen Standard.
-Die Datei wird von der Shell eingelesen (`set -a; . stack.env; set +a`): keine Leerzeichen um `=`, Werte mit Leerzeichen in Anführungszeichen.
+Alle Variablen mit Pflicht/optional, Standardwert und Bedeutung stehen in der **[Konfigurationsreferenz](installation/konfiguration.md)**. Für den Swarm gilt zusätzlich: Öffne `stack.env` (Vorlage `stack.env.example`) und ersetze die Beispielwerte; **Pflicht** sind die ersten Zeilen (`TIMETRACK_IMAGE`, `DB_HOST`, `PUBLIC_BASE_URL`, `WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGIN`, `VAPID_SUBJECT`). Die Datei wird von der Shell eingelesen (`set -a; . ./stack.env; set +a`): keine Leerzeichen um `=`, Werte mit Leerzeichen in Anführungszeichen. Das Backend loggt bei ungültiger Konfiguration einen Fehler mit dem Namen der Variable (z. B. `Invalid configuration for WEBAUTHN_RP_ID: must be a lowercase hostname`) und startet nicht.
 
-| Variable | Pflicht? | Beispielwert | Bedeutung / Regeln (aus `Configuration.swift`) |
-| --- | --- | --- | --- |
-| `TIMETRACK_IMAGE` | ja | `ghcr.io/OWNER/timetrack-backend:1.0.0` | Image von Backend und Migrationsjob. Feste Version statt `latest`. |
-| `DB_HOST` | ja | `db.internal.example.test` | Name des DB-Servers; bei `DB_TLS=required` muss er zum Zertifikat passen. |
-| `DB_PORT`, `DB_NAME`, `DB_USER` | nein | `3306`, `timetrack`, `timetrack` | Wie in Abschnitt 3. |
-| `DB_TLS` | nein | `required` | `required` (Standard) oder `off`. Siehe 3.3. |
-| `PUBLIC_BASE_URL` | ja | `https://timetrack.example.org` | Öffentliche Adresse. Muss HTTPS sein (HTTP nur für `localhost`), ohne Zugangsdaten, Query, Fragment. Bestimmt Einladungslinks, OAuth-URLs und das `Secure`-Flag des Cookies. |
-| `WEBAUTHN_RP_ID` | ja | `timetrack.example.org` | Relying-Party-ID: Kleinbuchstaben-Hostname, ohne Schema/Port/Pfad. **Nachträgliche Änderung entwertet alle Passkeys** (Abschnitt 10). |
-| `WEBAUTHN_ORIGIN` | ja | `https://timetrack.example.org` | Muss exakt dem Browser-Origin entsprechen (Schema + Host, kein Pfad); der Host muss RP-ID oder deren Subdomain sein. |
-| `WEBAUTHN_RP_NAME` | nein | `Timetrack` | Anzeigename im Passkey-Dialog. |
-| `VAPID_SUBJECT` | im Stack ja | `mailto:admin@example.org` | Kontakt für Push-Dienste: `mailto:` oder `https://`. Ungültig oder fehlend: Push bleibt aus (Warnung im Log). |
-| `PUBLISHED_PORT` | nein | `18080` | TCP-Port, der auf jedem Knoten veröffentlicht wird (Routing Mesh). Proxy-Upstream: `http://<Knoten-IP>:<Port>`. |
-| `TRUSTED_PROXY_CIDRS` | dringend empfohlen | `10.0.1.0/24` | Netze der Proxys, deren `X-Forwarded-For` geglaubt wird (Abschnitt 9). Leer = niemand. `/0` wird abgelehnt, ungültige Einträge verhindern den Start. |
-| `TRUSTED_PROXY_HEADER` | nein | `X-Forwarded-For` | Oder `X-Real-IP`. |
-| `APPLE_APP_IDS` | für die iOS/macOS-App | `ABCDE12345.com.example.timetrack` | Komma-getrennt, jeder Eintrag `<10-stellige Team-ID>.<Bundle-ID>`; ungültige Einträge verhindern den Start. Leer = AASA-Endpunkt antwortet 404. **`ABCDE12345` ist ein Platzhalter.** |
-| `PUSH_ALLOWED_HOSTS` | nein | `fcm.googleapis.com,updates.push.services.mozilla.com,web.push.apple.com,*.notify.windows.com` | Ersetzt die eingebaute Liste erlaubter Push-Dienste (ADR-0011); getesteter Vorschlag. Leer = eingebaute Liste. |
-| `NOTIFICATIONS_ENABLED` | nein | `true` | Hintergrund-Erinnerungen. |
-| `SESSION_TTL_HOURS` | nein | `336` | Sitzungsdauer 1..8760 Stunden (Stack-Standard 336; Code-Standard 720). |
-| `MODULES_DISABLED` | nein | `mcp` | Betreibersperre: `reports,planning,transfer,automation,mcp` (Abschnitt 16). |
-| `MAINTENANCE_INTERVAL_MINUTES` u. a. | nein | `60`, `90`, `168`, `168` | Wartungsjob (ADR-0017): Intervall (0 = aus), `MCP_AUDIT_RETENTION_DAYS`, `IMPORT_JOB_TIMEOUT_HOURS`, `STORAGE_ORPHAN_GRACE_HOURS`. |
-| `BACKEND_REPLICAS` | nein | `1` | Beim ersten Deployment `0` (Abschnitt 7). |
-| `BACKEND_PLACEMENT` | nein | `"node.platform.os == linux"` | Optionale Platzierungsbedingung. Keine feste Knotenbindung nötig (PWA im Image, Dateien in der Datenbank); z. B. `"node.labels.timetrack == true"` zum Einschränken. |
-| `SMTP_*` | nein | siehe Datei | E-Mail-Wiederherstellung. Alle Zeilen aktivieren (auch Block und Secret in `stack.yaml`): `SMTP_HOST`, `SMTP_PORT`, `SMTP_TLS` (`starttls`/`implicit`), `SMTP_FROM`, `SMTP_FROM_NAME`, `SMTP_USER` + Secret `tt_smtp_password`. `SMTP_USER` und Passwort nur gemeinsam; `SMTP_TLS=off` nur für Loopback-Testhosts. |
-| `OIDC_*` | nein | siehe Datei | Optionales OpenID-Connect (ADR-0007): `OIDC_ISSUER` (HTTPS), `OIDC_CLIENT_ID`, `OIDC_NAME`, `OIDC_SCOPES` (muss `openid` enthalten) + Secret `tt_oidc_client_secret`. Nur zusammen mit dem Block in `stack.yaml`. |
-| S3 | – | – | Wird **nicht** per Variable konfiguriert, sondern im Admin-Bereich der PWA (Speicherregeln); Zugangsdaten liegen verschlüsselt in der Datenbank (`STORAGE_SECRET_KEY`). |
-
-Das Backend loggt bei ungültiger Konfiguration einen Fehler mit dem Namen der Variable (z. B. `Invalid configuration for WEBAUTHN_RP_ID: must be a lowercase hostname`) und startet nicht.
-
-Dateispeicher in der Datenbank: Der Stack hat **keine Volumes**. Hochgeladene Dateien liegen in der Datenbank (und damit im DB-Backup). Stellen Sie nach dem ersten Login im Admin-Bereich bei den Speicherregeln „alles → Datenbank“ ein und setzen Sie ein globales Upload-Limit (Beispiel: 50 MiB). Die Speicherart „Lokal“ steht im Stack nicht zur Verfügung (kein beschreibbarer Pfad, Root-Dateisystem schreibgeschützt); S3 ist über den Admin-Bereich weiterhin möglich.
+Dateispeicher in der Datenbank: Der Stack hat **keine Volumes**. Hochgeladene Dateien liegen in der Datenbank (und damit im DB-Backup). Stelle nach dem ersten Login im Admin-Bereich bei den Speicherregeln „alles → Datenbank“ ein und setze ein globales Upload-Limit (Beispiel: 50 MiB). Die Speicherart „Lokal“ steht im Stack nicht zur Verfügung (kein beschreibbarer Pfad, Root-Dateisystem schreibgeschützt); S3 ist über den Admin-Bereich weiterhin möglich.
 
 ## 7. Erstes Deployment
 
@@ -219,7 +142,7 @@ docker service ps timetrack_backend                 # erwartet: Running (nach ca
 docker service logs --tail 50 timetrack_backend
 ```
 
-Schlägt der Migrationsjob fehl (`Failed`, `Rejected`): `docker service logs timetrack_migrate`. Häufig: DB nicht erreichbar, TLS-Fehler, fehlende Rechte (Abschnitt 18). Nach der Korrektur den Job erneut starten: `docker service update --force timetrack_migrate`.
+Schlägt der Migrationsjob fehl (`Failed`, `Rejected`): `docker service logs timetrack_migrate`. Häufig: DB nicht erreichbar, TLS-Fehler, fehlende Rechte ([Probleme und Lösungen](installation/probleme.md)). Nach der Korrektur den Job erneut starten: `docker service update --force timetrack_migrate`.
 
 Wichtig: `docker stack deploy` setzt `replicas` aus der Datei zurück. Wenn Sie später erneut deployen, ohne `BACKEND_REPLICAS` zu setzen, gilt der Wert aus `stack.env` (hier `1`).
 
@@ -235,137 +158,11 @@ docker exec "$(docker ps -q -f name=timetrack_backend)" curl -fsS http://127.0.0
 
 ## 8. Reverse Proxy
 
-Der Proxy terminiert TLS und leitet **alles** an das Backend (es liefert auch die PWA aus). Ziel: `http://<Knoten-IP>:18080` (der veröffentlichte Port, `PUBLISHED_PORT`).
-Der Name `backend` ist ebenfalls als Alias vorhanden, kann aber mit Diensten anderer Stacks kollidieren; der volle Name `timetrack_backend` ist eindeutig.
-
-Anforderungen (aus Code und BETRIEB.md Abschnitt 6):
-
-| Thema | Anforderung |
-| --- | --- |
-| TLS/HTTP | HTTPS für `timetrack.example.org`, HTTP/2 empfohlen, HTTP→HTTPS-Umleitung, HSTS (`max-age=31536000`). Auf dem Weg zum Backend darf HTTP/1.1 genutzt werden. |
-| Header | `Host`, `X-Forwarded-For` (anhängen), `X-Forwarded-Proto`. Das Backend baut URLs aus `PUBLIC_BASE_URL`, nicht aus dem Host-Header. |
-| `/.well-known/apple-app-site-association` | **Unverändert durchreichen**: kein Redirect, keine Authentifizierung, kein Umschreiben, `Content-Type: application/json` (setzt das Backend selbst; nicht überschreiben), HTTP 200 direkt. Auch `/.well-known/oauth-*` (MCP/OAuth) durchreichen. |
-| Caching | `/api/` nicht cachen (kein Proxy-Cache). Das Backend setzt für die PWA selbst `Cache-Control` (hashierte Dateien `immutable`, sonst `no-cache`); nicht überschreiben. Keine Komprimierung ist erforderlich. |
-| Upload | Dateien bis 64 MiB plus 64 KiB Multipart-Aufschlag: Körpergrenze **mindestens 65 MiB** (hier 70m), Lese-/Sendezeitüberschreitung ≥ 120 s. |
-| `/mcp` | Streamable HTTP nur per `POST` mit JSON-Antwort: kein SSE, kein WebSocket, keine Upgrade-Header, kein Streaming-Puffer nötig. `GET /mcp` liefert absichtlich 405. Körper ≤ 256 KiB. |
-| `/health`, `/ready` | Nicht öffentlich weiterreichen (Informationen über Datenbankzustand). Der Docker-Healthcheck braucht sie nicht über den Proxy. |
-| Rate-Limit | Zusätzlich am Proxy für `/api/v1/auth/`, `/api/v1/me/recovery/`, `/oauth/` (z. B. 10 Anfragen/s je IP). |
-| Echte Client-IP | Siehe Abschnitt 9: im Swarm den Proxy-Port im **Host-Modus** veröffentlichen (nicht über das Routing Mesh), sonst sieht der Proxy eine Mesh-Adresse. |
-
-### 8.1 nginx
-
-Variante A: nginx **im Swarm** am selben Overlay-Netz (Ziel `timetrack_backend:8080`; die `resolver`-Zeile von Docker nötig, damit Neustarts des Backends nicht an alten IPs hängen).
-Variante B: nginx auf dem Host: Dann ist das Overlay-Netz nicht erreichbar; Sie müssen in `stack.yaml` den auskommentierten `ports:`-Block (Host-Modus, z. B. `18080`) aktivieren und den Port per Firewall auf den Proxy begrenzen; Ziel dann `127.0.0.1:18080` bzw. die Host-Adresse. Nicht erprobt.
-
-```nginx
-# /etc/nginx/conf.d/timetrack.conf (Zertifikatspfade anpassen)
-server {
-    listen 80;
-    listen [::]:80;
-    server_name timetrack.example.org;
-    return 301 https://$host$request_uri;       # gilt NICHT für ACME-Challenges, falls Sie HTTP-01 nutzen: dort ausnehmen
-}
-
-server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
-    http2 on;
-    server_name timetrack.example.org;
-
-    ssl_certificate     /etc/letsencrypt/live/timetrack.example.org/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/timetrack.example.org/privkey.pem;
-    add_header Strict-Transport-Security "max-age=31536000" always;
-
-    client_max_body_size 70m;                   # 64 MiB Datei + Multipart-Aufschlag
-    proxy_request_buffering off;                # Uploads nicht erst auf Platte puffern
-    proxy_read_timeout 300s;
-    proxy_send_timeout 300s;
-
-    resolver 127.0.0.11 valid=10s;              # Docker-DNS (nur nginx IM Swarm); auf dem Host weglassen
-    set $upstream http://192.0.2.10:18080;     # Knoten-IP und PUBLISHED_PORT
-
-    location = /health { return 404; }
-    location = /ready  { return 404; }
-
-    # Apple-Datei: unverändert durchreichen, kein Redirect, kein Auth, kein Cache-Header-Umbau.
-    location = /.well-known/apple-app-site-association {
-        proxy_pass $upstream;
-        proxy_set_header Host $host;
-    }
-
-    location /api/ {
-        proxy_pass $upstream;
-        proxy_http_version 1.1;
-        proxy_set_header Host              $host;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_no_cache 1;
-        proxy_cache_bypass 1;
-    }
-
-    location / {
-        proxy_pass $upstream;
-        proxy_http_version 1.1;
-        proxy_set_header Host              $host;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Connection        "";
-    }
-}
-```
-
-`X-Forwarded-For` mit `$proxy_add_x_forwarded_for` **anhängt** die Client-Adresse an einen vom Client mitgesendeten Wert; das Backend liest den Header von rechts und ignoriert vorangestellte Fälschungen, sofern `TRUSTED_PROXY_CIDRS` genau Ihren Proxy umfasst.
-Steht ein weiterer Proxy (z. B. Cloudflare) davor, gehört dessen Netz ebenfalls in `TRUSTED_PROXY_CIDRS`.
-Anmerkung: Der `location /`-Block liefert auch `/oauth/*`, `/mcp` und `/.well-known/oauth-*`; kein weiterer Block nötig.
-
-### 8.2 Traefik (v3, Swarm-Provider)
-
-**Hinweis:** Die Label-Variante unten setzt voraus, dass Traefik im selben Swarm läuft und mit dem Backend ein Netz teilt (nicht Teil dieses Stacks). Mit dem veröffentlichten Port ist die dynamische Datei-Konfiguration einfacher: Router `Host(`timetrack.example.org`)` und ein Service mit `servers: - url: "http://192.0.2.10:18080"` (mehrere Knoten: mehrere `url`-Einträge).
-
-Traefik liest Labels aus dem **Dienst** (im Swarm unter `deploy.labels`). Ergänzen Sie im Dienst `backend` in `stack.yaml` den vorhandenen `deploy:`-Block um `labels:` (Entrypoint- und Resolver-Namen an Ihre Traefik-Konfiguration anpassen):
-
-```yaml
-    deploy:
-      labels:
-        - traefik.enable=true
-        - traefik.http.services.timetrack.loadbalancer.server.port=8080
-        - traefik.http.routers.timetrack.rule=Host(`timetrack.example.org`) && !Path(`/health`) && !Path(`/ready`)
-        - traefik.http.routers.timetrack.entrypoints=websecure
-        - traefik.http.routers.timetrack.tls.certresolver=letsencrypt
-        - traefik.http.routers.timetrack.middlewares=timetrack-headers
-        - traefik.http.middlewares.timetrack-headers.headers.stsSeconds=31536000
-```
-
-(Die Labels gehören unter `deploy.labels`, nicht unter `labels:`: nur dort sieht sie der Swarm-Provider. Die Regel schließt `/health` und `/ready` von der Weiterleitung aus.)
-
-Statische Traefik-Konfiguration (Auszug, beim Traefik-Dienst selbst):
-
-```yaml
-entryPoints:
-  websecure:
-    address: ":443"
-    http:
-      tls: {}
-    transport:
-      respondingTimeouts:
-        readTimeout: 300s        # Uploads bis 64 MiB; Traefik v3 begrenzt das Lesen standardmäßig (Wert in Ihrer Version prüfen)
-        writeTimeout: 300s
-        idleTimeout: 180s
-    forwardedHeaders:
-      trustedIPs: []             # nur eintragen, wenn davor ein weiterer Proxy steht (dann dessen Netz)
-```
-
-Traefik setzt `X-Forwarded-For` und `X-Forwarded-Proto` selbst, begrenzt die Anfragegröße **nicht** (keine `buffering`-Middleware verwenden, außer mit `maxRequestBodyBytes` ≥ 70 MiB) und leitet `/.well-known/*` ohne Umschreiben weiter. HTTP/2 ist an TLS-Entrypoints standardmäßig an.
-Das Traefik-Beispiel wurde **nicht** gegen eine laufende Traefik-Instanz getestet.
-
-Damit Traefik die echte Client-IP sieht: Ports 80/443 des Traefik-Dienstes im **Host-Modus** veröffentlichen (`mode: host`), nicht über das Routing Mesh.
+Ausgelagert auf die Seite **[Reverse Proxy und TLS](installation/proxy.md)**: Anforderungen, Beispiele für Caddy, nginx und Traefik.
 
 ## 9. `TRUSTED_PROXY_CIDRS` bestimmen
 
-1. Subnetz des `ingress`-Netzes (das Backend sieht hinter dem Routing Mesh diese Adresse als Verbindungspartner): `docker network inspect ingress --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'` (z. B. `10.0.0.0/24`).
-2. Zugriffsrechte beachten: Vertrauen Sie nur dem Netz, in dem **ausschließlich der Proxy** Verbindungen zum Backend aufbauen kann. Hängen weitere Dienste im selben Netz, legen Sie ein eigenes Netz nur für Proxy und Backend an, oder tragen Sie die feste Proxy-Adresse als `/32` ein.
-3. In `stack.env`: `TRUSTED_PROXY_CIDRS=10.0.0.0/24`, `TRUSTED_PROXY_HEADER=X-Forwarded-For`, neu ausrollen (Abschnitt 13).
-4. Prüfen: Rate-Limit-Verhalten, siehe BETRIEB.md Abschnitt 6, Schritt 3. Ohne die Einstellung teilen sich **alle** Clients einen Zähler (60 Ereignisse je 5 Minuten): ein Angreifer sperrt die Anmeldung für alle. Pro Konto gilt zusätzlich eine eigene Grenze (15 je 5 Minuten).
+Ausgelagert auf die Seite **[Reverse Proxy und TLS](installation/proxy.md#trusted-proxy-cidrs-bestimmen)**.
 
 ## 10. Passkeys und Domainregeln
 
@@ -457,7 +254,7 @@ Oder: `TIMETRACK_IMAGE` in `stack.env` ändern, `docker stack deploy ...` erneut
 
 Verhalten: Das neue Backend wird erst „healthy“, wenn `/ready` 200 liefert (Datenbank erreichbar, alle Migrationen angewendet). Ohne vorherige Migration bleibt es ungesund; `update_config` rollt automatisch zurück (`failure_action: rollback`, 60 s Beobachtung). Tritt das ein, ist der Dienst auf der alten Version geblieben.
 
-Manueller Rollback des Images: `docker service rollback timetrack_backend`. **Das Schema wird nicht zurückgerollt.** Ein Rückgang auf eine ältere Version nach einer angewendeten Migration ist nur sicher, wenn die Migration abwärtskompatibel war (nicht zugesichert); im Zweifel Restore aus dem Backup vor Schritt 1 (BETRIEB.md Abschnitt 3). Bei Migrationen mit zerstörenden Änderungen (Release-Hinweise lesen) das Backend vorher auf 0 skalieren: `docker service scale timetrack_backend=0`.
+Manueller Rollback des Images: `docker service rollback timetrack_backend`. **Das Schema wird nicht zurückgerollt.** Ein Rückgang auf eine ältere Version nach einer angewendeten Migration ist nur sicher, wenn die Migration abwärtskompatibel war (nicht zugesichert); im Zweifel Restore aus dem Backup vor Schritt 1 (BETRIEB.md [Eigene MariaDB](installation/mariadb.md)). Bei Migrationen mit zerstörenden Änderungen (Release-Hinweise lesen) das Backend vorher auf 0 skalieren: `docker service scale timetrack_backend=0`.
 
 PWA aktualisieren: Die PWA ist Teil des Images, ein Update ist ein neues Image-Tag. In GitHub baut der Docker-Workflow die PWA aus dem Repository `timetrack-pwa` (Referenz: Repository-Variable `PWA_REF`, Standard `main`); für eine neue PWA-Version den Workflow neu starten (Push auf `main`, Tag `v*` oder manuell) und das neue Tag wie ein Backend-Update ausrollen (Abschnitt oben). Browser und Service Worker holen die neue Version beim nächsten Besuch.
 
@@ -503,30 +300,7 @@ Das ist der tatsächliche Stand, nicht das Wunschbild:
 
 ## 18. Fehlersuche
 
-| Symptom | Wahrscheinliche Ursache | Abhilfe |
-| --- | --- | --- |
-| Browser zeigt 502/503 vom Proxy | Backend nicht gestartet oder Port nicht erreichbar (Firewall, falsche Knoten-IP/`PUBLISHED_PORT`); Replikate 0 | `docker service ps timetrack_backend`; Netz `PROXY_NETWORK` gleich beim Proxy und im Stack; Ziel `timetrack_backend:8080`; `docker service scale timetrack_backend=1`. |
-| Dienst startet nicht, Log: `Invalid configuration for X` | Variable ungültig (RP-ID mit Großbuchstaben, Origin mit Pfad, ungültiges CIDR, `OIDC_ISSUER` ohne HTTPS ...) | Wert in `stack.env` korrigieren, neu ausrollen. |
-| Dienst ist „unhealthy“, `/ready` = 503 | Migration nicht gelaufen oder DB nicht erreichbar | `docker service logs timetrack_migrate`; Migration ausführen (Abschnitt 13); DB-Erreichbarkeit, Passwort, TLS prüfen. |
-| Migrationsjob `Failed`: Verbindung/TLS-Fehler | Falscher `DB_HOST`, Firewall, Zertifikatsname passt nicht, private CA | Abschnitt 3.3; Verbindung mit dem `mariadb`-Client testen; `REQUIRE SSL` ohne TLS am Client. |
-| Migrationsjob `Failed`: Zugriff verweigert / `Access denied` | Falsches Passwort oder Benutzer-Host passt nicht zur Quelladresse | Passwort im Secret = Passwort in der DB? `'timetrack'@'<Host>'` auf die Quelladresse (Knoten-IP) anpassen. |
-| Migrationsjob `Failed`: `CREATE command denied` | Rechte fehlen | `GRANT` aus 3.2 nachholen. |
-| Container „Rejected“, `secret not found` | Secret fehlt oder anderer Name | `docker secret ls`; Namen in `stack.yaml` und Prefix des Skripts abgleichen. |
-| Container beendet sich mit Exit 64/66 | Variable und `_FILE` gleichzeitig gesetzt / Datei nicht lesbar | Nicht zusätzlich `DB_PASSWORD=` setzen; Secret im Dienst eingehängt? |
-| Passkey-Anmeldung/Registrierung schlägt fehl („Origin“, „RP ID“) | `WEBAUTHN_ORIGIN`/`WEBAUTHN_RP_ID` weichen vom Browser-Host ab (www, Port, http); Proxy ändert Host | Browser-Adresse = `WEBAUTHN_ORIGIN`; RP-ID = Host ohne Schema. Nach Änderung neu ausrollen. Nach RP-ID-Wechsel sind alte Passkeys wertlos. |
-| „Zu viele Anfragen“ (429) bei Anmeldung für alle | `TRUSTED_PROXY_CIDRS` fehlt oder falsches Netz: alle Clients teilen einen Zähler | Subnetz des Proxys eintragen (Abschnitt 9); Proxy im Host-Modus veröffentlichen; Wartezeit abwarten (5 Minuten). |
-| Rate-Limit trifft nur einen Nutzer | Zähler pro Konto (15 je 5 Minuten) | Warten oder anderen Zugang nutzen; kein Fehler. |
-| Push kommt nicht an | VAPID-Schlüssel/-Subjekt ungültig (Log-Warnung `Web Push stays unavailable`); `GET /api/v1/push/config` meldet `available:false`; `PUSH_ALLOWED_HOSTS` blockiert den Dienst; ausgehende Verbindung gesperrt; Gerät hat nicht abonniert | Secret/Subjekt prüfen; Liste enthält den Push-Host des Geräts (FCM, Mozilla, Apple, WNS); Egress-Firewall; Abo in der PWA erneuern. |
-| AASA liefert 404 | `APPLE_APP_IDS` leer oder Stack nicht neu ausgerollt | Setzen und ausrollen (Abschnitt 11). |
-| AASA liefert 301/302 oder HTML | Proxy leitet um oder fängt den Pfad ab | `/.well-known/` ohne Umleitung/Fallback durchreichen (Abschnitt 8). |
-| Apples CDN findet die Datei nicht | Domain nicht öffentlich/zertifikat ungültig/Cache noch alt | Abschnitt 11, Prüfbefehle; später erneut prüfen. |
-| Upload bricht ab (413 oder Verbindungsabbruch) | Proxy-Limit oder -Zeitüberschreitung zu klein | `client_max_body_size 70m`, Timeouts ≥ 120 s (Abschnitt 8). |
-| Datei-Upload scheitert / „Lokal“ nicht nutzbar | Der Stack hat keine Volumes; Speicherregel steht auf „Lokal“ | Im Admin-Bereich „alles → Datenbank“ (oder S3) wählen, Upload-Limit prüfen. |
-| `/` liefert 404 statt PWA | Image ohne PWA gebaut (Build ohne `pwa-src`) | Image aus dem Docker-Workflow verwenden; `docker run --rm --entrypoint ls IMAGE /srv/pwa` muss `index.html` zeigen. |
-| S3-Dateien unlesbar (503 `storage_unavailable`) | Falscher/neuer `STORAGE_SECRET_KEY` | Ursprünglichen Schlüssel als Secret wiederherstellen; sonst S3-Zugangsdaten im Admin-Bereich neu eintragen. |
-| PWA lädt, aber API-Fehler/CORS/Cookie fehlt | `PUBLIC_BASE_URL` ohne `https` (Cookie nicht `Secure`) oder abweichender Host | Alle drei URLs auf die öffentliche HTTPS-Adresse setzen. |
-| `bootstrap-admin` meldet Konflikt | Es existiert schon ein Konto | Weitere Personen per Einladung in der PWA; Verlust des Admin-Zugangs: Wiederherstellungsoptionen des Kontos nutzen. |
-| MCP-Client verbindet nicht | Modul `mcp` gesperrt; `/.well-known/oauth-*` nicht durchgereicht; `PUBLIC_BASE_URL` falsch | Abschnitte 8 und 16; MCP.md. |
+Ausgelagert auf die Seite **[Probleme und Lösungen](installation/probleme.md)** (alle Symptome, Ursachen und Abhilfen an einer Stelle).
 
 ## 19. Sicherheits-Checkliste
 
@@ -546,7 +320,7 @@ Das ist der tatsächliche Stand, nicht das Wunschbild:
 ## 20. Checkliste Go-Live
 
 1. [ ] DNS `timetrack.example.org` zeigt auf den Proxy; Zertifikat gültig (`curl -I https://timetrack.example.org/`).
-2. [ ] MariaDB: Datenbank und Benutzer angelegt, TLS-Verbindung getestet (Abschnitt 3).
+2. [ ] MariaDB: Datenbank und Benutzer angelegt, TLS-Verbindung getestet ([Eigene MariaDB](installation/mariadb.md)).
 3. [ ] Secrets angelegt (`docker secret ls` zeigt drei bis fünf `tt_*`), Schlüssel gesichert (Abschnitt 4).
 4. [ ] Overlay-Netz vorhanden, Proxy daran angeschlossen; Subnetz in `TRUSTED_PROXY_CIDRS` (Abschnitte 5, 9).
 5. [ ] `stack.env` ausgefüllt; `docker stack config -c stack.yaml` ohne Fehler (Abschnitte 6, 7).

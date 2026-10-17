@@ -1,5 +1,9 @@
 # Aktualisieren und Datenbank-Migrationen
 
+- **Wofür:** Eine laufende Instanz auf eine neue Version bringen, inklusive Datenbank-Migration und Rückweg.
+- **Voraussetzungen:** laufende Installation ([Compose](installation/compose.md) oder [Swarm](installation/swarm.md)) und eine aktuelle [Sicherung](installation/backup.md).
+- **Dauer:** 5 bis 15 Minuten.
+
 Kurzfassung: **erst sichern, dann die Migration mit dem neuen Image ausführen, dann das Backend wechseln.** Das Backend migriert nie von selbst.
 
 ## Wie Migrationen funktionieren
