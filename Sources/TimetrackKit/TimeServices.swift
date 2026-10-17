@@ -49,7 +49,7 @@ struct TimeServices: Sendable {
 struct WorkModelService: Sendable {
     let scope: TimeServices
     func list() async throws -> [WorkModelDTO] {
-        try await WorkModelRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).sort(\.$validFrom).all().map(\.payload)
+        try await WorkModelRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).sort(\.$validFrom).all().map(\.versioned)
     }
     func record(_ id: UUID) async throws -> WorkModelRecord {
         guard let row = try await WorkModelRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).filter(\.$id == id).first() else { throw APIError.missing }
@@ -67,7 +67,7 @@ struct WorkModelService: Sendable {
             } else if previous.validTo! >= input.validFrom.description { throw APIError(.conflict, "model_overlap") }
         }
         let row = WorkModelRecord(); row.id = UUID(); row.accountId = scope.accountId
-        var value = input; value.id = row.id; value.createdAt = Date()
+        var value = input; value.id = row.id; value.createdAt = Date(); value.version = 1
         row.validFrom = value.validFrom.description; row.validTo = value.validTo?.description; row.payload = value
         try await row.create(on: scope.db)
         return value
@@ -78,7 +78,7 @@ struct WorkModelService: Sendable {
         let versions = try await list()
         guard !versions.contains(where: { $0.id != id && $0.validFrom > row.payload.validFrom && $0.validFrom <= date }) else { throw APIError(.conflict, "model_overlap") }
         row.validTo = date.description; row.payload.validTo = date
-        try await row.update(on: scope.db); return row.payload
+        try await row.update(on: scope.db); return row.versioned
     }
 }
 

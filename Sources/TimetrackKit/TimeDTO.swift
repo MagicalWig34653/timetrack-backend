@@ -17,6 +17,8 @@ struct WorkModelDTO: Content {
     var schoolCreditSeconds: Int?
     var dayBoundaryMinutes: Int?
     var fixedBreaks: [BreakInput]?
+    /// Correction counter (M1); absent on versions created before it, which count as 1. Ignored on input.
+    var version: Int?
     struct BreakInput: Content { var start: String; var end: String }
     func engine() throws -> EngineWorkModel {
         func time(_ text: String) throws -> LocalTime {

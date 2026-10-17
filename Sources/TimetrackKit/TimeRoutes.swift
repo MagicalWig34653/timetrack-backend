@@ -21,12 +21,21 @@ func registerTimeRoutes(_ app: Application, auth: AuthService) {
         return try await run(req) { try timeResponse(await $0.models.create(input), status: .created) }
     }
     api.get("work-models", ":id") { req async throws -> Response in
-        let key = try id(req); return try await runRead(req) { try timeResponse(await $0.models.record(key).payload) }
+        let key = try id(req); return try await runRead(req) { try timeResponse(await $0.models.record(key).versioned) }
     }
     api.patch("work-models", ":id") { req async throws -> Response in
         struct Input: Decodable { var validTo: LocalDate }
         let key = try id(req); let input = try timeDecode(Input.self, request: req)
         return try await run(req) { try timeResponse(await $0.models.end(key, at: input.validTo)) }
+    }
+    api.put("work-models", ":id") { req async throws -> Response in
+        let key = try id(req); let input = try timeDecode(WorkModelDTO.self, request: req)
+        let version = req.headers.first(name: .ifMatch).flatMap { Int($0.trimmingCharacters(in: CharacterSet(charactersIn: "\""))) }
+        return try await run(req) { try timeResponse(await $0.models.update(key, input: input, version: version)) }
+    }
+    api.post("work-models", ":id", "preview") { req async throws -> Response in
+        let key = try id(req); let input = try timeDecode(WorkModelDTO.self, request: req)
+        return try await runRead(req) { try timeResponse(await $0.models.preview(key, input: input)) }
     }
     api.get("places") { req async throws -> Response in try await runRead(req) { try timeResponse(await $0.places.list()) } }
     api.post("places") { req async throws -> Response in

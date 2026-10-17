@@ -104,6 +104,10 @@ Der MCP-Endpunkt `https://timetrack.example.org/mcp` ist Teil des Servers. In Ch
 
 **Prüfen:** `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://timetrack.example.org/mcp` antwortet 401 (ohne Token), nicht 404.
 
+## Werte später prüfen und ändern
+
+Unter Einstellungen, Arbeitsmodell, zeigt jede Version ihre Werte; „Bearbeiten“ ändert ab einem Datum (neue Version) oder korrigiert die Version selbst (mit Warnung und Vorschau auf das Zeitkonto). Auf der Seite Urlaub zeigt die Karte „Dein Urlaubskonto“ Anspruch, Übertrag und Bestand; fehlt der Anspruch, führt sie direkt zum Eintragen.
+
 ## Und danach
 
 - [Sichern und Wiederherstellen](backup.md) einrichten, bevor Daten wichtig werden.
