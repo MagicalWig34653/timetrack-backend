@@ -57,3 +57,9 @@ und keine Nutzerentscheidungen (siehe jeweilige Statuszeile). Nummer 0004 existi
 | 0018 | Vertrauenswürdige Proxys: Client-Adresse für Rate-Limits | akzeptiert (B4, Lead-Prüfung offen) | [ADR-0018](decisions/ADR-0018-vertrauenswuerdige-proxys.md) |
 | 0019 | Profil, E-Mail-Änderung per Code, geführte Einrichtung | akzeptiert (P1, Lead-Prüfung offen) | [ADR-0019](decisions/ADR-0019-profil-onboarding.md) |
 | 0020 | Darstellung (Akzentfarbe, Farbschema) je Konto | akzeptiert (P2, Nutzerentscheidung 16.10.; Lead-Prüfung offen) | [ADR-0020](decisions/ADR-0020-darstellung-konto.md) |
+
+## Namensgebung und Kennungen (Entscheidung 17.10.2026)
+
+- Das Projekt, die Repos, Pakete und Oberflächen heißen weiter **Timetrack**. **Chronolog** ist nur der Name des App-Eintrags in App Store Connect („Chronolog – Arbeitszeit"); Anzeigename in den Apps und der PWA bleibt vorerst Timetrack.
+- Produktionsdomain und Passkey-RP-ID: `timetrack.linolaske.de` (bleibt). Bundle-ID: `de.linolaske.timetrack` (bleibt; nach dem Anlegen in App Store Connect nicht mehr änderbar).
+- Öffentliche Repos: `MagicalWig34653/timetrack-backend`, `-pwa`, `-apple` (Historie am 17.10.2026 von persönlichen Angaben bereinigt; Original-Sicherung lokal in `_old-repos/`).
