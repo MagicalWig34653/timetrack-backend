@@ -22,6 +22,7 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
         // Idle pooled connections are silently dropped by NAT/IPVS (Swarm routing mesh: 15 min), firewalls and
         // proxies; the next request that drew such a connection failed ("server not ready", fine after reload).
         // A cheap ping per event loop every 45 s keeps them alive and replaces dead ones before users hit them.
+        app.lifecycle.use(DatabaseStartupCheck(host: config.dbHost, port: config.dbPort, tls: config.dbTLS == .off ? "off" : "required", perLoop: config.dbPoolConnectionsPerLoop, timeout: config.dbPoolTimeoutSeconds))
         if config.dbKeepAliveSeconds > 0 { app.lifecycle.use(DatabaseKeepAlive(intervalSeconds: config.dbKeepAliveSeconds, connectionsPerLoop: config.dbPoolConnectionsPerLoop)) }
     }
     for migration in StageOneSchema.migrations { app.migrations.add(migration) }
@@ -93,3 +94,41 @@ final class DatabaseKeepAlive: LifecycleHandler, @unchecked Sendable {
     }
     func shutdown(_ application: Application) { task?.cancel() }
 }
+
+/// One connection test at startup with an operator-friendly result in the log (host, TLS mode, pool settings, round trip,
+/// and a classified reason on failure). It never blocks startup and never prints the password.
+final class DatabaseStartupCheck: LifecycleHandler, @unchecked Sendable {
+    let host: String, port: Int, tls: String, perLoop: Int, timeout: Int
+    init(host: String, port: Int, tls: String, perLoop: Int, timeout: Int) {
+        self.host = host; self.port = port; self.tls = tls; self.perLoop = perLoop; self.timeout = timeout
+    }
+    func didBoot(_ application: Application) throws {
+        let app = application
+        let summary = "host=\(host) port=\(port) tls=\(tls) poolPerLoop=\(perLoop) poolTimeout=\(timeout)s"
+        Task {
+            let start = Date()
+            do {
+                guard let db = app.databases.database(.mysql, logger: app.logger, on: app.eventLoopGroup.next()) else { return }
+                try await withThrowingTaskGroup(of: Void.self) { group in
+                    group.addTask { try await db.withConnection { try await requireSQL($0).raw("SELECT 1").run() } }
+                    group.addTask { try await Task.sleep(nanoseconds: 15_000_000_000); throw DatabaseCheckTimeout() }
+                    _ = try await group.next()
+                    group.cancelAll()
+                }
+                app.logger.notice("database connection OK in \(Int(Date().timeIntervalSince(start) * 1000)) ms (\(summary))")
+            } catch {
+                let text = String(describing: error)
+                let lower = text.lowercased()
+                let reason =
+                    error is DatabaseCheckTimeout || lower.contains("timeout") || lower.contains("timed out") ? "no answer within 15 s (network, firewall, wrong host/port, or DNS/IPv6 fallback)" :
+                    lower.contains("tls") || lower.contains("ssl") || lower.contains("certificate") ? "TLS handshake or certificate verification failed (DB_TLS=required verifies against the image's default CAs; a private CA needs DB_TLS=off or a public certificate)" :
+                    lower.contains("nodename") || lower.contains("resolve") || lower.contains("name or service") || lower.contains("getaddrinfo") ? "host name could not be resolved (DNS)" :
+                    lower.contains("access denied") || lower.contains("authentication") ? "access denied (user, password or host grant)" :
+                    lower.contains("refused") ? "connection refused (wrong port or server not listening)" :
+                    "unclassified"
+                app.logger.error("database connection FAILED after \(Int(Date().timeIntervalSince(start) * 1000)) ms (\(summary)): \(reason). Detail: \(text)")
+            }
+        }
+    }
+}
+private struct DatabaseCheckTimeout: Error {}
