@@ -1,5 +1,5 @@
 # Container image: linux/amd64 and linux/arm64, built natively on matching runners, merged into one multi-arch tag.
-# The PWA (repository timetrack-pwa, ref = variable PWA_REF, default main) is built into the image.
+# The PWA (repository timetrack-pwa, ref = variable PWA_REF; on a v* tag build the PWA tag of the same name; otherwise main) is built into the image.
 # Pull requests build only (no push). main and tags v* are pushed to GHCR. Documentation: docs/CI.md.
 name: Docker
 
@@ -60,7 +60,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/timetrack-pwa
           path: pwa-src
-          ref: ${{ vars.PWA_REF || 'main' }}
+          ref: ${{ vars.PWA_REF || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || 'main' }}
       - name: Resolve the PWA revision
         id: pwa
         run: echo "sha=$(git -C pwa-src rev-parse HEAD)" >> "$GITHUB_OUTPUT"
@@ -124,7 +124,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/timetrack-pwa
           path: pwa-src
-          ref: ${{ vars.PWA_REF || 'main' }}
+          ref: ${{ vars.PWA_REF || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || 'main' }}
       - name: Resolve the PWA revision
         id: pwa
         run: echo "sha=$(git -C pwa-src rev-parse HEAD)" >> "$GITHUB_OUTPUT"
