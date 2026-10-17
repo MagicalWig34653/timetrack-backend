@@ -16,6 +16,7 @@ extension AuthTests {
         let defaults = try await prefs(app, member)
         XCTAssertEqual(defaults["accent"] as? String, "blue"); XCTAssertEqual(defaults["colorScheme"] as? String, "system")
         XCTAssertNil(defaults["accentCustomHex"] as? String); XCTAssertNil(defaults["updatedAt"] as? String)
+        XCTAssertEqual(defaults["glow"] as? String, "subtle")
         let session0 = try object(await api(app, member, .GET, "auth/session"))
         XCTAssertEqual(((session0["account"] as? [String: Any])?["preferences"] as? [String: Any])?["accent"] as? String, "blue")
 
@@ -24,6 +25,22 @@ extension AuthTests {
         XCTAssertEqual(teal["accent"] as? String, "teal"); XCTAssertEqual(teal["colorScheme"] as? String, "system"); XCTAssertNotNil(teal["updatedAt"] as? String)
         let dark = try object(await api(app, member, .PATCH, "me/preferences", ["colorScheme": "dark"]))
         XCTAssertEqual(dark["accent"] as? String, "teal"); XCTAssertEqual(dark["colorScheme"] as? String, "dark")
+
+        // Glow level (v0.15.0): every level is accepted, merge keeps the other keys, bad values change nothing.
+        for level in AccountPreferences.glows {
+            let patched = try object(await api(app, member, .PATCH, "me/preferences", ["glow": level]))
+            XCTAssertEqual(patched["glow"] as? String, level); XCTAssertEqual(patched["accent"] as? String, "teal")
+        }
+        for bad in ["bright", "STRONG", "", "1"] as [Any] { try await api(app, member, .PATCH, "me/preferences", ["glow": bad], .badRequest) }
+        try await api(app, member, .PATCH, "me/preferences", ["glow": 2], .badRequest)
+        try await api(app, member, .PATCH, "me/preferences", ["glow": NSNull()], .badRequest)
+        try await eq((try await prefs(app, member))["glow"] as? String, "strong")
+        let both = try object(await api(app, member, .PATCH, "me/preferences", ["accent": "navy", "glow": "off"]))
+        XCTAssertEqual(both["accent"] as? String, "navy"); XCTAssertEqual(both["glow"] as? String, "off")
+        for accent in ["indigo", "navy", "purple", "magenta", "crimson", "forest", "petrol", "bronze"] {
+            try await eq((try object(await api(app, member, .PATCH, "me/preferences", ["accent": accent])))["accent"] as? String, accent)
+        }
+        try await api(app, member, .PATCH, "me/preferences", ["accent": "teal", "glow": "medium"])
 
         // Custom colour: needs a strict #RRGGBB, is stored upper case, and is cleared by switching to a preset.
         for bad in ["#12345", "#1234567", "123456", "#GGGGGG", "red", "#12 456", "#12345é", ""] {
@@ -73,13 +90,13 @@ extension AuthTests {
         var noCSRF = headers(member, csrf: false); noCSRF.contentType = .json
         let rejected = try await app.testable().sendRequest(.PATCH, "/api/v1/me/preferences", headers: noCSRF, body: ByteBuffer(string: #"{"accent":"pink"}"#))
         XCTAssertEqual(rejected.status, .forbidden)
-        try await eq((try await prefs(app, member))["accent"] as? String, "graphite")
+        try await eq((try await prefs(app, member))["accent"] as? String, "bronze")
 
         // Export carries the preferences; the other account's export does not mix them up.
         let export = try await api(app, member, .GET, "me/export")
         let files = try entries(Data(export.body.readableBytesView))
         let exported = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(files["preferences.json"])) as? [String: Any])
-        XCTAssertEqual(exported["accent"] as? String, "graphite"); XCTAssertEqual(exported["colorScheme"] as? String, "dark")
+        XCTAssertEqual(exported["accent"] as? String, "bronze"); XCTAssertEqual(exported["colorScheme"] as? String, "dark")
 
         // Deleting the account removes the preferences with it (they live on the account row).
         try await del(app, member, "me", confirm: "member")
@@ -94,7 +111,10 @@ extension AuthTests {
             let account = try await Account.find(admin.account.requireID(), on: app.db)
             XCTAssertNotNil(account); XCTAssertNil(account?.preferences)
             let prefs = try await self.prefs(app, admin)
-            XCTAssertEqual(prefs["accent"] as? String, "blue")
+            XCTAssertEqual(prefs["accent"] as? String, "blue"); XCTAssertEqual(prefs["glow"] as? String, "subtle")
+            // a document stored before v0.15.0 has no glow key and reads as subtle
+            let old = try JSONDecoder().decode(AccountPreferences.self, from: Data(#"{"accent":"teal","colorScheme":"dark"}"#.utf8))
+            XCTAssertEqual(old.glow, "subtle"); XCTAssertEqual(old.accent, "teal")
             let export = try await self.api(app, admin, .GET, "me/export")
             let files = try self.entries(Data(export.body.readableBytesView))
             XCTAssertNotNil(files["preferences.json"])

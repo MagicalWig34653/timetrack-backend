@@ -100,3 +100,14 @@ Jede Umsetzung belegt Hell/Dunkel, 390 px und Desktop per Screenshot, Kontrastpr
 
 
 **Bekannte Abweichung Apps ↔ PWA (A8, 16.10.2026):** Verbindlich sind nur die Preset-IDs (`blue, teal, violet, green, orange, pink, graphite, custom`, ADR-0020). Die nativen Farbwerte weichen bei drei Presets von der PWA ab: Türkis #0EA5A4 (PWA #0D9488), Orange #F97316 (PWA #D97706), Rosa #EC4899 (PWA #DB2777); Blau, Violett, Grün, Graphit sind gleich.
+
+## Glas und Leuchteffekt
+
+Stand: 17.10.2026 (Paket G1, Vertrag v0.15.0, ADR-0020 Nachtrag). Gilt für die PWA; native Apps setzen es sinngemäß mit Liquid Glass um.
+
+**Glas.** Jede schwebende Fläche (Popover, Dialog, Toast, Drawer, Menü) und die Rahmen (Seitenleiste, Kopfzeile) nutzen gemeinsame Klassen und Tokens in `layout.css`: halbtransparente Fläche (`--glass-*`), `backdrop-filter: blur(…) saturate(…)` mit `-webkit-`-Präfix (`--bf-*`), Haarlinie mit innerem Glanz (`--glass-edge`) und weicher Schatten. Leichtes Blur tragen außerdem klebende Tabellenköpfe und segmentierte Schalter (`.glass-soft`) sowie der Scrim hinter Dialogen und Drawer. Regeln: (1) Seitenleiste und Kopfzeile malen ihr Glas auf einer `::before`-Ebene, weil ein Element mit eigenem `backdrop-filter` ein „Backdrop Root“ ist: Popover darin würden sonst nur ihren transparenten Elternteil sehen und nicht verwischen. (2) Kein Blur auf großen scrollenden Listen; Text liegt nie direkt auf unruhigem Grund, Textkontrast ≥ 4,5:1 (Fläche ≥ 80 % deckend). (3) Rückfälle: bei `prefers-reduced-transparency`, dem In-App-Schalter `data-transparency="reduced"` und ohne `backdrop-filter`-Unterstützung werden alle Flächen deckend und die Filter `none`.
+
+**Leuchteffekt** (Konto-Einstellung `glow`, `data-glow` am `<html>`): Aus, Dezent (Standard), Mittel, Stark. Die Leuchtfarbe wird aus dem Akzent abgeleitet und von hellem/dunklem Grund weggeschoben, wenn sie sonst unsichtbar wäre (`theme/glow.ts`, Mindestkontrast 1,8:1 gegen den Seitengrund). Dezent: weicher Schein um Hauptaktionen, aktive Einträge, Fokus, laufenden Timer und Balken. Mittel: größerer Schein, Kartenkanten mit Akzent-Haarlinie, leuchtende Statusfarben, Farbhauch im Seitenkopf. Stark: zusätzlich ein statischer Akzent-Verlauf (Aurora) hinter der Seite und der Hauptbereich als Glasfläche (Blur, Haarlinie, großer Schatten), Karten darin etwas durchscheinender. Ohne Animation. Mit Transparenz reduzieren schrumpfen Scheine zu Haarlinien und die Aurora entfällt; bei `forced-colors` gibt es keinen Schein. Schein ist reine Zusatzdekoration an Flächen und Rändern, nie an Text.
+
+**Weitere Akzent-Voreinstellungen** mit weißer Schrift (jeweils ≥ 4,5:1 auf der Fläche, Tinte ≥ 4,5:1 auf Seitengrund): siehe `docs/handoffs/G1.md` für IDs und Hex-Werte.
+

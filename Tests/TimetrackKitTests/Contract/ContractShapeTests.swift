@@ -46,7 +46,7 @@ extension AuthTests {
             try await check(.GET, "me/passkeys")
             try await check(.GET, "modules")
             try await check(.GET, "me/preferences")
-            try await check(.PATCH, "me/preferences", nil, ["accent": "custom", "accentCustomHex": "#12ab9f", "colorScheme": "dark"])
+            try await check(.PATCH, "me/preferences", nil, ["accent": "custom", "accentCustomHex": "#12ab9f", "colorScheme": "dark", "glow": "medium"])
             try await check(.GET, "auth/session")
             try await check(.PATCH, "me/preferences", nil, ["accent": "teal"])
             try await check(.PUT, "me/modules", nil, ["modules": ["reports": true]])
