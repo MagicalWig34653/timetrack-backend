@@ -88,7 +88,16 @@ struct AuthRateLimitMiddleware: AsyncMiddleware {
             path.hasPrefix("/api/v1/me/profile/email")
         if limited && [.POST, .PUT].contains(request.method) {
             // Forwarded headers count only from configured trusted proxies (ADR-0018). Charge before decoding request bodies.
-            try await service.limited(ip: request.clientRateLimitKey, on: request.db)
+            do { try await service.limited(ip: request.clientRateLimitKey, on: request.db) }
+            catch let error as APIError where error.code == "too_many_requests" {
+                // Diagnostics for operators (no personal data): behind a reverse proxy without TRUSTED_PROXY_CIDRS every
+                // client shares the proxy's address and therefore one bucket (docs: Reverse Proxy, ADR-0018).
+                let proxies = request.application.trustedProxies
+                let peer = request.remoteAddress?.ipAddress ?? "unknown"
+                let hasForwarded = request.headers.contains(name: proxies.header.rawValue) || request.headers.contains(name: "X-Forwarded-For")
+                request.logger.warning("rate limit (per client address) exceeded on \(request.method) \(path): peer=\(peer) trustedProxies=\(proxies.isEmpty ? "none" : "set") forwardedHeaderPresent=\(hasForwarded)\(proxies.isEmpty && hasForwarded ? " - the request came through a proxy but TRUSTED_PROXY_CIDRS is empty: all clients share one bucket; set TRUSTED_PROXY_CIDRS to the subnet of the connecting proxy (Swarm routing mesh: the ingress network)" : "")")
+                throw error
+            }
         }
         return try await next.respond(to: request)
     }
