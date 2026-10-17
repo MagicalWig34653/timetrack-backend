@@ -2,7 +2,7 @@ import Foundation
 import Fluent
 
 struct TimeEvaluationSnapshot: Sendable {
-    let models: [EngineWorkModel]
+    var models: [EngineWorkModel]
     let segments: [EngineSegment]
     let preferences: [String: DayPreferences]
     var absences: [EngineAbsence] = []
@@ -73,12 +73,17 @@ struct AccountService: Sendable {
     let scope: TimeServices
     func balance(asOf: LocalDate? = nil, now: Date = Date()) async throws -> TimeAccountResult {
         let snapshot = try await scope.days.snapshot()
+        let adjustments = try await AdjustmentRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).all()
+        return try balance(snapshot: snapshot, adjustments: adjustments, asOf: asOf, now: now)
+    }
+    /// Balance over already loaded inputs, so a what-if evaluation (work model preview) can reuse one load for
+    /// several model sets without further statements.
+    func balance(snapshot: TimeEvaluationSnapshot, adjustments: [AdjustmentRecord], asOf: LocalDate? = nil, now: Date = Date()) throws -> TimeAccountResult {
         let models = snapshot.models
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: models.last?.timezone ?? "Europe/Berlin")!
         let today = LocalDate.local(now, calendar: calendar)
         let end = min(asOf ?? today, today)
-        let adjustments = try await AdjustmentRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).all()
         let opening = adjustments.first { $0.kind == "opening" }
         let segments = snapshot.segments.filter { !$0.voided }
         let firstSegmentDate = segments.first.map { LocalDate.local($0.startedAt, calendar: calendar) }

@@ -243,4 +243,48 @@ extension AuthTests {
             XCTAssertLessThanOrEqual(counter.count - before, 12)
         }
     }
+
+    /// M1: the work model preview evaluates two model sets over the whole history with the statements of one load.
+    func testWorkModelPreviewQueryBudgetIsConstant() async throws {
+        setenv("DB_SQL_LOG", "1", 1); defer { unsetenv("DB_SQL_LOG") }
+        try await withApp { app, auth in
+            let (context, _) = try await registered(auth, db: app.db)
+            let accountId = try context.account.requireID()
+            let account = try SyntheticAccount.make()
+            for model in account.snapshot.models {
+                let row = WorkModelRecord(); row.id = model.id; row.accountId = accountId
+                row.validFrom = model.validFrom.description; row.validTo = model.validTo?.description
+                var dto = WorkModelDTO(id: model.id, validFrom: model.validFrom, validTo: model.validTo, timezone: model.timezone,
+                                       weeklyTargetSeconds: model.weeklyTargetSeconds, workdays: model.workdays.sorted())
+                dto.roundingEnabled = model.roundingEnabled; dto.roundingMinutes = model.roundingMinutes; dto.dayBoundaryMinutes = model.dayBoundaryMinutes
+                row.payload = dto; try await row.create(on: app.db)
+            }
+            var rows: [SegmentRecord] = []
+            for segment in account.snapshot.segments where !segment.voided {
+                let row = SegmentRecord(); row.id = segment.id; row.accountId = accountId; row.rawStartedAt = segment.startedAt; row.rawEndedAt = segment.endedAt
+                row.startedAt = segment.startedAt; row.endedAt = segment.endedAt; row.kind = segment.kind.rawValue; row.source = "import"
+                row.version = 1; row.needsReview = false; row.revisions = 0; row.running = segment.endedAt == nil ? 1 : nil
+                rows.append(row)
+            }
+            for chunk in stride(from: 0, to: rows.count, by: 200) { for row in rows[chunk..<min(chunk + 200, rows.count)] { try await row.create(on: app.db) } }
+
+            let counter = CountingLogHandler.Counter()
+            var logger = Logger(label: "x1-count") { _ in CountingLogHandler(counter: counter) }
+            logger.logLevel = .info
+            let counted = try XCTUnwrap(app.databases.database(logger: logger, on: app.eventLoopGroup.next()))
+            let scope = TimeServices(accountId: accountId, db: counted)
+            let now = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-10-16T14:00:00Z"))
+            let stored = try await scope.models.list()
+            var input = try XCTUnwrap(stored.last); input.weeklyTargetSeconds = 100_800
+            let baseline = counter.count
+            let preview = try await scope.models.preview(try XCTUnwrap(input.id), input: input, now: now)
+            let used = counter.count - baseline
+            print("BENCH preview statements:", used)
+            XCTAssertLessThanOrEqual(used, 16, "preview issued \(used) statements")
+            XCTAssertEqual(preview.changedFields, ["weeklyTargetSeconds"])
+            XCTAssertNotEqual(preview.differenceSeconds, 0)
+            let reference = try await scope.account.balance(now: now).balanceSeconds
+            XCTAssertEqual(preview.balanceBeforeSeconds, reference)
+        }
+    }
 }

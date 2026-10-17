@@ -2853,6 +2853,11 @@
        "id": {
         "format": "uuid",
         "type": "string"
+       },
+       "version": {
+        "description": "Korrekturzähler (M1); ältere Versionen ohne Wert zählen als 1",
+        "minimum": 1,
+        "type": "integer"
        }
       },
       "required": [
@@ -2958,6 +2963,62 @@
      "validFrom",
      "weeklyTargetSeconds",
      "workdays"
+    ],
+    "type": "object"
+   },
+   "WorkModelPreview": {
+    "properties": {
+     "affectedDays": {
+      "description": "Kalendertage von affectedFrom bis heute",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "affectedFrom": {
+      "format": "date",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "affectedTo": {
+      "description": "null = laufend",
+      "format": "date",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "balanceAfterSeconds": {
+      "type": "integer"
+     },
+     "balanceBeforeSeconds": {
+      "type": "integer"
+     },
+     "changedFields": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "differenceSeconds": {
+      "type": "integer"
+     },
+     "previousValidTo": {
+      "description": "neues Ende der Vorversion",
+      "falls angepasst": null,
+      "format": "date",
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "affectedDays",
+     "balanceBeforeSeconds",
+     "balanceAfterSeconds",
+     "differenceSeconds",
+     "changedFields"
     ],
     "type": "object"
    },
@@ -3165,9 +3226,9 @@
   }
  },
  "info": {
-  "description": "Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und\nPWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).\nAnnahmen (ADR-0003): Basispfad /api/v1; Sitzung per HttpOnly-Cookie `tt_session`;\nschreibende Requests mit Sitzung senden Header `X-CSRF-Token` (Wert aus GET /api/v1/auth/session).\nWebAuthn-Optionen/-Antworten folgen den JSON-Formen der W3C-Spezifikation (base64url-Felder).\nFehler immer als application/json `{ \"error\": { \"code\": string, \"message\": string } }`.\nAntworten verraten nie, ob eine Kontoadresse existiert.\nError codes (English, stable): bad_request, unauthorized, forbidden, not_found, conflict, handle_taken,\nlast_passkey, too_many_requests, not_implemented, invalid_code, csrf_invalid,\nrecovery_session_restricted, reauth_required, not_ready.\nDecisions (Lead, 14.10.2026): (1) register/options returns 409 handle_taken for duplicate handle and 400 bad_request\nfor validation errors. (2) Adding/revoking passkeys and changing recovery settings require a \"fresh\" session\n(login within the last 10 minutes) or a recovery session; otherwise 403 reauth_required, and the client signs in again.\n(3) A successful POST /me/passkeys/verify inside a recovery session upgrades it to a normal session (recovery=false).\n(4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form\n`<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.\n(6) No session listing endpoint in stage 1; only revoking other sessions.\nv0.15.0: Leuchteffekt und weitere Akzentfarben (G1, ADR-0020 Nachtrag, additiv): Preferences.glow (off|subtle|medium|strong, Standard subtle, auch bei zuvor gespeicherten Konten) ist per PATCH /me/preferences schreibbar; AccentId um indigo, navy, purple, magenta, crimson, forest, petrol, bronze erweitert (dunkle Töne mit weißer Schrift). Ältere Clients ignorieren das neue Feld; unbekannte Akzent-IDs zeigen sie als Blau.\nv0.14.0: Darstellung je Konto (P2, ADR-0020, additiv): GET/PATCH /me/preferences (accent, accentCustomHex, colorScheme, updatedAt; Standard blue/system ohne gespeicherte Zeile; Merge-Patch, unbekannte Schlüssel 400, Body über 1 KiB 413) und Account.preferences in der Sitzungsantwort; GET /me/export enthält preferences.json. App-Icon und Transparenz bleiben gerätelokal. Keine Modulbindung; Recovery-Sitzungen erhalten 403.\nv0.13.0: Profil und Einrichtung (P1, ADR-0019, additiv): GET/PATCH /me/profile (Anzeigename; Handle nur lesend), E-Mail-Adresse ändern per Bestätigungscode (PUT /me/profile/email, POST /me/profile/email/verify, DELETE /me/profile/email; frische Sitzung, 501 ohne SMTP, 409 email_taken, Versuchsgrenze 5, Gültigkeit 10 Minuten, Rate-Limit wie Recovery-E-Mail) und der Einrichtungsmerker PUT /me/onboarding (pending|completed|skipped). Account.onboardingState in der Sitzungsantwort. Keine Modulbindung; Recovery-Sitzungen erhalten 403.\nv0.11.0: Kontenverwaltung und Datenschutz (ADR-0016, additiv): Admin-API /admin/accounts (Liste, Deaktivieren/Reaktivieren, Rollenwechsel, Sitzungen widerrufen, Löschen), GET /me/export (ZIP der eigenen Daten), DELETE /me (Selbstlöschung). Fehlercodes: self_lockout (409), last_admin (409), confirmation_mismatch (400), account_deletion_incomplete (503). Löschen/Rollenwechsel verlangen eine frische Sitzung (403 reauth_required). Die Endpunkte sind keinem Modul zugeordnet.\nv0.10.4: GET /.well-known/apple-app-site-association (additiv, ADR-0015; 404 ohne APPLE_APP_IDS). Native Apple-Passkeys melden den Origin `https://<rpId>` (ohne Port); das Backend akzeptiert ihn zusätzlich zu WEBAUTHN_ORIGIN (exakter Abgleich, RP-ID-Hash unverändert), sofern die RP-ID eine echte Domain ist.\nv0.10.3: ImportResult.warnings (additiv, wie in der Vorschau); school_on_holiday für Schulzeilen an Feiertagen neben holiday_times_discarded für Arbeitszeilen.\nv0.10.2: Import-Profil: holidayTimes/partialCredit, Warnungen holiday_times_discarded/credit_partial_as_work (zusammengefasst mit count), Vorschau sheetBalanceUpToTodaySeconds/sheetBalanceFutureSeconds/firstContentDate (Befund L20: Abweichung Tabelle/App erklärt sich aus Feiertagszeilen, Teilgutschriften, Modellbeginn und Zeilen nach heute).\nv0.10.1: Klarstellungen C21: rules leer = keine Regeln; Vorschau-warnings (pause_exceeds_day); Zeilenfehler planning_disabled (Abwesenheits-/Feiertagsaktionen bei ausgeschaltetem Modul planning, Arbeit/Schule bleiben importierbar); ImportResult.conflictItems; Notizen über 500 bzw. Feiertagsnamen über 80 Zeichen → note_too_long (keine stille Kürzung). Export worktime-xlsx ist kein verlustfreies Sicherungsformat (siehe docs/handoffs/C22.md).\nv0.10.0: Arbeitszeit-Tabelle als Import-/Exportprofil und Typ excused (ADR-0013).\nv0.9.0: Modulschalter (ADR-0012). Abgeschaltete Module antworten 404 mit Code module_disabled, Änderungen an gesperrten Modulen 409 module_locked. Betreiber-Override per Umgebung MODULES_DISABLED.\nv0.8.1: C19-Review-Fixes: DELETE /files/{id} → 503 storage_unavailable, wenn das Objekt nicht entfernt werden konnte (Datensatz bleibt mit Retry-Marker); POST /oauth/token → 429 temporarily_unavailable bei Überschreitung des Limits; Push-Endpunkte nur https:443 auf erlaubten Push-Diensten (Apple/Google/Mozilla/Microsoft), sonst 400 bad_request; Datums- und Zahlenbereiche strikt validiert (Int.min/Int.max → 400).\nv0.8.0: Hinweise/Web Push (ADR-0010). Push-Nutzlast ohne Details, Ruhezeiten stellen Push zurück; REST-Fehlercodes: push_unavailable (501), too_many_subscriptions (409).\nv0.7.0: MCP/OAuth/persönliche Tokens (ADR-0009). Fehlercodes REST: reauth_required, insufficient_scope; OAuth-Endpunkte folgen RFC 6749/7009/7591/8414/9728 (Fehler als JSON `error`/`error_description`).\nv0.6.0: Berichtsheft (ADR-0008). Fehlercodes: stale_version (412), not_found; Quellen mit fileId benötigen eine eigene Datei (404 sonst).\nv0.5.1: Speicher: 503 storage_unavailable (Backend einer bestehenden Datei nicht konfiguriert), 500 storage_corrupt, 409 conflict bei mehr als 20 Anhängen je Abwesenheit; PUT /admin/storage ersetzt die gesamte Konfiguration (`s3: null` löscht S3-Konfiguration und Secret, `s3` ohne secretAccessKey behält das gespeicherte Secret). OIDC: für purpose=link führen Fehler nach `/settings/identities?oidc_error=<code>`; 'frische Sitzung nötig' ist 403 reauth_required; ungültiges inviteToken bei start = 404; pendingId gilt 10 Minuten (danach 404); der Passkey-Widerruf zählt externe Identitäten als Anmeldemethode.\nv0.5.0: OIDC (optional) siehe ADR-0007. Konfiguration: OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET (optional), OIDC_NAME, OIDC_SCOPES (Standard `openid email profile`). Kein Pflicht-Authentik; Registrierung weiter nur mit Einladung.\nv0.4.1: Import-Ergänzungen (allowOvernight, errorCount, rolledBack, Fehlercodes unknown_kind/note_too_long/too_many_rows; rollback_conflict liefert conflicts auch oben; je Konto max. 20 offene Importe, 50 Vorlagen).\nv0.4.0: Export/Import/Dateispeicher, siehe docs/decisions/ADR-0006. Fehlercodes: file_too_large (413), unsupported_type (415), import_not_ready, import_has_errors, rollback_conflict.\nv0.3.2: Tagesmarkierung Feiertag hat Vorrang vor Urlaub am selben Tag; Krankheit wirkt nur mit Status approved/taken; Freigabe an sich selbst 400 `cannot_share_with_self`; DayEvaluation.markSource/targetOverrideSeconds.\nStage 3 (v0.3.0/0.3.1): see docs/decisions/ADR-0005 (Entscheidungen 0.3.1: GET vacation/settings liefert Standardwerte mit configured=false; Übertrag je Jahr; Abwesenheiten rejected/cancelled blockieren keine Überlappung\nund haben countedHalfDays 0, countedHalfDays nur für kind=vacation; doppelte Freigabe 409 share_exists; Freigabe an sich selbst 400; Urlaubsansicht nur approved/taken; actual nur Tage mit Arbeitszeit;\nmaximale Zeiträume für absences/plan/shared view 366 Tage, time/days 93 Tage, sonst 400 range_too_large). Half days as integers (30 days = 60). Sick absences and documents are never part of shares.\nStage 2 decisions (v0.2.1): a work model `validFrom` may lie in the past but must be later than the previous version's `validFrom` (else 409 model_overlap);\ndays on or after it are then evaluated by the new version (explicit user act). Future days are never `provisional`; today and days with a running segment are.\nA second accept of a suggestion returns 409 `suggestion_resolved`. Further codes: timer_already_running, no_running_timer, segment_overlap, stale_version, model_overlap.\n--- B2 (v0.10.5, additiv; zusammen mit B1 als v0.12.0 ausgeliefert) ---\nv0.10.5 (B2, ADR-0017): POST /api/v1/me/push-subscriptions/replace für `pushsubscriptionchange` (ersetzt ein Abo atomar, behält Id und wartende Pushes). Gleichzeitiges Anlegen desselben Lernfelds liefert 409 `learning_field_exists` statt 500. Kein Schemawechsel; Aufräumjob (`MAINTENANCE_INTERVAL_MINUTES`, CLI `maintenance`) ohne API-Änderung.\n",
+  "description": "Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und\nPWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).\nAnnahmen (ADR-0003): Basispfad /api/v1; Sitzung per HttpOnly-Cookie `tt_session`;\nschreibende Requests mit Sitzung senden Header `X-CSRF-Token` (Wert aus GET /api/v1/auth/session).\nWebAuthn-Optionen/-Antworten folgen den JSON-Formen der W3C-Spezifikation (base64url-Felder).\nFehler immer als application/json `{ \"error\": { \"code\": string, \"message\": string } }`.\nAntworten verraten nie, ob eine Kontoadresse existiert.\nError codes (English, stable): bad_request, unauthorized, forbidden, not_found, conflict, handle_taken,\nlast_passkey, too_many_requests, not_implemented, invalid_code, csrf_invalid,\nrecovery_session_restricted, reauth_required, not_ready.\nDecisions (Lead, 14.10.2026): (1) register/options returns 409 handle_taken for duplicate handle and 400 bad_request\nfor validation errors. (2) Adding/revoking passkeys and changing recovery settings require a \"fresh\" session\n(login within the last 10 minutes) or a recovery session; otherwise 403 reauth_required, and the client signs in again.\n(3) A successful POST /me/passkeys/verify inside a recovery session upgrades it to a normal session (recovery=false).\n(4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form\n`<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.\n(6) No session listing endpoint in stage 1; only revoking other sessions.\nv0.16.0: Arbeitsmodell-Korrektur (M1, ADR-0004-Nachtrag, additiv): PUT /work-models/{id} ersetzt alle bearbeitbaren Felder einer Version (optional If-Match mit `version`, sonst 412 stale_version; 409 model_overlap bei Überschneidung; die Vorversion wird am Vortag von validFrom neu begrenzt), POST /work-models/{id}/preview liefert dieselbe Prüfung als Vorschau ohne Speichern (Zeitkonto vorher/nachher, betroffene Tage, geänderte Felder). WorkModel.version (additiv). Auswertungen werden beim Lesen berechnet; die Korrektur ändert sie bewusst nur auf ausdrücklichen Nutzerwunsch.\nv0.15.0: Leuchteffekt und weitere Akzentfarben (G1, ADR-0020 Nachtrag, additiv): Preferences.glow (off|subtle|medium|strong, Standard subtle, auch bei zuvor gespeicherten Konten) ist per PATCH /me/preferences schreibbar; AccentId um indigo, navy, purple, magenta, crimson, forest, petrol, bronze erweitert (dunkle Töne mit weißer Schrift). Ältere Clients ignorieren das neue Feld; unbekannte Akzent-IDs zeigen sie als Blau.\nv0.14.0: Darstellung je Konto (P2, ADR-0020, additiv): GET/PATCH /me/preferences (accent, accentCustomHex, colorScheme, updatedAt; Standard blue/system ohne gespeicherte Zeile; Merge-Patch, unbekannte Schlüssel 400, Body über 1 KiB 413) und Account.preferences in der Sitzungsantwort; GET /me/export enthält preferences.json. App-Icon und Transparenz bleiben gerätelokal. Keine Modulbindung; Recovery-Sitzungen erhalten 403.\nv0.13.0: Profil und Einrichtung (P1, ADR-0019, additiv): GET/PATCH /me/profile (Anzeigename; Handle nur lesend), E-Mail-Adresse ändern per Bestätigungscode (PUT /me/profile/email, POST /me/profile/email/verify, DELETE /me/profile/email; frische Sitzung, 501 ohne SMTP, 409 email_taken, Versuchsgrenze 5, Gültigkeit 10 Minuten, Rate-Limit wie Recovery-E-Mail) und der Einrichtungsmerker PUT /me/onboarding (pending|completed|skipped). Account.onboardingState in der Sitzungsantwort. Keine Modulbindung; Recovery-Sitzungen erhalten 403.\nv0.11.0: Kontenverwaltung und Datenschutz (ADR-0016, additiv): Admin-API /admin/accounts (Liste, Deaktivieren/Reaktivieren, Rollenwechsel, Sitzungen widerrufen, Löschen), GET /me/export (ZIP der eigenen Daten), DELETE /me (Selbstlöschung). Fehlercodes: self_lockout (409), last_admin (409), confirmation_mismatch (400), account_deletion_incomplete (503). Löschen/Rollenwechsel verlangen eine frische Sitzung (403 reauth_required). Die Endpunkte sind keinem Modul zugeordnet.\nv0.10.4: GET /.well-known/apple-app-site-association (additiv, ADR-0015; 404 ohne APPLE_APP_IDS). Native Apple-Passkeys melden den Origin `https://<rpId>` (ohne Port); das Backend akzeptiert ihn zusätzlich zu WEBAUTHN_ORIGIN (exakter Abgleich, RP-ID-Hash unverändert), sofern die RP-ID eine echte Domain ist.\nv0.10.3: ImportResult.warnings (additiv, wie in der Vorschau); school_on_holiday für Schulzeilen an Feiertagen neben holiday_times_discarded für Arbeitszeilen.\nv0.10.2: Import-Profil: holidayTimes/partialCredit, Warnungen holiday_times_discarded/credit_partial_as_work (zusammengefasst mit count), Vorschau sheetBalanceUpToTodaySeconds/sheetBalanceFutureSeconds/firstContentDate (Befund L20: Abweichung Tabelle/App erklärt sich aus Feiertagszeilen, Teilgutschriften, Modellbeginn und Zeilen nach heute).\nv0.10.1: Klarstellungen C21: rules leer = keine Regeln; Vorschau-warnings (pause_exceeds_day); Zeilenfehler planning_disabled (Abwesenheits-/Feiertagsaktionen bei ausgeschaltetem Modul planning, Arbeit/Schule bleiben importierbar); ImportResult.conflictItems; Notizen über 500 bzw. Feiertagsnamen über 80 Zeichen → note_too_long (keine stille Kürzung). Export worktime-xlsx ist kein verlustfreies Sicherungsformat (siehe docs/handoffs/C22.md).\nv0.10.0: Arbeitszeit-Tabelle als Import-/Exportprofil und Typ excused (ADR-0013).\nv0.9.0: Modulschalter (ADR-0012). Abgeschaltete Module antworten 404 mit Code module_disabled, Änderungen an gesperrten Modulen 409 module_locked. Betreiber-Override per Umgebung MODULES_DISABLED.\nv0.8.1: C19-Review-Fixes: DELETE /files/{id} → 503 storage_unavailable, wenn das Objekt nicht entfernt werden konnte (Datensatz bleibt mit Retry-Marker); POST /oauth/token → 429 temporarily_unavailable bei Überschreitung des Limits; Push-Endpunkte nur https:443 auf erlaubten Push-Diensten (Apple/Google/Mozilla/Microsoft), sonst 400 bad_request; Datums- und Zahlenbereiche strikt validiert (Int.min/Int.max → 400).\nv0.8.0: Hinweise/Web Push (ADR-0010). Push-Nutzlast ohne Details, Ruhezeiten stellen Push zurück; REST-Fehlercodes: push_unavailable (501), too_many_subscriptions (409).\nv0.7.0: MCP/OAuth/persönliche Tokens (ADR-0009). Fehlercodes REST: reauth_required, insufficient_scope; OAuth-Endpunkte folgen RFC 6749/7009/7591/8414/9728 (Fehler als JSON `error`/`error_description`).\nv0.6.0: Berichtsheft (ADR-0008). Fehlercodes: stale_version (412), not_found; Quellen mit fileId benötigen eine eigene Datei (404 sonst).\nv0.5.1: Speicher: 503 storage_unavailable (Backend einer bestehenden Datei nicht konfiguriert), 500 storage_corrupt, 409 conflict bei mehr als 20 Anhängen je Abwesenheit; PUT /admin/storage ersetzt die gesamte Konfiguration (`s3: null` löscht S3-Konfiguration und Secret, `s3` ohne secretAccessKey behält das gespeicherte Secret). OIDC: für purpose=link führen Fehler nach `/settings/identities?oidc_error=<code>`; 'frische Sitzung nötig' ist 403 reauth_required; ungültiges inviteToken bei start = 404; pendingId gilt 10 Minuten (danach 404); der Passkey-Widerruf zählt externe Identitäten als Anmeldemethode.\nv0.5.0: OIDC (optional) siehe ADR-0007. Konfiguration: OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET (optional), OIDC_NAME, OIDC_SCOPES (Standard `openid email profile`). Kein Pflicht-Authentik; Registrierung weiter nur mit Einladung.\nv0.4.1: Import-Ergänzungen (allowOvernight, errorCount, rolledBack, Fehlercodes unknown_kind/note_too_long/too_many_rows; rollback_conflict liefert conflicts auch oben; je Konto max. 20 offene Importe, 50 Vorlagen).\nv0.4.0: Export/Import/Dateispeicher, siehe docs/decisions/ADR-0006. Fehlercodes: file_too_large (413), unsupported_type (415), import_not_ready, import_has_errors, rollback_conflict.\nv0.3.2: Tagesmarkierung Feiertag hat Vorrang vor Urlaub am selben Tag; Krankheit wirkt nur mit Status approved/taken; Freigabe an sich selbst 400 `cannot_share_with_self`; DayEvaluation.markSource/targetOverrideSeconds.\nStage 3 (v0.3.0/0.3.1): see docs/decisions/ADR-0005 (Entscheidungen 0.3.1: GET vacation/settings liefert Standardwerte mit configured=false; Übertrag je Jahr; Abwesenheiten rejected/cancelled blockieren keine Überlappung\nund haben countedHalfDays 0, countedHalfDays nur für kind=vacation; doppelte Freigabe 409 share_exists; Freigabe an sich selbst 400; Urlaubsansicht nur approved/taken; actual nur Tage mit Arbeitszeit;\nmaximale Zeiträume für absences/plan/shared view 366 Tage, time/days 93 Tage, sonst 400 range_too_large). Half days as integers (30 days = 60). Sick absences and documents are never part of shares.\nStage 2 decisions (v0.2.1): a work model `validFrom` may lie in the past but must be later than the previous version's `validFrom` (else 409 model_overlap);\ndays on or after it are then evaluated by the new version (explicit user act). Future days are never `provisional`; today and days with a running segment are.\nA second accept of a suggestion returns 409 `suggestion_resolved`. Further codes: timer_already_running, no_running_timer, segment_overlap, stale_version, model_overlap.\n--- B2 (v0.10.5, additiv; zusammen mit B1 als v0.12.0 ausgeliefert) ---\nv0.10.5 (B2, ADR-0017): POST /api/v1/me/push-subscriptions/replace für `pushsubscriptionchange` (ersetzt ein Abo atomar, behält Id und wartende Pushes). Gleichzeitiges Anlegen desselben Lernfelds liefert 409 `learning_field_exists` statt 500. Kein Schemawechsel; Aufräumjob (`MAINTENANCE_INTERVAL_MINUTES`, CLI `maintenance`) ohne API-Änderung.\n",
   "title": "Timetrack API",
-  "version": "0.15.0"
+  "version": "0.16.0"
  },
  "openapi": "3.1.0",
  "paths": {
@@ -9212,7 +9273,7 @@
     ]
    },
    "patch": {
-    "description": "Setzt nur validTo (z. B. Ausbildungsende). Weitere Felder sind unveränderlich; neue Regeln = neue Version.",
+    "description": "Setzt nur validTo (z. B. Ausbildungsende). Weitere Felder ändert PUT (Korrektur, mit Vorschau); neue Regeln ab einem Datum = neue Version per POST.",
     "operationId": "endWorkModel",
     "parameters": [
      {
@@ -9248,6 +9309,118 @@
        }
       },
       "description": "ok"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   },
+   "put": {
+    "description": "Korrektur (M1): ersetzt alle bearbeitbaren Felder dieser Version, auch validFrom/validTo. Die Auswertung aller betroffenen Tage ändert sich (sie wird beim Lesen berechnet); vorher POST .../preview aufrufen. Header If-Match mit `version` ist optional (412 stale_version). 409 model_overlap bei Überschneidung mit Nachbarversionen; ist die Vorversion unmittelbar anschließend, wird ihr validTo auf den Vortag von validFrom gesetzt.",
+    "operationId": "correctWorkModel",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     },
+     {
+      "in": "header",
+      "name": "If-Match",
+      "required": false,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/WorkModelInput"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WorkModel"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     },
+     "412": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      },
+      "description": "veraltete Version"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
+  "/api/v1/work-models/{id}/preview": {
+   "post": {
+    "description": "Vorschau der Korrektur (M1) ohne zu speichern, gleiche Prüfung wie PUT. Vergleicht das Zeitkonto bis heute mit dem gespeicherten und dem korrigierten Modellsatz.",
+    "operationId": "previewWorkModelCorrection",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Id"
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/WorkModelInput"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WorkModelPreview"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
      },
      "404": {
       "$ref": "#/components/responses/NotFound"
@@ -9636,5 +9809,5 @@
    "url": "/"
   }
  ],
- "x-source-sha256": "8ac7222306e83ca344d7afd78b710b8fbacafa06af0fbf59a3206941d7025e4b"
+ "x-source-sha256": "e66b2f30fd4b0caf4c6a495a5b5f1bf8fbec6e68a0a1b7d01348241e5d22b125"
 }

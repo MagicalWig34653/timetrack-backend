@@ -71,7 +71,7 @@ Summe der Paketpunkte (Schätzwerte; nur Umsetzungspakete mit Punkten; Reviews, 
 | --- | --- | --- |
 | Codex | C1 5, C2 8, C3 3, C4 1, C5 5, C6 8, C7 2, C8 5, C19 8, C20 8, C21 10, C22 8, C23 6 | **77** |
 | Claude-Agents, bis 15.10. | L1 8, L2 3, L3a 2, L3b 3, L4 8, L5 4, L6 8, L7a 2, L7b 3, C9 8, C10 2, C11 5, C12 8, C13 8, L9 8, L10 3, C14 8, L11 5, L12 5, C15 6, L13 6, L14 4, C16 8, C17 8, L15 5, X1 4, C18 8, L16 8, L17 6, D1 3, L18 8 | 175 |
-| Claude-Agents, ab L19 | L19 4, L20 3, L21 10, L22 4, A1 10, A2 4, A3 8, A4 6, A5 5, A6 10, A6b 4, A6c 4, A6d 3, A7 8, A8 4, L23 8, B1 8, B2 8, B3 6, B4 3, B5 4, P1 8, P2 3, D2 3, W1 5 | 143 |
+| Claude-Agents, ab L19 | L19 4, L20 3, L21 10, L22 4, A1 10, A2 4, A3 8, A4 6, A5 5, A6 10, A6b 4, A6c 4, A6d 3, A7 8, A8 4, L23 8, B1 8, B2 8, B3 6, B4 3, B5 4, P1 8, P2 3, D2 3, W1 5, M1 6 | 149 |
 | Claude-Agents gesamt | | **318** |
 
 Formel: Codex-Anteil = 77 / (77 + 318) = 77 / 395 ≈ **19,5 %** – deutlich unter dem Richtwert 40–60 % (bis C22: 71 von 246 ≈ 29 %; der Anteil fiel, weil danach fast nur Claude-Pakete folgten, vor allem die gesamten Apple-Apps A1–A8, Betrieb, Dokumentation und Oberflächen).
@@ -242,6 +242,14 @@ Claude-Agent in getrennten Worktrees je Repo, Branch `p2-accent`; integriert. Nu
 | ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
 | --- | --- | --- | --- | --- | --- |
 | P2 | `GET/PATCH /me/preferences` (Akzent, eigene Farbe, Farbschema), `account.preferences` in der Sitzung, Export `preferences.json`, Vertrag v0.14.0, ADR-0020; PWA: Darstellungsseite am Konto mit localStorage-Cache und Abgleich, Mock, Unit-/Mock-/Echt-E2E; Vertrag für native Clients in `handoffs/P2.md` | Claude-Agent | 3 | integriert (Vertrag v0.14.0, ADR-0020); Lead: Backend 305 Tests SQLite, 0 Fehler; PWA check 0 Fehler, 587 Unit, 84 Mock-E2E, Echt-E2E 180/180 gegen frisch gebautes Backend; Live-Instanz aktualisiert (alte Build-Dateien in deploy/pwa-static nicht gelöscht, nur überschrieben); native Apps in A8 angepasst | P1 |
+
+## M1 – Arbeitsmodelle korrigieren, Urlaubskonto sichtbar (17.10.2026)
+
+Claude-Agent in getrennten Worktrees (Branch `m1-model-edit`), nicht gemergt.
+
+| ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
+| --- | --- | --- | --- | --- | --- |
+| M1 | `PUT /work-models/{id}` (Korrektur) und `POST /work-models/{id}/preview` (Zeitkonto vorher/nachher), `WorkModel.version`, Audit `work_model.updated`, Vertrag v0.16.0, ADR-0004-Nachtrag; PWA: Bearbeiten mit zwei Modi, Warnung, Vorschau, Bestätigung; Urlaubskonto-Karte mit Handlungsaufforderung | Claude-Agent | 6 | fertig, Lead-Prüfung offen | X1, P1 |
 
 ## W1 – GitHub Actions und Pages (17.10.2026)
 

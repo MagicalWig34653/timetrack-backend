@@ -11,6 +11,8 @@ final class WorkModelRecord: Model, @unchecked Sendable {
     @OptionalField(key: "valid_to") var validTo: String?
     @Field(key: "payload") var payload: WorkModelDTO
     init() {}
+    /// The payload as served: versions stored before M1 have no correction counter and count as 1.
+    var versioned: WorkModelDTO { var value = payload; value.version = value.version ?? 1; return value }
 }
 
 final class PlaceRecord: Model, @unchecked Sendable {

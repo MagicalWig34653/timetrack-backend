@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.15.0
+  version: 0.16.0
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -20,6 +20,7 @@ info:
     (4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form
     `<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.
     (6) No session listing endpoint in stage 1; only revoking other sessions.
+    v0.16.0: Arbeitsmodell-Korrektur (M1, ADR-0004-Nachtrag, additiv): PUT /work-models/{id} ersetzt alle bearbeitbaren Felder einer Version (optional If-Match mit `version`, sonst 412 stale_version; 409 model_overlap bei Überschneidung; die Vorversion wird am Vortag von validFrom neu begrenzt), POST /work-models/{id}/preview liefert dieselbe Prüfung als Vorschau ohne Speichern (Zeitkonto vorher/nachher, betroffene Tage, geänderte Felder). WorkModel.version (additiv). Auswertungen werden beim Lesen berechnet; die Korrektur ändert sie bewusst nur auf ausdrücklichen Nutzerwunsch.
     v0.15.0: Leuchteffekt und weitere Akzentfarben (G1, ADR-0020 Nachtrag, additiv): Preferences.glow (off|subtle|medium|strong, Standard subtle, auch bei zuvor gespeicherten Konten) ist per PATCH /me/preferences schreibbar; AccentId um indigo, navy, purple, magenta, crimson, forest, petrol, bronze erweitert (dunkle Töne mit weißer Schrift). Ältere Clients ignorieren das neue Feld; unbekannte Akzent-IDs zeigen sie als Blau.
     v0.14.0: Darstellung je Konto (P2, ADR-0020, additiv): GET/PATCH /me/preferences (accent, accentCustomHex, colorScheme, updatedAt; Standard blue/system ohne gespeicherte Zeile; Merge-Patch, unbekannte Schlüssel 400, Body über 1 KiB 413) und Account.preferences in der Sitzungsantwort; GET /me/export enthält preferences.json. App-Icon und Transparenz bleiben gerätelokal. Keine Modulbindung; Recovery-Sitzungen erhalten 403.
     v0.13.0: Profil und Einrichtung (P1, ADR-0019, additiv): GET/PATCH /me/profile (Anzeigename; Handle nur lesend), E-Mail-Adresse ändern per Bestätigungscode (PUT /me/profile/email, POST /me/profile/email/verify, DELETE /me/profile/email; frische Sitzung, 501 ohne SMTP, 409 email_taken, Versuchsgrenze 5, Gültigkeit 10 Minuten, Rate-Limit wie Recovery-E-Mail) und der Einrichtungsmerker PUT /me/onboarding (pending|completed|skipped). Account.onboardingState in der Sitzungsantwort. Keine Modulbindung; Recovery-Sitzungen erhalten 403.
@@ -549,11 +550,26 @@ paths:
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/WorkModel' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
     patch:
       operationId: endWorkModel
-      description: Setzt nur validTo (z. B. Ausbildungsende). Weitere Felder sind unveränderlich; neue Regeln = neue Version.
+      description: Setzt nur validTo (z. B. Ausbildungsende). Weitere Felder ändert PUT (Korrektur, mit Vorschau); neue Regeln ab einem Datum = neue Version per POST.
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [validTo], properties: { validTo: { type: string, format: date } } } } } }
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/WorkModel' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' } }
+    put:
+      operationId: correctWorkModel
+      description: 'Korrektur (M1): ersetzt alle bearbeitbaren Felder dieser Version, auch validFrom/validTo. Die Auswertung aller betroffenen Tage ändert sich (sie wird beim Lesen berechnet); vorher POST .../preview aufrufen. Header If-Match mit `version` ist optional (412 stale_version). 409 model_overlap bei Überschneidung mit Nachbarversionen; ist die Vorversion unmittelbar anschließend, wird ihr validTo auf den Vortag von validFrom gesetzt.'
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' }, { name: If-Match, in: header, required: false, schema: { type: string } } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/WorkModelInput' } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/WorkModel' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' }, '412': { description: veraltete Version, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } } }
+  /api/v1/work-models/{id}/preview:
+    post:
+      operationId: previewWorkModelCorrection
+      description: Vorschau der Korrektur (M1) ohne zu speichern, gleiche Prüfung wie PUT. Vergleicht das Zeitkonto bis heute mit dem gespeicherten und dem korrigierten Modellsatz.
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/WorkModelInput' } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/WorkModelPreview' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' } }
   /api/v1/places:
     get:
       operationId: listPlaces
@@ -1498,7 +1514,19 @@ components:
         - $ref: '#/components/schemas/WorkModelInput'
         - type: object
           required: [id, createdAt]
-          properties: { id: { type: string, format: uuid }, createdAt: { type: string, format: date-time } }
+          properties: { id: { type: string, format: uuid }, createdAt: { type: string, format: date-time }, version: { type: integer, minimum: 1, description: 'Korrekturzähler (M1); ältere Versionen ohne Wert zählen als 1' } }
+    WorkModelPreview:
+      type: object
+      required: [affectedDays, balanceBeforeSeconds, balanceAfterSeconds, differenceSeconds, changedFields]
+      properties:
+        affectedFrom: { type: [string, 'null'], format: date }
+        affectedTo: { type: [string, 'null'], format: date, description: null = laufend }
+        affectedDays: { type: integer, minimum: 0, description: Kalendertage von affectedFrom bis heute }
+        balanceBeforeSeconds: { type: integer }
+        balanceAfterSeconds: { type: integer }
+        differenceSeconds: { type: integer }
+        changedFields: { type: array, items: { type: string } }
+        previousValidTo: { type: [string, 'null'], format: date, description: neues Ende der Vorversion, falls angepasst }
     PlaceInput:
       type: object
       required: [name, kind, automationMode]
