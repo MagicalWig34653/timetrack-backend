@@ -54,3 +54,12 @@
 @media (max-width: 760px) { .link-grid { grid-template-columns: 1fr; } }
 .shots { justify-content: center; }
 @media (max-width: 1200px) { .shots { justify-content: flex-start; } }
+
+.install-cta { display: flex; gap: 24px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-top: 18px; padding: 22px 24px; border: 1px solid var(--vp-c-brand-2); border-radius: 14px; background: var(--vp-c-brand-soft); }
+.install-cta strong { font-size: 1.15rem; }
+.install-cta p { margin: 6px 0 0; color: var(--vp-c-text-2); max-width: 34rem; }
+.install-cta-actions { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.install-btn { display: inline-block; padding: 10px 22px; border-radius: 20px; background: var(--vp-button-brand-bg); color: #fff !important; font-weight: 600; text-decoration: none !important; }
+.install-btn:hover { background: var(--vp-button-brand-hover-bg); }
+.install-link { font-size: 0.9rem; }
+@media (max-width: 640px) { .install-cta { padding: 18px; } }

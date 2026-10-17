@@ -19,6 +19,7 @@ const gh = `https://github.com/${repo}`;
 
 /** Pages: repo path -> site route. Optional pages are skipped when the source file does not exist. */
 const pages = [
+  ['docs/INSTALLATION.md', '/docs/installation'],
   ['docs/KONZEPT.md', '/docs/konzept'],
   ['docs/ARCHITEKTUR.md', '/docs/architektur'],
   ['docs/UMSETZUNG.md', '/docs/umsetzung'],
@@ -26,7 +27,7 @@ const pages = [
   ['docs/MCP.md', '/docs/mcp'],
   ['EINRICHTUNG.md', '/docs/einrichtung'],
   ['docs/BETRIEB.md', '/docs/betrieb'],
-  ['docs/DEPLOYMENT.md', '/docs/deployment'], // written by another package; optional
+  ['docs/DEPLOYMENT.md', '/docs/deployment'], // detailed guide: Swarm, MariaDB grants, proxy details, checklists
   ['docs/CI.md', '/docs/ci'],
   ['docs/ENTWICKLUNGSABLAUF.md', '/docs/entwicklungsablauf'],
   ['docs/LIZENZEN.md', '/docs/lizenzen'],

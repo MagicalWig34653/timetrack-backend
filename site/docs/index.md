@@ -8,11 +8,17 @@ Diese Seiten werden beim Bauen der Website aus den Dokumenten im Repository übe
 
 ## Wo anfangen?
 
+::: tip Selbst betreiben?
+Starte mit der **[Installationsanleitung: in 10 Minuten zum Laufen](/docs/installation)**. Für Swarm, eigene MariaDB und Proxy-Details gibt es die **[Ausführliche Deployment-Anleitung](/docs/deployment)**.
+:::
+
 | Ich möchte … | Lies |
 | --- | --- |
+| Timetrack selbst installieren (Docker Compose, in 10 Minuten) | [Installation](/docs/installation) |
+| im Swarm oder mit eigener MariaDB betreiben | [Ausführliche Deployment-Anleitung](/docs/deployment) |
 | verstehen, was Timetrack kann und was noch offen ist | [Konzept](/docs/konzept) |
 | wissen, wie es technisch aufgebaut ist | [Architektur](/docs/architektur) und [Architekturentscheidungen](/adr/) |
-| es lokal starten und testen | [Einrichtung](/docs/einrichtung) |
+| es für die Entwicklung lokal starten und testen | [Einrichtung](/docs/einrichtung) |
 | es betreiben, sichern und wiederherstellen | [Betrieb](/docs/betrieb) |
 | einen KI-Assistenten anbinden | [MCP-Anbindung](/docs/mcp) |
 | die API ansprechen | [API-Referenz](/api/) |

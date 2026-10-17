@@ -7,6 +7,7 @@ Stand: 17.10.2026. Jede Information hat genau eine maßgebliche Datei; andere Da
 
 | Frage | Maßgebliche Datei |
 | --- | --- |
+| **Selbst installieren: Einstieg in 10 Minuten (Compose, Proxy, erster Admin)** | [INSTALLATION.md](INSTALLATION.md) |
 | Was ist tatsächlich gebaut, geprüft, offen? | [STATUS.md](STATUS.md) |
 | Welche Pakete gab es/gibt es, wer, mit welchem Ergebnis? | [ARBEITSPLAN.md](ARBEITSPLAN.md), Belege je Paket in [handoffs/](handoffs/) |
 | Was ist gefordert (bestätigt vs. Vorschlag)? | [KONZEPT.md](KONZEPT.md) |
@@ -22,7 +23,7 @@ Stand: 17.10.2026. Jede Information hat genau eine maßgebliche Datei; andere Da
 | Arbeitsweise, Sprache, Parallelarbeit, Checks, Definition of Done | [ENTWICKLUNGSABLAUF.md](ENTWICKLUNGSABLAUF.md) |
 | Ergebnisse des Codex-Reviews C9–C18 | [reviews/2026-10-15-codex-review.md](reviews/2026-10-15-codex-review.md) |
 | Betrieb: Backup/Restore, Swarm-Stack, Reverse-Proxy-Anforderungen, amd64 | [BETRIEB.md](BETRIEB.md) |
-| Produktion einrichten (Swarm, eigene MariaDB, Proxy, erster Admin, Go-Live-Checkliste) | [DEPLOYMENT.md](DEPLOYMENT.md) |
+| Produktion einrichten, ausführlich (Swarm, eigene MariaDB, Proxy, erster Admin, Go-Live-Checkliste) | [DEPLOYMENT.md](DEPLOYMENT.md) |
 | CI, Image-Build, Releases, GitHub Pages (Website `site/`) | [CI.md](CI.md) |
 | Container/Deployment | [../deploy/README.md](../deploy/README.md), [../compose.yaml](../compose.yaml) |
 | Designsprache (Tokens, Shell, Komponenten; native Entsprechung im Apple-Repo) | [DESIGN.md](DESIGN.md), ADR-0014 |
