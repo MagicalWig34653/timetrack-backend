@@ -93,3 +93,7 @@ Sichern, dann Migration mit dem neuen Image, dann Backend wechseln: [Aktualisier
 ## Grenzen
 
 Stack und Anleitung sind nicht auf einem echten Swarm erprobt (geprüft sind `docker stack config` und das Containerverhalten). Die vollständige Liste: [Deployment-Anleitung](../DEPLOYMENT.md), Abschnitt 17.
+
+## Betrieb mit mehreren Replikaten und Sticky Sessions
+
+Das Backend ist zustandslos bis auf die Datenbank: Sitzungen, Ratenbegrenzung und Sperren liegen in der Datenbank. Mehrere Replikate (zum Beispiel 2) hinter einem Proxy funktionieren daher mit und ohne Sticky Sessions. Sticky Sessions sind nicht nötig, schaden aber nicht (zum Beispiel für Cache-Wärme). Wichtig: `TRUSTED_PROXY_CIDRS` muss das Netz enthalten, aus dem die Proxy-Verbindungen kommen, und jedes Replikat braucht denselben `STORAGE_SECRET_KEY` und dieselben VAPID-Schlüssel (Docker-Secrets).
