@@ -88,6 +88,7 @@ Hinweise zu den Rechten (aus dem Code abgeleitet, nicht gegen den Produktionsser
 - **Keine** globalen Rechte (`*.*`), kein `GRANT OPTION`, kein `SUPER`/`FILE`. Der Benutzer darf nur `timetrack.*`.
 - Datenbankzeichensatz `utf8mb4`; die Server-Sortierung `utf8mb4_unicode_ci` entspricht der Entwicklungsumgebung. Einzelne Tabellen setzen `utf8mb4_bin` selbst.
 - `max_allowed_packet` des Servers sollte mindestens **70 MiB** betragen, wenn Dateien in der Datenbank gespeichert werden (Speicherregel „Datenbank“; Uploads bis 64 MiB, siehe handoffs/C13.md). Prüfen: `SHOW VARIABLES LIKE 'max_allowed_packet';`.
+  Beispiel „alle Dateien in der Datenbank, höchstens 50 MiB“: im Admin-Bereich (Einstellungen → Dateispeicher) Speicherregel „alles → Datenbank“ (Voreinstellung) und „Größter erlaubter Upload“ = 50 MiB (`maxUploadBytes` = 52428800) setzen; dafür genügt `max_allowed_packet` ≥ 56 MiB, im Proxy `client_max_body_size` ≈ 52m. Weil die Dateien in MariaDB liegen, sehen alle Swarm-Replikate dieselben Dateien (kein verteilter Speicher nötig). Die Grenze ist eine Datenbankeinstellung (kein Umgebungswert); der feste Höchstwert der Software ist 64 MiB, die Voreinstellung 10 MiB.
 - Einen **zweiten** Benutzer für Backups (nur lesen) legen Sie nach Abschnitt 14 an.
 
 ### 3.3 TLS zur Datenbank
