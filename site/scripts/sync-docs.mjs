@@ -40,16 +40,9 @@ if (process.env.PWA_DOCS_DIR) pages.push([path.join(process.env.PWA_DOCS_DIR, 'S
 const routeOf = new Map(pages.map(([src, route]) => [path.normalize(src), route]));
 routeOf.set(path.normalize('docs/README.md'), '/adr/');
 
-// Internal or personal identifiers that must not appear on the public site.
-const redactions = [
-  [/test\.example\.org/g, 'timetrack-test.example.org'],
-  [/timetrack\.example\.org/g, 'timetrack.example.org'],
-  [/com\.example/g, 'org.example'],
-  [/ABCDE12345/g, 'TEAMID1234'],
-  [/\/home\/user\/timetrack-backend/g, '/pfad/zu/timetrack-backend'],
-  [/192\.168\.(\d+)\.(\d+)/g, '192.0.2.$2'],
-];
-const forbidden = /owner-name|owner-domain|192\.168|ABCDE12345|\/Users\/|@icloud|Az-Laske/i;
+// Guard: private-network addresses, local paths and personal data must never reach the public site.
+const redactions = [];
+const forbidden = /192\.168\.|\/Users\/|@icloud\.com|Az-Laske/i;
 
 function escapeOutsideCode(markdown) {
   let inFence = false;

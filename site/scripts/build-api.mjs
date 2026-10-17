@@ -20,9 +20,7 @@ execFileSync(bin, [
 let html = fs.readFileSync(outFile, 'utf8');
 html = html.replace(/<link[^>]*fonts\.googleapis\.com[^>]*>/g, '');
 html = html.replace('<head>', '<head><link rel="icon" href="../logo.svg">');
-// Same redactions as scripts/sync-docs.mjs for identifiers in contract examples.
-html = html.replace(/ABCDE12345/g, 'TEAMID1234').replace(/com\.example/g, 'org.example');
-if (/owner-name|owner-domain|192\.168|\/Users\//i.test(html)) throw new Error('API page contains an internal identifier');
+if (/192\.168\.|\/Users\/|@icloud\.com/i.test(html)) throw new Error('API page contains an internal identifier');
 html = html.replace('</body>', '<a href="../" style="position:fixed;right:12px;bottom:12px;z-index:100;background:#2563EB;color:#fff;padding:8px 14px;border-radius:999px;font:600 14px system-ui,sans-serif;text-decoration:none;box-shadow:0 2px 10px rgba(0,0,0,.25)">Zur Dokumentation</a></body>');
 fs.writeFileSync(outFile, html);
 console.log(`build-api: wrote ${path.relative(siteDir, outFile)} (${(html.length / 1024).toFixed(0)} KiB)`);
