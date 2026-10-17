@@ -15,6 +15,7 @@ tatsächlich geprüften Stand ist [docs/STATUS.md](docs/STATUS.md); der API-Vert
 ## Einstieg
 
 - [Einrichtung, Start- und Testbefehle](EINRICHTUNG.md)
+- [Deployment in Produktion (Swarm, eigene MariaDB, Proxy)](docs/DEPLOYMENT.md)
 - [Dokumentationslandkarte und ADR-Index](docs/README.md)
 - [Tatsächlicher Stand](docs/STATUS.md) und [Arbeitsplan](docs/ARBEITSPLAN.md)
 - [Produktkonzept](docs/KONZEPT.md), [Architektur](docs/ARCHITEKTUR.md), [Etappen](docs/UMSETZUNG.md), [Repository-Pfade](docs/REPOSITORIES.md)

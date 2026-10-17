@@ -140,6 +140,14 @@ Claude-Agent im Worktree `timetrack-backend-wt/b4`, Branch `b4-proxy`.
 | --- | --- | --- | --- | --- | --- |
 | B4 | `TRUSTED_PROXY_CIDRS`/`TRUSTED_PROXY_HEADER`, zentrale Client-Adresse für alle Rate-Limits, Tests, ADR-0018, Betriebsdoku | Claude-Agent | 3 | integriert; Lead: 12 neue Tests grün, /0-Netze nachträglich abgelehnt; zwei Push-Timing-Tests (C19) schlugen bei Systemlast ~230 fehl, auch in Einzelläufen (Ursache offen, siehe STATUS); kein Test mit echtem Proxy | B3 |
 
+## D2 – Deployment-Anleitung Produktion (17.10.2026)
+
+Claude-Agent im Worktree `timetrack-backend-wt/d2`, Branch `d2-deployment-guide`. Schreibt nur `deploy/`, `docs/`; kein Swift-Code, nicht `.github/` oder `site/` (Paket W1).
+
+| ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
+| --- | --- | --- | --- | --- | --- |
+| D2 | `docs/DEPLOYMENT.md` (Schritt-für-Schritt für `timetrack.example.org`), Stack ohne DB-Container mit allen Variablen, `deploy/swarm/create-secrets.sh` (`--dry-run`), Abgleich BETRIEB/deploy-README | Claude-Agent | 3 | umgesetzt, Lead-Prüfung offen (nicht auf echtem Swarm/Proxy erprobt) | B3, B4 |
+
 ## Backlog Backend (Stand 15.10.2026, nicht begonnen)
 
 1. **Kontenverwaltung** (umgesetzt und integriert: B1): Admin-Liste der Konten, Deaktivieren/Reaktivieren, Rollenwechsel, Sitzungen widerrufen, Konto löschen; Selbstauskunft/Selbstlöschung und Export der eigenen Daten (ZIP aus JSON/CSV + Dateien).
