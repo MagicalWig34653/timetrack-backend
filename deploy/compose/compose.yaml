@@ -1,0 +1,147 @@
+# Timetrack: simple production-style Docker Compose setup (single host). For a Swarm cluster use deploy/swarm/stack.yaml.
+#
+#   1. cp .env.example .env            and fill in the REQUIRED values
+#   2. ./init-secrets.sh               creates ./secrets/* (database password is read from the terminal)
+#   3. docker compose up -d            runs the migration job first, then the backend
+#      docker compose --profile db up -d   additionally starts a MariaDB container (single-host setups without a database)
+# Documentation: docs/DEPLOYMENT.md (reverse proxy, passkeys, backups). Compose reads .env automatically.
+name: timetrack
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "5" }
+
+services:
+  # One-shot schema migration. The backend never migrates (AUTO_MIGRATE=false) and reports /ready = 503 until the schema is current.
+  migrate:
+    image: ${TIMETRACK_IMAGE:?set TIMETRACK_IMAGE in .env}
+    command: ["migrate", "--yes", "--env", "production"]
+    restart: "no"
+    environment:
+      DATABASE_DRIVER: mariadb
+      DB_HOST: ${DB_HOST:?set DB_HOST in .env}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_NAME: ${DB_NAME:-timetrack}
+      DB_USER: ${DB_USER:-timetrack}
+      DB_PASSWORD_FILE: /run/secrets/tt_db_password
+      DB_TLS: ${DB_TLS:-required}
+      AUTO_MIGRATE: "false"
+    secrets: [tt_db_password]
+    read_only: true
+    tmpfs: [/tmp]
+    logging: *logging
+    depends_on:
+      db:
+        condition: service_healthy
+        required: false                       # only when the optional "db" profile is active
+
+  backend:
+    image: ${TIMETRACK_IMAGE:?set TIMETRACK_IMAGE in .env}
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    # Published on all interfaces by default; set BIND_ADDR=127.0.0.1 when the reverse proxy runs on this host.
+    ports:
+      - "${BIND_ADDR:-0.0.0.0}:${PUBLISHED_PORT:-18080}:8080"
+    environment:
+      DATABASE_DRIVER: mariadb
+      DB_HOST: ${DB_HOST:?set DB_HOST in .env}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_NAME: ${DB_NAME:-timetrack}
+      DB_USER: ${DB_USER:-timetrack}
+      DB_PASSWORD_FILE: /run/secrets/tt_db_password
+      DB_TLS: ${DB_TLS:-required}
+      AUTO_MIGRATE: "false"
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL in .env}
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:?set WEBAUTHN_RP_ID in .env}
+      WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN:?set WEBAUTHN_ORIGIN in .env}
+      WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-Timetrack}
+      APPLE_APP_IDS: ${APPLE_APP_IDS:-}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-336}
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}
+      TRUSTED_PROXY_HEADER: ${TRUSTED_PROXY_HEADER:-X-Forwarded-For}
+      STORAGE_SECRET_KEY_FILE: /run/secrets/tt_storage_secret_key
+      VAPID_PRIVATE_KEY_FILE: /run/secrets/tt_vapid_private_key
+      VAPID_SUBJECT: ${VAPID_SUBJECT:?set VAPID_SUBJECT in .env}
+      PUSH_ALLOWED_HOSTS: ${PUSH_ALLOWED_HOSTS:-}
+      NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-true}
+      MODULES_DISABLED: ${MODULES_DISABLED:-}
+      MAINTENANCE_INTERVAL_MINUTES: ${MAINTENANCE_INTERVAL_MINUTES:-60}
+      MCP_AUDIT_RETENTION_DAYS: ${MCP_AUDIT_RETENTION_DAYS:-90}
+      IMPORT_JOB_TIMEOUT_HOURS: ${IMPORT_JOB_TIMEOUT_HOURS:-168}
+      STORAGE_ORPHAN_GRACE_HOURS: ${STORAGE_ORPHAN_GRACE_HOURS:-168}
+      PWA_STATIC_DIR: /srv/pwa
+      # OPTIONAL e-mail recovery codes (SMTP): uncomment ALL lines, the secret below and in `secrets:`; SMTP_USER and password together.
+      # SMTP_HOST: ${SMTP_HOST:?set SMTP_HOST}
+      # SMTP_PORT: ${SMTP_PORT:-587}
+      # SMTP_TLS: ${SMTP_TLS:-starttls}
+      # SMTP_FROM: ${SMTP_FROM:?set SMTP_FROM}
+      # SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Timetrack}
+      # SMTP_USER: ${SMTP_USER:?set SMTP_USER}
+      # SMTP_PASSWORD_FILE: /run/secrets/tt_smtp_password
+      # OPTIONAL OpenID Connect: uncomment, plus the secret below and in `secrets:`.
+      # OIDC_ISSUER: ${OIDC_ISSUER:?set OIDC_ISSUER}
+      # OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:?set OIDC_CLIENT_ID}
+      # OIDC_NAME: ${OIDC_NAME:-OpenID Connect}
+      # OIDC_SCOPES: ${OIDC_SCOPES:-openid email profile}
+      # OIDC_CLIENT_SECRET_FILE: /run/secrets/tt_oidc_client_secret
+    secrets:
+      - tt_db_password
+      - tt_storage_secret_key
+      - tt_vapid_private_key
+      # - tt_smtp_password
+      # - tt_oidc_client_secret
+    read_only: true
+    tmpfs: [/tmp]
+    # Default: no volumes. The PWA is part of the image; uploaded files are stored in the database (admin UI: storage rule
+    # "everything -> database", global upload limit) or in S3. OPTIONAL local-path storage (admin sets /data/files):
+    # uncomment this block and the top-level `volumes:` entry `files`.
+    # volumes:
+    #   - files:/data/files
+    healthcheck:
+      # /ready = database reachable AND all migrations applied (the image's own HEALTHCHECK only checks /health)
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/ready"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+    logging: *logging
+
+  # OPTIONAL database for single-host setups without an existing MariaDB: docker compose --profile db up -d
+  # (then use DB_HOST=db and DB_TLS=off in .env; the database is only reachable inside the Compose network).
+  db:
+    profiles: ["db"]
+    image: mariadb:12.3
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${DB_NAME:-timetrack}
+      MARIADB_USER: ${DB_USER:-timetrack}
+      MARIADB_PASSWORD_FILE: /run/secrets/tt_db_password
+      MARIADB_RANDOM_ROOT_PASSWORD: "1"
+    command: ["--max-allowed-packet=70M", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    secrets: [tt_db_password]
+    volumes:
+      - db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+secrets:
+  tt_db_password:
+    file: ./secrets/tt_db_password
+  tt_storage_secret_key:
+    file: ./secrets/tt_storage_secret_key
+  tt_vapid_private_key:
+    file: ./secrets/tt_vapid_private_key
+  # tt_smtp_password:
+  #   file: ./secrets/tt_smtp_password
+  # tt_oidc_client_secret:
+  #   file: ./secrets/tt_oidc_client_secret
+
+volumes:
+  db:
+  # files:

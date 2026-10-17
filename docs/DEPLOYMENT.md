@@ -144,6 +144,8 @@ Secrets sind unveränderlich. Rotation: neues Secret mit anderem Namen (`--prefi
 
 ## 5. Port und Netzwerk
 
+> **Ohne Swarm?** Für einen einzelnen Server gibt es eine einfache Variante: [`deploy/compose/`](../deploy/compose/README.md) (Compose-Datei, `.env.example`, `init-secrets.sh`, optional eine gebündelte MariaDB).
+
 > **Dateispeicher:** Standard ohne Volumes: Dateien in der Datenbank (oder S3). Für lokale Dateiablage enthält `stack.yaml` einen auskommentierten Volume-Block (Dienst und Ende der Datei), dazu `BACKEND_PLACEMENT` auf einen festen Knoten setzen.
 
 Der Stack veröffentlicht den Port des Backends auf **jedem Swarm-Knoten** (Routing Mesh, `mode: ingress`, Standard `PUBLISHED_PORT=18080`). Jeder Knoten leitet an ein gesundes Replikat weiter, egal auf welchem Knoten es läuft. Ein vorab angelegtes Overlay-Netz ist **nicht** nötig; der Stack nutzt nur sein eigenes Standardnetz.

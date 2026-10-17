@@ -7,3 +7,7 @@
 !.env.example
 *.sqlite*
 deploy/pwa-static/
+
+# Compose production setup: local config and secrets
+deploy/compose/.env
+deploy/compose/secrets/
