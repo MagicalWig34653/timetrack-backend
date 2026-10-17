@@ -47,9 +47,9 @@ struct JSONSchemaValidator {
             return problems
         }
         if let string = value as? String, !Self.isBool(value) { problems += checkString(string, schema, path) }
-        if Self.isNumber(value), let number = (value as? NSNumber)?.doubleValue {
-            if let minimum = (schema["minimum"] as? NSNumber)?.doubleValue, number < minimum { problems.append("\(path): \(number) < minimum \(minimum)") }
-            if let maximum = (schema["maximum"] as? NSNumber)?.doubleValue, number > maximum { problems.append("\(path): \(number) > maximum \(maximum)") }
+        if let number = Self.double(value) {
+            if let minimum = Self.double(schema["minimum"] as Any), number < minimum { problems.append("\(path): \(number) < minimum \(minimum)") }
+            if let maximum = Self.double(schema["maximum"] as Any), number > maximum { problems.append("\(path): \(number) > maximum \(maximum)") }
         }
         if let object = value as? [String: Any] { problems += checkObject(object, schema, path) }
         if let array = value as? [Any] {
@@ -114,22 +114,65 @@ struct JSONSchemaValidator {
         return schema["type"] as? [String] ?? []
     }
 
+    /// Booleans are detected by their Swift type. Values must come from `parse(_:)` (or be native Swift literals):
+    /// `JSONSerialization` yields NSNumber, whose boolean/number distinction differs between Darwin and swift-corelibs-foundation.
     static func isBool(_ value: Any) -> Bool {
-        guard let number = value as? NSNumber else { return false }
+        if value is NSNull { return false }
         #if canImport(Darwin)
-        return CFGetTypeID(number) == CFBooleanGetTypeID()
-        #else
-        return type(of: value) == Bool.self
+        if let number = value as? NSNumber { return CFGetTypeID(number) == CFBooleanGetTypeID() }
         #endif
+        return type(of: value) == Bool.self
     }
-    static func isNumber(_ value: Any) -> Bool { value is NSNumber && !isBool(value) }
+    /// Numeric value of a JSON number; nil for booleans and non-numbers.
+    static func double(_ value: Any) -> Double? {
+        if isBool(value) { return nil }
+        switch value {
+        case let v as Int: return Double(v)
+        case let v as Double: return v
+        case let v as Int64: return Double(v)
+        case let v as UInt64: return Double(v)
+        case let v as Float: return Double(v)
+        case let v as NSNumber: return v.doubleValue
+        default: return nil
+        }
+    }
+    static func isNumber(_ value: Any) -> Bool { double(value) != nil }
+
+    /// Parses JSON into native Swift values (Bool, Int, Double, String, NSNull, arrays, dictionaries) identically on every platform.
+    static func parse(_ data: Data) throws -> Any {
+        try JSONDecoder().decode(Node.self, from: data).value
+    }
+    private enum Node: Decodable {
+        case null, bool(Bool), int(Int), double(Double), string(String), array([Node]), object([String: Node])
+        init(from decoder: any Decoder) throws {
+            let c = try decoder.singleValueContainer()
+            if c.decodeNil() { self = .null }
+            else if let v = try? c.decode(Bool.self) { self = .bool(v) }
+            else if let v = try? c.decode(Int.self) { self = .int(v) }
+            else if let v = try? c.decode(Double.self) { self = .double(v) }
+            else if let v = try? c.decode(String.self) { self = .string(v) }
+            else if let v = try? c.decode([Node].self) { self = .array(v) }
+            else { self = .object(try c.decode([String: Node].self)) }
+        }
+        var value: Any {
+            switch self {
+            case .null: return NSNull()
+            case .bool(let v): return v
+            case .int(let v): return v
+            case .double(let v): return v
+            case .string(let v): return v
+            case .array(let v): return v.map(\.value)
+            case .object(let v): return v.mapValues(\.value)
+            }
+        }
+    }
     static func matches(_ type: String, _ value: Any) -> Bool {
         switch type {
         case "null": return value is NSNull
         case "string": return value is String
         case "boolean": return isBool(value)
         case "number": return isNumber(value)
-        case "integer": return isNumber(value) && ((value as? NSNumber)?.doubleValue ?? 0.5).rounded() == (value as? NSNumber)?.doubleValue
+        case "integer": return double(value).map { $0.rounded() == $0 } ?? false
         case "object": return value is [String: Any]
         case "array": return value is [Any]
         default: return true
@@ -148,7 +191,7 @@ struct JSONSchemaValidator {
         if a is NSNull || b is NSNull { return a is NSNull && b is NSNull }
         if isBool(a) != isBool(b) { return false }
         if let x = a as? String, let y = b as? String { return x == y }
-        if let x = a as? NSNumber, let y = b as? NSNumber { return x == y }
+        if let x = double(a), let y = double(b) { return x == y }
         return false
     }
     static func isDate(_ string: String) -> Bool {

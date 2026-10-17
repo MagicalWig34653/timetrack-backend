@@ -47,7 +47,7 @@ final class JSONSchemaValidatorTests: XCTestCase {
     }
 
     func testJSONSerializationRoundTripBooleans() throws {
-        let parsed = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(#"{"a":true,"b":1}"#.utf8)) as? [String: Any])
+        let parsed = try XCTUnwrap(JSONSchemaValidator.parse(Data(#"{"a":true,"b":1}"#.utf8)) as? [String: Any])
         XCTAssertEqual(issues(parsed, ["type": "object", "properties": ["a": ["type": "boolean"], "b": ["type": "integer"]]]), [])
         XCTAssertEqual(issues(parsed, ["type": "object", "properties": ["a": ["type": "integer"], "b": ["type": "boolean"]]]).count, 2)
     }

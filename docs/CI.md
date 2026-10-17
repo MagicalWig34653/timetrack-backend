@@ -59,6 +59,14 @@ In allen Repositories außerdem: Issue-Vorlagen (Fehler, Funktion; deutsch, mit 
 
 ## Lokal nachstellen
 
+**Linux-Lauf lokal reproduzieren** (Docker/Colima, eigenes Build-Volume, nie das macOS-`.build` mounten). `--cpuset-cpus 0,1` bildet die zwei Kerne der GitHub-Runner nach; die Zahl der Kerne bestimmt die Zahl der Event Loops und damit der SQLite-Pool-Verbindungen:
+
+```sh
+docker run --rm --cpuset-cpus 0,1 -v "$PWD":/work -v timetrack-dev-l1-build:/build -w /work swift:6.3-noble \
+  bash -lc "swift test --build-system native --scratch-path /build"   # ggf. --filter <Test>; erster Build ca. 3-10 Minuten
+```
+Für MariaDB zusätzlich `--network timetrack-dev_default --env-file <Datei mit MARIADB_TEST_*>` (eigene Datenbank, `MARIADB_TEST_DB`). Unter Rosetta (amd64) stürzt der Swift-Compiler ab; dort nicht bauen.
+
 ```sh
 # Backend
 swift build --build-system native && swift test --build-system native      # SQLite
