@@ -23,6 +23,19 @@ struct TimeServices: Sendable {
     var plans: PlanService { .init(scope: self) }
     var shares: ShareService { .init(scope: self) }
 
+    /// Read-only requests: the session was authenticated by the session middleware in this very request, so no
+    /// second authentication and, above all, no global `auth_lock` (which serialises every request of every
+    /// account) is needed. A transaction still gives all reads of one request a consistent snapshot. Handlers
+    /// that write (even lazily, like the suggestion review) must use `session`.
+    static func read<T: Sendable>(_ context: AuthContext, auth: AuthService, db: any Database,
+                                  operation: @escaping @Sendable (TimeServices) async throws -> T) async throws -> T {
+        try context.normal()
+        let accountId = try context.account.requireID(), disabled = auth.configuration.disabledModules
+        return try await db.transaction { tx in
+            try await operation(TimeServices(accountId: accountId, db: tx, disabledModules: disabled))
+        }
+    }
+
     static func session<T: Sendable>(_ context: AuthContext, auth: AuthService, db: any Database,
                                     operation: @escaping @Sendable (TimeServices) async throws -> T) async throws -> T {
         try await auth.transaction(on: db) { tx in
@@ -102,7 +115,25 @@ extension SegmentRecord {
 struct SegmentService: Sendable {
     let scope: TimeServices
     func all() async throws -> [EngineSegment] {
-        try await SegmentRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).sort(\.$startedAt).all().map { try $0.dto() }
+        try await all(window: nil)
+    }
+    /// Segments that can belong to the given days. A segment is assigned to a civil day at most one day away
+    /// from its local start date (time zone offset below 15 h plus the day boundary below 12 h), so a margin of
+    /// three days before and four days after the window is safe. `nil` loads everything.
+    func all(window: ClosedRange<LocalDate>?) async throws -> [EngineSegment] {
+        let query = SegmentRecord.query(on: scope.db).filter(\.$accountId == scope.accountId)
+        if let window {
+            query.filter(\.$startedAt >= window.lowerBound.addingDays(-3).utcMidnight)
+                .filter(\.$startedAt < window.upperBound.addingDays(4).utcMidnight)
+        }
+        return try await query.sort(\.$startedAt).all().map { try $0.dto() }
+    }
+    /// Segments whose start lies in [from, to), optionally including voided ones.
+    func list(from: Date, to: Date, includeVoided: Bool) async throws -> [EngineSegment] {
+        let query = SegmentRecord.query(on: scope.db).filter(\.$accountId == scope.accountId)
+            .filter(\.$startedAt >= from).filter(\.$startedAt < to)
+        if !includeVoided { query.filter(\.$voidedAt == nil) }
+        return try await query.sort(\.$startedAt).all().map { try $0.dto() }
     }
     func record(_ id: UUID) async throws -> SegmentRecord {
         guard let row = try await SegmentRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).filter(\.$id == id).first() else { throw APIError.missing }
@@ -111,7 +142,13 @@ struct SegmentService: Sendable {
     func validate(_ value: EngineSegment) async throws {
         guard value.endedAt.map({ $0 > value.startedAt }) ?? true, (value.note?.count ?? 0) <= 500 else { throw APIError.invalid }
         if let place = value.placeId { _ = try await scope.places.record(place) }
-        for other in try await all() where other.id != value.id {
+        // Superset pre-filter in SQL (inclusive bounds, voided rows never overlap); the exact half-open test
+        // below decides, so the outcome equals checking against every stored segment.
+        let candidates = SegmentRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).filter(\.$voidedAt == nil)
+        if let end = value.endedAt { candidates.filter(\.$startedAt <= end) }
+        let start: Date? = value.startedAt
+        candidates.group(.or) { $0.filter(\.$endedAt == nil).filter(\.$endedAt >= start) }
+        for other in try await candidates.all().map({ try $0.dto() }) where other.id != value.id {
             if try TimeEngine.detectOverlap(value, other) { throw APIError(.conflict, "segment_overlap") }
         }
     }

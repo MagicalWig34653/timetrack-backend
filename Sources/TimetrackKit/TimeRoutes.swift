@@ -11,20 +11,24 @@ func registerTimeRoutes(_ app: Application, auth: AuthService) {
         do { return try await TimeServices.session(req.authContext, auth: auth, db: req.db, operation: operation) }
         catch is TimeEngineError { throw APIError.invalid }
     }
-    api.get("work-models") { req async throws -> Response in try await run(req) { try timeResponse(await $0.models.list()) } }
+    @Sendable func runRead(_ req: Request, _ operation: @escaping @Sendable (TimeServices) async throws -> Response) async throws -> Response {
+        do { return try await TimeServices.read(req.authContext, auth: auth, db: req.db, operation: operation) }
+        catch is TimeEngineError { throw APIError.invalid }
+    }
+    api.get("work-models") { req async throws -> Response in try await runRead(req) { try timeResponse(await $0.models.list()) } }
     api.post("work-models") { req async throws -> Response in
         let input = try timeDecode(WorkModelDTO.self, request: req)
         return try await run(req) { try timeResponse(await $0.models.create(input), status: .created) }
     }
     api.get("work-models", ":id") { req async throws -> Response in
-        let key = try id(req); return try await run(req) { try timeResponse(await $0.models.record(key).payload) }
+        let key = try id(req); return try await runRead(req) { try timeResponse(await $0.models.record(key).payload) }
     }
     api.patch("work-models", ":id") { req async throws -> Response in
         struct Input: Decodable { var validTo: LocalDate }
         let key = try id(req); let input = try timeDecode(Input.self, request: req)
         return try await run(req) { try timeResponse(await $0.models.end(key, at: input.validTo)) }
     }
-    api.get("places") { req async throws -> Response in try await run(req) { try timeResponse(await $0.places.list()) } }
+    api.get("places") { req async throws -> Response in try await runRead(req) { try timeResponse(await $0.places.list()) } }
     api.post("places") { req async throws -> Response in
         let input = try timeDecode(PlaceDTO.self, request: req)
         return try await run(req) { try timeResponse(await $0.places.save(input), status: .created) }
@@ -40,8 +44,8 @@ func registerTimeRoutes(_ app: Application, auth: AuthService) {
         guard let fromText: String = req.query["from"], let toText: String = req.query["to"],
               let from = timeInstant(fromText), let to = timeInstant(toText), from < to else { throw APIError.invalid }
         let voided = (try? req.query.get(Bool.self, at: "includeVoided")) ?? false
-        return try await run(req) { scope in
-            try timeResponse(await scope.segments.all().filter { $0.startedAt >= from && $0.startedAt < to && (voided || !$0.voided) })
+        return try await runRead(req) { scope in
+            try timeResponse(await scope.segments.list(from: from, to: to, includeVoided: voided))
         }
     }
     api.post("time", "segments") { req async throws -> Response in
@@ -49,7 +53,7 @@ func registerTimeRoutes(_ app: Application, auth: AuthService) {
         return try await run(req) { try timeResponse(await $0.segments.create(input), status: .created) }
     }
     api.get("time", "segments", ":id") { req async throws -> Response in
-        let key = try id(req); return try await run(req) { try timeResponse(await $0.segments.record(key).dto()) }
+        let key = try id(req); return try await runRead(req) { try timeResponse(await $0.segments.record(key).dto()) }
     }
     api.patch("time", "segments", ":id") { req async throws -> Response in
         let key = try id(req); let input = try timeDecode(SegmentCorrection.self, request: req)
@@ -60,7 +64,7 @@ func registerTimeRoutes(_ app: Application, auth: AuthService) {
         let key = try id(req); let reason: String = req.query["reason"] ?? ""
         return try await run(req) { try await $0.segments.void(key, reason: reason); return Response(status: .noContent) }
     }
-    api.get("time", "timer") { req async throws -> Response in try await run(req) { try timeResponse(await $0.timer.current()?.dto()) } }
+    api.get("time", "timer") { req async throws -> Response in try await runRead(req) { try timeResponse(await $0.timer.current()?.dto()) } }
     for action in ["start", "stop"] {
         api.post("time", "timer", .constant(action)) { req async throws -> Response in
             let input = try timeDecode(TimerInput.self, request: req)
@@ -69,10 +73,10 @@ func registerTimeRoutes(_ app: Application, auth: AuthService) {
     }
     api.get("time", "days") { req async throws -> Response in
         let from = try LocalDate(req.query[String.self, at: "from"] ?? ""); let to = try LocalDate(req.query[String.self, at: "to"] ?? "")
-        return try await run(req) { try timeResponse(await $0.days.range(from: from, to: to)) }
+        return try await runRead(req) { try timeResponse(await $0.days.range(from: from, to: to)) }
     }
     api.get("time", "days", ":date") { req async throws -> Response in
-        let day = try date(req); return try await run(req) { try timeResponse(await $0.days.evaluate(day)) }
+        let day = try date(req); return try await runRead(req) { try timeResponse(await $0.days.evaluate(day)) }
     }
     api.put("time", "days", ":date") { req async throws -> Response in
         let day = try date(req); let input = try timeDecode(DayInput.self, request: req)
@@ -80,7 +84,7 @@ func registerTimeRoutes(_ app: Application, auth: AuthService) {
     }
     api.get("time", "account") { req async throws -> Response in
         let asOf = try req.query[String.self, at: "asOf"].map(LocalDate.init)
-        return try await run(req) { try timeResponse(await $0.account.balance(asOf: asOf)) }
+        return try await runRead(req) { try timeResponse(await $0.account.balance(asOf: asOf)) }
     }
     api.post("time", "account", "adjustments") { req async throws -> Response in
         let input = try timeDecode(AdjustmentInput.self, request: req)
@@ -95,7 +99,7 @@ func registerTimeRoutes(_ app: Application, auth: AuthService) {
     api.post("time", "suggestions", ":id", "reject") { req async throws -> Response in
         let key = try id(req); return try await run(req) { try await $0.suggestions.reject(key); return Response(status: .noContent) }
     }
-    api.get("me", "device-tokens") { req async throws -> Response in try await run(req) { try timeResponse(await $0.devices.list()) } }
+    api.get("me", "device-tokens") { req async throws -> Response in try await runRead(req) { try timeResponse(await $0.devices.list()) } }
     api.post("me", "device-tokens") { req async throws -> Response in
         let input = try timeDecode(DeviceTokenInput.self, request: req)
         return try await run(req) { try timeResponse(await $0.devices.create(input), status: .created) }

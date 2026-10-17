@@ -14,11 +14,14 @@ func registerPlanningRoutes(_ app: Application, auth: AuthService) {
     @Sendable func run(_ req: Request, _ operation: @escaping @Sendable (TimeServices) async throws -> Response) async throws -> Response {
         try await TimeServices.session(req.authContext, auth: auth, db: req.db, operation: operation)
     }
+    @Sendable func runRead(_ req: Request, _ operation: @escaping @Sendable (TimeServices) async throws -> Response) async throws -> Response {
+        try await TimeServices.read(req.authContext, auth: auth, db: req.db, operation: operation)
+    }
     @Sendable func empty(_ work: @escaping @Sendable () async throws -> Void) async throws -> Response {
         try await work(); return Response(status: .noContent)
     }
 
-    api.get("vacation", "settings") { req async throws -> Response in try await run(req) { try timeResponse(await $0.vacation.settings()) } }
+    api.get("vacation", "settings") { req async throws -> Response in try await runRead(req) { try timeResponse(await $0.vacation.settings()) } }
     api.put("vacation", "settings") { req async throws -> Response in
         let input = try timeDecode(VacationSettingsDTO.self, request: req)
         return try await run(req) { try timeResponse(await $0.vacation.save(input)) }
@@ -32,10 +35,10 @@ func registerPlanningRoutes(_ app: Application, auth: AuthService) {
         return try await run(req) { try timeResponse(await $0.vacation.createAdjustment(input), status: .created) }
     }
     api.get("vacation", "balance") { req async throws -> Response in
-        let value = try year(req); return try await run(req) { try timeResponse(await $0.vacation.balance(year: value)) }
+        let value = try year(req); return try await runRead(req) { try timeResponse(await $0.vacation.balance(year: value)) }
     }
     api.get("vacation", "entries") { req async throws -> Response in
-        let value = try year(req); return try await run(req) { try timeResponse(await $0.vacation.entries(year: value)) }
+        let value = try year(req); return try await runRead(req) { try timeResponse(await $0.vacation.entries(year: value)) }
     }
     api.delete("vacation", "entries", ":id") { req async throws -> Response in
         let key = try id(req); return try await run(req) { scope in try await empty { try await scope.vacation.deleteEntry(key) } }
@@ -43,14 +46,14 @@ func registerPlanningRoutes(_ app: Application, auth: AuthService) {
 
     api.get("absences") { req async throws -> Response in
         let from = try query(req, "from"), to = try query(req, "to")
-        return try await run(req) { try timeResponse(await $0.absences.list(from: from, to: to)) }
+        return try await runRead(req) { try timeResponse(await $0.absences.list(from: from, to: to)) }
     }
     api.post("absences") { req async throws -> Response in
         let input = try timeDecode(AbsenceInputDTO.self, request: req)
         return try await run(req) { try timeResponse(await $0.absences.create(input), status: .created) }
     }
     api.get("absences", ":id") { req async throws -> Response in
-        let key = try id(req); return try await run(req) { try timeResponse(await $0.absences.get(key)) }
+        let key = try id(req); return try await runRead(req) { try timeResponse(await $0.absences.get(key)) }
     }
     api.put("absences", ":id") { req async throws -> Response in
         let key = try id(req); let input = try timeDecode(AbsenceInputDTO.self, request: req)
@@ -66,7 +69,7 @@ func registerPlanningRoutes(_ app: Application, auth: AuthService) {
 
     api.get("calendar", "holidays") { req async throws -> Response in
         let value = try year(req); let region: String? = req.query["region"]
-        return try await run(req) { try timeResponse(await $0.calendar.holidays(year: value, region: region)) }
+        return try await runRead(req) { try timeResponse(await $0.calendar.holidays(year: value, region: region)) }
     }
     api.post("calendar", "custom-days") { req async throws -> Response in
         let input = try timeDecode(CustomDayInput.self, request: req)
@@ -78,7 +81,7 @@ func registerPlanningRoutes(_ app: Application, auth: AuthService) {
 
     api.get("plan", "days") { req async throws -> Response in
         let from = try query(req, "from"), to = try query(req, "to")
-        return try await run(req) { try timeResponse(await $0.plans.list(from: from, to: to)) }
+        return try await runRead(req) { try timeResponse(await $0.plans.list(from: from, to: to)) }
     }
     api.put("plan", "days", ":date") { req async throws -> Response in
         let day = try date(req); let input = try timeDecode(PlanDayInput.self, request: req)
@@ -89,12 +92,12 @@ func registerPlanningRoutes(_ app: Application, auth: AuthService) {
     }
 
     // "incoming" is a constant path segment and takes precedence over the :id routes below.
-    api.get("shares", "incoming") { req async throws -> Response in try await run(req) { try timeResponse(await $0.shares.incoming()) } }
+    api.get("shares", "incoming") { req async throws -> Response in try await runRead(req) { try timeResponse(await $0.shares.incoming()) } }
     api.get("shares", "incoming", ":shareId", "view") { req async throws -> Response in
         let key = try id(req, "shareId"); let from = try query(req, "from"), to = try query(req, "to")
-        return try await run(req) { try timeResponse(await $0.shares.view(key, from: from, to: to)) }
+        return try await runRead(req) { try timeResponse(await $0.shares.view(key, from: from, to: to)) }
     }
-    api.get("shares") { req async throws -> Response in try await run(req) { try timeResponse(await $0.shares.list()) } }
+    api.get("shares") { req async throws -> Response in try await runRead(req) { try timeResponse(await $0.shares.list()) } }
     api.post("shares") { req async throws -> Response in
         let input = try timeDecode(ShareCreateInput.self, request: req)
         return try await run(req) { try timeResponse(await $0.shares.create(input), status: .created) }

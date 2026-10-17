@@ -15,12 +15,17 @@ struct AuthContext: Sendable {
 }
 
 extension AuthService {
+    static let lastSeenGranularity: TimeInterval = 60
     func authenticate(_ token: String?, on db: any Database) async throws -> AuthContext {
         guard let token, token.count == 43,
               let session = try await Session.query(on: db).filter(\.$tokenHash == Secrets.hash(token)).first(),
               session.revokedAt == nil, session.expiresAt > Date(),
               let account = try await Account.find(session.accountId, on: db), account.disabledAt == nil else { throw APIError.unauthorized }
-        try await Session.query(on: db).filter(\.$id == session.requireID()).set(\.$lastSeenAt, to: Date()).update()
+        // The timestamp is informational; writing it on every request (up to three authentications per request)
+        // cost a committed write each. Refresh it at most once a minute.
+        if session.lastSeenAt.map({ Date().timeIntervalSince($0) >= Self.lastSeenGranularity }) ?? true {
+            try await Session.query(on: db).filter(\.$id == session.requireID()).set(\.$lastSeenAt, to: Date()).update()
+        }
         return AuthContext(session: session, account: account, token: token)
     }
     func issueSession(for account: Account, recovery: Bool = false, on db: any Database) async throws -> AuthContext {

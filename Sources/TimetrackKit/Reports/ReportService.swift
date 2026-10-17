@@ -152,8 +152,9 @@ struct ReportService: Sendable {
 
     /// Evaluated working time of the week's days (hint only); days outside any work model count 0.
     private func trackedWorkSeconds(_ week: ReportCalendar.Week) async throws -> Int {
-        let snapshot = try await time.days.snapshot(); let now = Date()
-        return week.days.reduce(0) { $0 + ((try? snapshot.evaluate($1, now: now).evaluatedWorkSeconds) ?? 0) }
+        guard let first = week.days.first, let last = week.days.last else { return 0 }
+        let prepared = try await time.days.snapshot(window: first...last).prepared(); let now = Date()
+        return week.days.reduce(0) { $0 + ((try? prepared.evaluate($1, now: now).evaluatedWorkSeconds) ?? 0) }
     }
 
     func week(year: Int, week number: Int) async throws -> ReportWeekDTO {

@@ -1,6 +1,7 @@
 import Foundation
 import Fluent
 import FluentSQL
+import FluentMySQLDriver
 
 final class WorkModelRecord: Model, @unchecked Sendable {
     static let schema = "work_models"
@@ -249,5 +250,19 @@ struct CreateTimePersistence: AsyncMigration {
         try await db.schema("work_segments").delete()
         try await db.schema("places").delete()
         try await db.schema("work_models").delete()
+    }
+}
+
+/// X1: range reads and the overlap check filter `work_segments` by account and start instant. The single-column
+/// account index forced a scan of the whole account history; this composite index serves both.
+struct AddSegmentTimeIndex: AsyncMigration {
+    let name = "x1.add_segment_time_index"
+    func prepare(on db: any Database) async throws {
+        try await requireSQL(db).create(index: "idx_work_segments_account_started").on("work_segments").column("account_id").column("started_at").run()
+    }
+    func revert(on db: any Database) async throws {
+        let sql = try requireSQL(db)
+        if db is any MySQLDatabase { try await sql.raw("DROP INDEX idx_work_segments_account_started ON work_segments").run() }
+        else { try await sql.raw("DROP INDEX idx_work_segments_account_started").run() }
     }
 }

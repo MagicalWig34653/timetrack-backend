@@ -54,15 +54,52 @@ public struct LocalDate: Hashable, Comparable, Codable, Sendable, CustomStringCo
         calendar.timeZone = .gmt
         return calendar
     }
+    var utcMidnight: Date {
+        Self.fastYears.contains(year) ? Date(timeIntervalSince1970: Double(epochDays) * 86_400) : instant
+    }
     private var instant: Date {
         Self.utc.date(from: DateComponents(year: year, month: month, day: day)) ?? .distantPast
     }
+    // Pure integer civil-date arithmetic (proleptic Gregorian, Howard Hinnant's algorithms). Foundation's
+    // calendar follows the Julian rules before the 1582 reform, so the fast paths are limited to years where
+    // both agree; everything else keeps using the calendar. Creating a Calendar per call used to dominate
+    // the cost of evaluating long day ranges (performance package X1).
+    static let fastYears = 1600...9000
+    /// Days since 1970-01-01 (proleptic Gregorian).
+    var epochDays: Int {
+        let y = month <= 2 ? year - 1 : year
+        let era = (y >= 0 ? y : y - 399) / 400
+        let yoe = y - era * 400
+        let doy = (153 * (month + (month > 2 ? -3 : 9)) + 2) / 5 + day - 1
+        let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
+        return era * 146_097 + doe - 719_468
+    }
+    private static func civil(epochDays: Int) -> LocalDate {
+        let z = epochDays + 719_468
+        let era = (z >= 0 ? z : z - 146_096) / 146_097
+        let doe = z - era * 146_097
+        let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365
+        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100)
+        let mp = (5 * doy + 2) / 153
+        let day = doy - (153 * mp + 2) / 5 + 1
+        let month = mp < 10 ? mp + 3 : mp - 9
+        let year = yoe + era * 400 + (month <= 2 ? 1 : 0)
+        return LocalDate(uncheckedYear: year, month: month, day: day)
+    }
+    /// ISO weekday, Monday = 1 ... Sunday = 7.
+    var isoWeekday: Int { ((epochDays % 7 + 7) % 7 + 3) % 7 + 1 }
+
     func distance(to other: LocalDate) -> Int {
-        Self.utc.dateComponents([.day], from: instant, to: other.instant).day ?? 0
+        if Self.fastYears.contains(year), Self.fastYears.contains(other.year) { return other.epochDays - epochDays }
+        return Self.utc.dateComponents([.day], from: instant, to: other.instant).day ?? 0
     }
     /// Internal arithmetic can produce boundary sentinels (year 0/10000), never decoded input.
     /// This lets inclusive iteration terminate without trapping at the last supported date.
     func addingDays(_ days: Int) -> LocalDate {
+        if Self.fastYears.contains(year), abs(days) < 1_000_000 {
+            let next = Self.civil(epochDays: epochDays + days)
+            if Self.fastYears.contains(next.year) { return next }
+        }
         guard let next = Self.utc.date(byAdding: .day, value: days, to: instant) else { return self }
         return Self.local(next, calendar: Self.utc)
     }

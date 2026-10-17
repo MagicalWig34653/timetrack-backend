@@ -6,17 +6,23 @@ import FluentSQLiteDriver
 public func configure(_ app: Application, configuration: Configuration? = nil, mailSender: (any MailSender)? = nil,
                       notifications: NotificationOptions = NotificationOptions(), maintenance: MaintenanceOptions? = nil) async throws {
     let config = try configuration ?? Configuration()
+    // Diagnostics only: DB_SQL_LOG=1 logs every statement at info level (query-count measurements and tests).
+    let sqlLog: Logger.Level? = ProcessInfo.processInfo.environment["DB_SQL_LOG"] == "1" ? .info : nil
     switch config.databaseDriver {
     case .sqlite:
         app.databases.use(.sqlite(config.sqlitePath == ":memory:" ? .memory : .file(config.sqlitePath),
-                                  sqlLogLevel: nil), as: .sqlite)
+                                  sqlLogLevel: sqlLog), as: .sqlite)
     case .mariadb:
         // Explicitly override the driver's default TLS configuration for local development.
         var mysql = MySQLConfiguration(hostname: config.dbHost, port: config.dbPort,
                                        username: config.dbUser, password: config.dbPassword,
                                        database: config.dbName)
         if config.dbTLS == .off { mysql.tlsConfiguration = nil }
-        app.databases.use(.mysql(configuration: mysql, sqlLogLevel: nil), as: .mysql)
+        app.databases.use(.mysql(configuration: mysql, maxConnectionsPerEventLoop: 2, connectionPoolTimeout: .seconds(10), sqlLogLevel: sqlLog), as: .mysql)
+        // Idle pooled connections are silently dropped by NAT/IPVS (Swarm routing mesh: 15 min), firewalls and
+        // proxies; the next request that drew such a connection failed ("server not ready", fine after reload).
+        // A cheap ping per event loop every 45 s keeps them alive and replaces dead ones before users hit them.
+        app.lifecycle.use(DatabaseKeepAlive())
     }
     for migration in StageOneSchema.migrations { app.migrations.add(migration) }
     app.migrations.add(CreateAuthLock())
@@ -33,6 +39,7 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
     app.migrations.add(EnableExcusedAbsences())
     app.migrations.add(CreateWorktimeImportItems())
     for migration in AccountSchema.migrations { app.migrations.add(migration) }
+    app.migrations.add(AddSegmentTimeIndex())
     // Fluent installs the migrate command, including --revert and the global --yes flag.
     // Do not auto-apply migrations before explicit migrate/revert commands.
     if config.autoMigrate && !app.environment.arguments.contains("migrate") {
@@ -62,4 +69,24 @@ struct NotReadyResponse: Content {
         var message = "Database unavailable or migrations pending."
     }
     var error = Detail()
+}
+
+/// Pings the MariaDB pool of every event loop periodically (see `configure`).
+final class DatabaseKeepAlive: LifecycleHandler, @unchecked Sendable {
+    private var task: Task<Void, Never>?
+    func didBoot(_ application: Application) throws {
+        let app = application
+        task = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 45_000_000_000)
+                for loop in app.eventLoopGroup.makeIterator() {
+                    guard let db = app.databases.database(.mysql, logger: app.logger, on: loop) else { continue }
+                    for _ in 0..<2 {   // up to two connections per loop
+                        if (try? await db.withConnection { try await requireSQL($0).raw("SELECT 1").run() }) != nil { break }
+                    }
+                }
+            }
+        }
+    }
+    func shutdown(_ application: Application) { task?.cancel() }
 }
