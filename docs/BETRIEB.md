@@ -149,7 +149,7 @@ openssl ecparam -name prime256v1 -genkey -noout | openssl ec -outform DER 2>/dev
 docker secret create tt_db_password /pfad/zur/datei-mit-dem-db-passwort
 ```
 
-Außerdem: leere Datenbank samt Benutzer auf dem MariaDB-Server, die gebaute PWA auf dem Knoten (`PWA_HOST_DIR`) und
+Außerdem: leere Datenbank samt Benutzer auf dem MariaDB-Server, die gebaute PWA ist im Image enthalten (kein Kopieren auf den Knoten), und
 `deploy/swarm/stack.env.example` nach `stack.env` kopieren und ausfüllen. Docker-Secrets sind unveränderlich: zum Rotieren neues Secret
 mit neuem Namen anlegen, Stack-Datei anpassen, neu ausrollen. `STORAGE_SECRET_KEY` nie rotieren, ohne S3-Zugangsdaten neu einzutragen.
 
@@ -183,7 +183,7 @@ abwärtskompatibel (additiv) sind. Das ist **keine geprüfte Zusage** des Projek
 - **Ressourcen**: Backend 1 CPU / 768 MiB (Reservierung 0,1 CPU / 128 MiB), Migrationsjob 1 CPU / 512 MiB. **Nicht gemessen**: Uploads bis 64 MiB werden im Speicher gesammelt; die Werte sind Startwerte, unter Last zu prüfen.
 - **Update/Rollback**: siehe 5.2; `rollback_config` mit `start-first`.
 - **Logging**: `json-file` mit Rotation (10 MiB × 5), Backend loggt auf stdout. Für zentrale Logs Treiber (z. B. `gelf`, `syslog`) pro Dienst austauschen. Invite-URLs werden nicht protokolliert (Backend ersetzt die Standard-Logging-Middleware).
-- **Volumes**: `timetrack-files` (lokale Datei-Regel, im Admin-Dialog Pfad `/data/files` eintragen). Ein knotenlokales Volume setzt `BACKEND_REPLICAS=1` und feste Platzierung (`BACKEND_PLACEMENT`) voraus; über mehrere Knoten Netzwerk-Volume (z. B. NFS-Treiber), S3 oder Datenbankspeicher. PWA als schreibgeschützter Bind-Mount (`PWA_HOST_DIR`).
+- **Volumes**: keine. Die PWA ist im Image (`/srv/pwa`), Dateien liegen in der Datenbank (Admin: Speicherregel „alles → Datenbank“, globales Upload-Limit). Die Speicherart „Lokal“ ist im Stack nicht verfügbar; wer sie braucht, ergänzt selbst einen Bind-Mount (dann knotenfeste Platzierung über `BACKEND_PLACEMENT`). Keine Knotenbindung nötig.
 - **Härtung**: `read_only: true` mit `tmpfs /tmp`, Benutzer uid 10001 (aus dem Image). Keine veröffentlichten Ports; der Proxy erreicht `http://backend:8080` über das Overlay-Netz `PROXY_NETWORK`.
 - **Replikate**: Standard 1. MariaDB erlaubt mehrere; der Erinnerungs-Scheduler nutzt eine Lease. Eine globale `auth_lock`-Serialisierung begrenzt den Durchsatz der Anmeldung (bekannt, `STATUS.md`).
 

@@ -1,8 +1,26 @@
 # syntax=docker/dockerfile:1
 # Multi-stage build for the Timetrack backend (Swift/Vapor), linux/arm64 and linux/amd64.
 # Build:  docker buildx build --platform linux/amd64,linux/arm64 .
+# With the PWA: add --build-context pwa-src=../timetrack-pwa (see the pwa-src stage).
 
 ARG SWIFT_VERSION=6.3
+ARG NODE_VERSION=26.5.0
+
+# Build context of the PWA (static SvelteKit app, separate repository). Default: empty, so a plain
+# `docker build .` still works and /srv/pwa stays empty (development mounts deploy/pwa-static there).
+# Image with the PWA:  docker build --build-context pwa-src=../timetrack-pwa --build-arg PWA_REVISION=<sha> .
+FROM scratch AS pwa-src
+
+# The static output is platform independent, so this stage always runs natively on the builder
+# (no QEMU for multi-arch builds). Without a package.json in the context it produces an empty directory.
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine AS pwa-build
+WORKDIR /src
+# The PWA repository has no .dockerignore: copy everything except dependencies and build output, so a local
+# checkout with node_modules / .svelte-kit / build is neither read nor overwritten.
+RUN --mount=type=bind,from=pwa-src,source=.,target=/ctx \
+    tar -C /ctx --exclude=./node_modules --exclude=./.git --exclude=./.svelte-kit --exclude=./build \
+        --exclude=./test-results -cf - . | tar -C /src -xf - \
+    && if [ -f package.json ]; then npm ci && npm run build; else mkdir -p build; fi
 
 # Dependency resolution only fetches git sources (architecture independent). It runs on the
 # native builder platform because `swift package resolve` crashes under QEMU emulation
@@ -34,6 +52,9 @@ RUN if [ "$QEMU_LIMIT" = "1" ]; then LIMIT="taskset -c 0-1"; JOBS="-j 2"; else L
     && (find "$(swift build -c release --show-bin-path)" -maxdepth 1 -name '*.resources' -exec cp -R {} /staging/ \;)
 
 FROM swift:${SWIFT_VERSION}-noble-slim AS runtime
+# Revision of the PWA checkout built into /srv/pwa (empty when built without the pwa-src context).
+ARG PWA_REVISION=""
+LABEL org.opencontainers.image.pwa.revision="${PWA_REVISION}"
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates libsqlite3-0 tzdata curl \
     && rm -rf /var/lib/apt/lists/* \
@@ -44,11 +65,13 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY --from=build --chown=timetrack:timetrack /staging/ /app/
+# Built PWA (static files, no Node at runtime), served by the backend (PWA_STATIC_DIR).
+COPY --from=pwa-build --chown=timetrack:timetrack /src/build /srv/pwa
 # Translates VAR_FILE (Docker/Swarm secrets) into VAR, then execs /app/App (scripts/docker-entrypoint.sh).
 COPY --chown=timetrack:timetrack --chmod=0755 scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
 
 USER timetrack:timetrack
-ENV HOST=0.0.0.0 PORT=8080 SQLITE_PATH=/data/timetrack.sqlite
+ENV HOST=0.0.0.0 PORT=8080 SQLITE_PATH=/data/timetrack.sqlite PWA_STATIC_DIR=/srv/pwa
 EXPOSE 8080
 VOLUME ["/data"]
 HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=3 \

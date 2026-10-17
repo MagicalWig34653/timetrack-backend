@@ -32,3 +32,5 @@ Befehle und Konfiguration: `../EINRICHTUNG.md`, Testdienste: `../docs/TESTUMGEBU
 
 Ziele: Linux amd64/arm64, MariaDB empfohlen, statische PWA ohne Node-Laufzeit. Entwurf: `../docs/ARCHITEKTUR.md`.
 Reverse Proxy, Domains und TLS stellt der Betreiber; das Projekt provisioniert sie nicht.
+
+Produktions-Stack (`swarm/`): ohne Volumes und ohne Knotenbindung; die PWA ist im Image (Dockerfile, Build-Kontext `pwa-src`), Dateien liegen in der Datenbank. Die Entwicklungs-Compose-Umgebung bindet weiterhin `pwa-static/` bzw. `pwa-empty/` nach `/srv/pwa` ein (überlagert die PWA im Image).

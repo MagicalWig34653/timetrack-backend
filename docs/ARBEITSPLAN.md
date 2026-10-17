@@ -249,6 +249,12 @@ Claude-Agent in getrennten Worktrees je Repo (Branches `w1-ci-pages`, `w1-ci`); 
 | --- | --- | --- | --- | --- | --- |
 | D3 | Abgleich aller Dokumente in den drei Repos mit dem tatsächlichen Stand (STATUS, ARBEITSPLAN, UMSETZUNG, READMEs, Agent-Einstiege, LIZENZEN, Links, Personenbezug) | Claude-Agent | – (nicht gezählt, keine Punktschätzung) | integriert; Belege und Unsicherheiten `handoffs/D3.md`; Zahlen nicht neu gemessen | W1, D2 |
 
+## D4 – PWA im Image, Stack ohne Volumes (17.10.2026)
+
+| ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
+| --- | --- | --- | --- | --- | --- |
+| D4 | Dockerfile baut die PWA (Build-Kontext `pwa-src`), Docker-Workflow mit zweitem Checkout, Smoke-Test `EXPECT_PWA`, Stack ohne Volumes und Knotenbindung, Dokumentation | Claude-Agent | – (nicht gezählt) | umgesetzt, Lead-Prüfung offen; Belege `handoffs/D4.md` | D2, W1 |
+
 ## Veröffentlichung und Historienbereinigung (17.10.2026)
 
 Am 17.10.2026 wurden die drei Repositories öffentlich auf GitHub veröffentlicht. Vorher wurde die Git-Historie aller drei Repos von persönlichen Angaben bereinigt (umgeschrieben); dabei änderten sich alle Commit-Hashes. Die unbereinigten Originale liegen als lokale Sicherungen außerhalb der Repos (Verzeichnisse `_old-repos/` und `_repo-backups-before-scrub/` neben den Arbeitsordnern; das Austauschskript liegt in `_publish/`). Sie dürfen nie in ein öffentliches Repo gelangen. Seither laufen die Workflows (W1) auf GitHub; Dependabot-Pull-Requests sind offen. Zugehörige Folgeänderungen: Platzhalter statt persönlicher Domain/Kennungen im Backend-Repo (`docs/README.md`, Abschnitt „Namensgebung und Kennungen“), Vereinfachung der Website-Schwärzungsprüfungen (`492acdc`, nach der Bereinigung), TestFlight-Skript im Apple-Repo.

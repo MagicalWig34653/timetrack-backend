@@ -188,6 +188,9 @@ npm run test:e2e:pwa     # baut die PWA, Spec-Satz für den Produktionsbuild (Ma
 ```
 
 Quelle: `package.json` des PWA-Repos; Details und Voraussetzungen (z. B. gebautes Backend für die Echt-E2E) stehen dort.
+Image mit eingebauter PWA lokal bauen (Produktionsweg, Node nur im Build):
+`docker build --build-context pwa-src=../timetrack-pwa -t timetrack-backend:local .` (optional `--build-arg PWA_REVISION=$(git -C ../timetrack-pwa rev-parse HEAD)`).
+Ohne `--build-context` entsteht wie bisher ein Image mit leerem `/srv/pwa`.
 Die PWA wird produktiv nicht mit Node betrieben: das Backend liefert `build/` über `PWA_STATIC_DIR` aus; im Container
 über `PWA_STATIC_HOST_DIR` (Standard `./deploy/pwa-empty`, Beispiel `../timetrack-pwa/build`).
 
