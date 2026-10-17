@@ -39,6 +39,24 @@ Gehe zuerst diese Reihenfolge durch: (1) `/ready` aufrufen, (2) Logs von Migrati
 
 Weitere Hintergründe und Checklisten: [Deployment-Anleitung](../DEPLOYMENT.md), [Betrieb und Backup](../BETRIEB.md).
 
+## E-Mail kommt nicht an
+
+Öffne als Admin Verwaltung, E-Mail und wähle „Verbindung prüfen“. Der Schritt, der rot wird, zeigt die Ursache und was zu tun ist. Ohne Browser: `POST /api/v1/admin/mail/check` (Details im [API-Vertrag](../../contracts/openapi.yaml)).
+
+| Symptom | Fehlgeschlagener Schritt | Abhilfe |
+| --- | --- | --- |
+| „Der Servername … ist unbekannt“ | Servername auflösen | `SMTP_HOST` prüfen; im Docker-Netz muss ein Dienstname im selben Netzwerk liegen wie Timetrack. |
+| „Der Server nimmt auf Port … keine Verbindungen an“ | Verbindung aufbauen | `SMTP_PORT` prüfen, läuft der Mailserver? |
+| „Der Server antwortet nicht“ (Zeitüberschreitung) | Verbindung aufbauen / Verschlüsselung | Firewall blockiert ausgehend (Port 25 sperren viele Anbieter, nimm 587 oder 465) oder falscher Modus: 465 braucht `SMTP_TLS=implicit`, 587 `starttls`. |
+| „Der Server bietet STARTTLS nicht an“ | Verschlüsselung | Anderen Port wählen (587) oder bei 465 `SMTP_TLS=implicit`. Timetrack sendet nie unverschlüsselt (außer `off` für Loopback-Tests). |
+| „Zertifikat … abgelaufen“ | Verschlüsselung | Zertifikat beim Mailanbieter erneuern lassen. |
+| „Zertifikat gilt für …, aber SMTP_HOST ist …“ | Verschlüsselung | `SMTP_HOST` auf genau den Namen setzen, für den das Zertifikat gilt (keine IP-Adresse). |
+| „Dem Zertifikat … wird nicht vertraut“ | Verschlüsselung | Zertifikat einer öffentlichen Zertifizierungsstelle verwenden; selbst signierte Zertifikate werden nicht akzeptiert. |
+| „Die Anmeldung wurde abgelehnt“ | Anmeldung | `SMTP_USER`/`SMTP_PASSWORD(_FILE)` prüfen; viele Anbieter verlangen ein App-Passwort. |
+| „Der Server verlangt eine Anmeldung“ / „lehnt die Absenderadresse ab“ | Absender prüfen | `SMTP_USER` und `SMTP_PASSWORD` setzen; `SMTP_FROM` muss zum Konto gehören oder beim Anbieter freigegeben sein. |
+| Prüfung grün, Mail landet im Spam | – | SPF, DKIM und DMARC der Absenderdomain beim Anbieter einrichten; Absenderdomain sollte zu `PUBLIC_BASE_URL` passen. |
+| Testmail: „Relay verweigert“ / „nimmt die Empfängeradresse nicht an“ | (Testmail) | Der Mailserver leitet nur für angemeldete Konten oder eigene Domains weiter: Anmeldung einrichten. |
+
 ## „Zu viele Versuche. Bitte warte einen Moment."
 
 Das ist ein HTTP 429. Es kommt entweder vom **Backend** (nur bei Anmelde-, Registrierungs- und Wiederherstellungsaufrufen; im Log steht eine Warnung `rate limit …`, und ohne `TRUSTED_PROXY_CIDRS` teilen sich alle Clients hinter dem Proxy einen Zähler) oder vom **Reverse Proxy** (zu niedrige Ratenbegrenzung, siehe [Reverse Proxy](proxy.md)). Prüfe zuerst das Backend-Log: Ohne `rate limit`-Zeile ist es der Proxy.

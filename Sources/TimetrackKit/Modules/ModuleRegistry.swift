@@ -60,7 +60,7 @@ enum ModuleMessages {
         switch code {
         case "module_disabled": "Dieses Modul ist deaktiviert."
         case "module_locked": "Dieses Modul ist durch den Server gesperrt."
-        default: nil
+        default: MailDiagnosis.messages[code]
         }
     }
 }

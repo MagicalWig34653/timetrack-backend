@@ -5,7 +5,10 @@ import NIOSSL
 import NIOTLS
 
 // Errors deliberately exclude server responses, addresses, credentials and message content.
-enum SMTPError: Error { case invalidMessage, protocolFailure, deliveryFailed, timeout }
+enum SMTPError: Error { case invalidMessage, protocolFailure, deliveryFailed, timeout, failed(MailFailureKind) }
+
+/// Coarse failure classes (ADR-0022). They carry no server text, so they are safe to map to user messages.
+enum MailFailureKind: String, Sendable { case connect, tls, auth, sender, recipient, timeout, other }
 
 struct RecoveryMailText: Decodable, Sendable {
     let subject: String
@@ -35,7 +38,18 @@ public struct SMTPMailSender: MailSender {
     }
 
     public func sendCode(_ code: String, to address: String) async throws {
-        let message = try makeMessage(code: code, address: address)
+        do { try await deliver(try makeMessage(code: code, address: address), to: address) }
+        catch { throw SMTPError.deliveryFailed }
+    }
+
+    /// Sends the fixed test message of the mail diagnosis (ADR-0022); the failure class is the only detail that leaves.
+    func sendTest(subject: String, body: String, to address: String) async throws {
+        let message = try Self.message(configuration: configuration, address: address, subject: subject, body: body)
+        try await deliver(message, to: address)
+    }
+
+    /// Throws `SMTPError.failed(kind)` for every delivery problem.
+    private func deliver(_ message: String, to address: String) async throws {
         let loop = group.next()
         let config = configuration, tls = tlsContext, timeout = timeout
         do {
@@ -57,13 +71,14 @@ public struct SMTPMailSender: MailSender {
                 try await completion.futureResult.get()
                 try? await channel.close().get()
             } catch {
-                completion.fail(SMTPError.deliveryFailed)
+                completion.fail(SMTPError.failed(.other))
                 try? await channel.close().get()
                 throw error
             }
         } catch {
-            // NIO/TLS errors may include endpoint details; expose only a fixed diagnostic.
-            throw SMTPError.deliveryFailed
+            // NIO/TLS errors may include endpoint details; expose only a fixed class.
+            if case SMTPError.failed = error { throw error }
+            throw SMTPError.failed(.connect)
         }
     }
 
@@ -237,10 +252,21 @@ final class SMTPDialog: ChannelInboundHandler {
         context.fireUserInboundEventTriggered(event)
     }
 
-    private func fail(_ context: ChannelHandlerContext, _ error: SMTPError = .protocolFailure) {
+    private func fail(_ context: ChannelHandlerContext, _ error: SMTPError = .protocolFailure, tlsError: Bool = false) {
         guard !finished else { return }; finished = true; timer?.cancel()
-        completion.fail(error); context.close(promise: nil)
+        let kind: MailFailureKind
+        if case .timeout = error { kind = .timeout } else if tlsError { kind = .tls } else {
+            switch state {
+            case .startTLS, .handshake: kind = .tls
+            case .auth, .authChallenge: kind = .auth
+            case .mail: kind = .sender
+            case .recipient: kind = .recipient
+            case .ehlo where configuration.tls == .starttls: kind = .tls
+            default: kind = .other
+            }
+        }
+        completion.fail(SMTPError.failed(kind)); context.close(promise: nil)
     }
-    func errorCaught(context: ChannelHandlerContext, error: Error) { fail(context) }
+    func errorCaught(context: ChannelHandlerContext, error: Error) { fail(context, tlsError: error is NIOSSLError || error is BoringSSLError || error is NIOSSLExtraError) }
     func channelInactive(context: ChannelHandlerContext) { fail(context); context.fireChannelInactive() }
 }
