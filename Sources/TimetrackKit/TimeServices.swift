@@ -21,6 +21,7 @@ struct TimeServices: Sendable {
     var absences: AbsenceService { .init(scope: self) }
     var calendar: CalendarService { .init(scope: self) }
     var plans: PlanService { .init(scope: self) }
+    var weeks: TimeWeekService { .init(scope: self) }
     var shares: ShareService { .init(scope: self) }
 
     /// Read-only requests: the session was authenticated by the session middleware in this very request, so no

@@ -59,6 +59,10 @@ Neue Konten sehen auf der Startseite ein Banner zur Einrichtung. In sechs Schrit
 
 **Prüfen:** Die Startseite zeigt dein Soll und deinen Zeitkonto-Stand; du kannst eine Zeit starten.
 
+## Optional: Woche planen und Wochenübersicht
+
+Unter „Woche“ siehst du die Wochenübersicht (Stunden, Saldo, Zeitkonto) und planst im Reiter „Planen“ grob, von wann bis wann du arbeitest (nur bei eingeschaltetem Modul Planung). Der Plan bucht keine Zeit. Beides braucht Backend ab Vertrag v0.17.0.
+
 ## 5. Weitere Personen einladen
 
 Registrierung ist **nur per Einladung** möglich (auch bei OpenID Connect). Als Admin erstellst du unter Einladungen einen Link und gibst ihn der Person weiter. Jede Person bekommt ein eigenes, privates Konto; Planungen teilt sie nur gezielt. Konten verwaltest du unter Admin, Konten (deaktivieren, Rolle, Sitzungen beenden).

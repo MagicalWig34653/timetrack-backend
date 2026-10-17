@@ -24,9 +24,9 @@ struct DayService: Sendable {
     /// Loads the inputs of the day evaluation. With a `window` only rows that can influence those days are read
     /// (segments by start instant with a safety margin for time zone and day-boundary shifts, preferences and
     /// absences by date); without one the complete history is loaded (account balance, exports of long ranges).
-    func snapshot(window: ClosedRange<LocalDate>? = nil) async throws -> TimeEvaluationSnapshot {
+    func snapshot(window: ClosedRange<LocalDate>? = nil, includeSegments: Bool = true) async throws -> TimeEvaluationSnapshot {
         let models = try await scope.models.list().map { try $0.engine() }
-        let segments = try await scope.segments.all(window: window)
+        let segments = includeSegments ? try await scope.segments.all(window: window) : []
         let query = DayPreferenceRecord.query(on: scope.db).filter(\.$accountId == scope.accountId)
         if let window { query.filter(\.$date >= window.lowerBound.description).filter(\.$date <= window.upperBound.description) }
         let rows = try await query.all()

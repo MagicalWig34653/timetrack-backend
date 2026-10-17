@@ -87,6 +87,14 @@ func registerPlanningRoutes(_ app: Application, auth: AuthService) {
         let day = try date(req); let input = try timeDecode(PlanDayInput.self, request: req)
         return try await run(req) { try timeResponse(await $0.plans.put(day, input)) }
     }
+    @Sendable func week(_ req: Request) throws -> ISOWeek { try ISOWeek(req.parameters.get("week") ?? "") }
+    api.get("plan", "weeks", ":week") { req async throws -> Response in
+        let value = try week(req); return try await runRead(req) { try timeResponse(await $0.plans.week(value)) }
+    }
+    api.put("plan", "weeks", ":week") { req async throws -> Response in
+        let value = try week(req); let input = try timeDecode(PlanWeekInput.self, request: req)
+        return try await run(req) { try timeResponse(await $0.plans.putWeek(value, input)) }
+    }
     api.delete("plan", "days", ":date") { req async throws -> Response in
         let day = try date(req); return try await run(req) { scope in try await empty { try await scope.plans.delete(day) } }
     }

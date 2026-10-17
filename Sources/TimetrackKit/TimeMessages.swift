@@ -18,6 +18,10 @@ enum TimeMessages {
         "share_exists": "Für dieses Konto besteht bereits eine Freigabe.",
         "cannot_share_with_self": "Eine Freigabe an das eigene Konto ist nicht möglich.",
         "recipient_not_found": "Das Empfängerkonto wurde nicht gefunden.",
+        "plan_time_invalid": "Bitte gib Beginn und Ende als Uhrzeit (HH:MM) an; das Ende muss nach dem Beginn liegen.",
+        "plan_break_invalid": "Die geplante Pause muss zwischen 0 und 600 Minuten liegen und setzt Beginn und Ende voraus.",
+        "invalid_week": "Die Kalenderwoche ist ungültig (Beispiel: 2026-W44).",
+        "week_day_invalid": "Die Tage der Woche sind ungültig: je Datum höchstens ein Eintrag, alle innerhalb der Woche.",
         "suggestion_resolved": "Dieser Vorschlag wurde bereits bearbeitet.",
     ]
 }

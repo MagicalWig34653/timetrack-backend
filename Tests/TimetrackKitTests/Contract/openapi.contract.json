@@ -9,6 +9,17 @@
      "format": "uuid",
      "type": "string"
     }
+   },
+   "IsoWeek": {
+    "description": "ISO-Woche, z. B. 2026-W44 (Montag bis Sonntag)",
+    "in": "path",
+    "name": "isoWeek",
+    "required": true,
+    "schema": {
+     "example": "2026-W44",
+     "pattern": "^[0-9]{4}-W[0-9]{2}$",
+     "type": "string"
+    }
    }
   },
   "responses": {
@@ -1725,6 +1736,14 @@
        "date": {
         "format": "date",
         "type": "string"
+       },
+       "plannedSeconds": {
+        "description": "Ende − Beginn − Pause, nie negativ; null ohne Zeiten.",
+        "readOnly": true,
+        "type": [
+         "integer",
+         "null"
+        ]
        }
       },
       "required": [
@@ -1759,10 +1778,178 @@
        "string",
        "null"
       ]
+     },
+     "plannedBreakMinutes": {
+      "description": "Geplante Pause; nur zusammen mit Zeiten.",
+      "maximum": 600,
+      "minimum": 0,
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "plannedEnd": {
+      "description": "Geplantes Ende, lokale Uhrzeit HH:mm am selben Tag.",
+      "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "plannedStart": {
+      "description": "Geplanter Beginn, lokale Uhrzeit HH:mm; zusammen mit plannedEnd, kleiner als plannedEnd. Bei mode off ignoriert.",
+      "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+      "type": [
+       "string",
+       "null"
+      ]
      }
     },
     "required": [
      "mode"
+    ],
+    "type": "object"
+   },
+   "PlanWeek": {
+    "properties": {
+     "days": {
+      "items": {
+       "$ref": "#/components/schemas/PlanWeekDay"
+      },
+      "maxItems": 7,
+      "minItems": 7,
+      "type": "array"
+     },
+     "from": {
+      "format": "date",
+      "type": "string"
+     },
+     "to": {
+      "format": "date",
+      "type": "string"
+     },
+     "totals": {
+      "properties": {
+       "differenceSeconds": {
+        "description": "plannedSeconds − targetSeconds",
+        "type": "integer"
+       },
+       "plannedSeconds": {
+        "type": "integer"
+       },
+       "targetSeconds": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "targetSeconds",
+       "plannedSeconds",
+       "differenceSeconds"
+      ],
+      "type": "object"
+     },
+     "week": {
+      "example": "2026-W44",
+      "type": "string"
+     }
+    },
+    "required": [
+     "week",
+     "from",
+     "to",
+     "days",
+     "totals"
+    ],
+    "type": "object"
+   },
+   "PlanWeekDay": {
+    "properties": {
+     "blockedBy": {
+      "enum": [
+       "holiday",
+       "vacation",
+       "sick",
+       "excused",
+       null
+      ],
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "date": {
+      "format": "date",
+      "type": "string"
+     },
+     "plan": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/PlanDay"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "plannedSeconds": {
+      "description": "Effektiv: 0 bei blockiertem Tag, null ohne Plan oder ohne Zeiten.",
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "targetSeconds": {
+      "type": "integer"
+     },
+     "weekday": {
+      "description": "ISO, Montag = 1",
+      "maximum": 7,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "date",
+     "weekday",
+     "targetSeconds",
+     "plannedSeconds",
+     "blockedBy",
+     "plan"
+    ],
+    "type": "object"
+   },
+   "PlanWeekInput": {
+    "properties": {
+     "days": {
+      "items": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/PlanDayInput"
+        },
+        {
+         "properties": {
+          "date": {
+           "format": "date",
+           "type": "string"
+          }
+         },
+         "required": [
+          "date"
+         ],
+         "type": "object"
+        }
+       ]
+      },
+      "maxItems": 7,
+      "type": "array"
+     },
+     "replace": {
+      "default": false,
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "days"
     ],
     "type": "object"
    },
@@ -2482,6 +2669,30 @@
           false
          ],
          "type": "string"
+        },
+        "plannedBreakMinutes": {
+         "type": [
+          "integer",
+          "null"
+         ]
+        },
+        "plannedEnd": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "plannedSeconds": {
+         "type": [
+          "integer",
+          "null"
+         ]
+        },
+        "plannedStart": {
+         "type": [
+          "string",
+          "null"
+         ]
         }
        },
        "required": [
@@ -2742,6 +2953,338 @@
      "openingSeconds",
      "adjustmentSeconds",
      "provisional"
+    ],
+    "type": "object"
+   },
+   "TimeWeek": {
+    "properties": {
+     "days": {
+      "items": {
+       "$ref": "#/components/schemas/TimeWeekDay"
+      },
+      "maxItems": 7,
+      "minItems": 7,
+      "type": "array"
+     },
+     "from": {
+      "format": "date",
+      "type": "string"
+     },
+     "summary": {
+      "properties": {
+       "accountBalanceAfterSeconds": {
+        "type": "integer"
+       },
+       "accountBalanceAsOf": {
+        "description": "Sonntag der Woche, höchstens heute",
+        "format": "date",
+        "type": "string"
+       },
+       "accountBalanceBeforeSeconds": {
+        "type": "integer"
+       },
+       "averageEnd": {
+        "description": "HH:mm lokal",
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "averageStart": {
+        "description": "HH:mm lokal",
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "balanceSeconds": {
+        "description": "Summe der Tagessalden bis heute",
+        "type": "integer"
+       },
+       "breakSeconds": {
+        "type": "integer"
+       },
+       "creditSeconds": {
+        "type": "integer"
+       },
+       "holidayDays": {
+        "type": "integer"
+       },
+       "longestDay": {
+        "oneOf": [
+         {
+          "properties": {
+           "date": {
+            "format": "date",
+            "type": "string"
+           },
+           "seconds": {
+            "type": "integer"
+           }
+          },
+          "required": [
+           "date",
+           "seconds"
+          ],
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "plannedSeconds": {
+        "description": "null ohne jeden geplanten Tag",
+        "type": [
+         "integer",
+         "null"
+        ]
+       },
+       "provisional": {
+        "type": "boolean"
+       },
+       "schoolDays": {
+        "type": "integer"
+       },
+       "sickDays": {
+        "type": "integer"
+       },
+       "targetSeconds": {
+        "type": "integer"
+       },
+       "targetToDateSeconds": {
+        "description": "Soll der Tage bis einschließlich heute",
+        "type": "integer"
+       },
+       "travelSeconds": {
+        "type": "integer"
+       },
+       "vacationDays": {
+        "description": "halbe Tage zählen 0.5",
+        "type": "number"
+       },
+       "workDays": {
+        "description": "Tage mit bewerteter Arbeitszeit",
+        "type": "integer"
+       },
+       "workSeconds": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "targetSeconds",
+       "targetToDateSeconds",
+       "workSeconds",
+       "creditSeconds",
+       "balanceSeconds",
+       "plannedSeconds",
+       "accountBalanceBeforeSeconds",
+       "accountBalanceAfterSeconds",
+       "accountBalanceAsOf",
+       "vacationDays",
+       "sickDays",
+       "schoolDays",
+       "holidayDays",
+       "workDays",
+       "travelSeconds",
+       "breakSeconds",
+       "averageStart",
+       "averageEnd",
+       "longestDay",
+       "provisional"
+      ],
+      "type": "object"
+     },
+     "to": {
+      "format": "date",
+      "type": "string"
+     },
+     "week": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "week",
+     "from",
+     "to",
+     "days",
+     "summary"
+    ],
+    "type": "object"
+   },
+   "TimeWeekDay": {
+    "properties": {
+     "absences": {
+      "items": {
+       "properties": {
+        "halfDay": {
+         "type": "boolean"
+        },
+        "kind": {
+         "enum": [
+          "vacation",
+          "sick",
+          "excused",
+          "other"
+         ],
+         "type": "string"
+        },
+        "status": {
+         "enum": [
+          "planned",
+          "requested",
+          "approved",
+          "rejected",
+          "cancelled",
+          "taken"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "kind",
+        "status",
+        "halfDay"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "balanceSeconds": {
+      "description": "work + credit − target (deltaSeconds); null nach heute",
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "breakDeductionSeconds": {
+      "description": "abgezogene feste Pausen des Arbeitsmodells",
+      "type": "integer"
+     },
+     "breakSeconds": {
+      "description": "tatsächliche Lücken zwischen den Abschnitten des Tages",
+      "type": "integer"
+     },
+     "creditSeconds": {
+      "type": "integer"
+     },
+     "date": {
+      "format": "date",
+      "type": "string"
+     },
+     "firstStart": {
+      "format": "date-time",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "isFuture": {
+      "type": "boolean"
+     },
+     "isToday": {
+      "type": "boolean"
+     },
+     "lastEnd": {
+      "format": "date-time",
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "mark": {
+      "description": "off = kein Arbeitstag und nichts gebucht (auch Abwesenheit am Wochenende).",
+      "enum": [
+       "work",
+       "school",
+       "vacation",
+       "sick",
+       "holiday",
+       "excused",
+       false
+      ],
+      "type": "string"
+     },
+     "markSource": {
+      "enum": [
+       "none",
+       "explicit",
+       "absence",
+       "holiday"
+      ],
+      "type": "string"
+     },
+     "planMode": {
+      "enum": [
+       "office",
+       "home",
+       "customer",
+       "school",
+       false,
+       null
+      ],
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "plannedSeconds": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "provisional": {
+      "type": "boolean"
+     },
+     "rawWorkSeconds": {
+      "type": "integer"
+     },
+     "schoolSeconds": {
+      "type": "integer"
+     },
+     "segmentsCount": {
+      "type": "integer"
+     },
+     "targetSeconds": {
+      "type": "integer"
+     },
+     "travelSeconds": {
+      "type": "integer"
+     },
+     "weekday": {
+      "maximum": 7,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "workSeconds": {
+      "description": "bewertete Arbeitszeit (evaluatedWorkSeconds)",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "date",
+     "weekday",
+     "mark",
+     "markSource",
+     "targetSeconds",
+     "plannedSeconds",
+     "planMode",
+     "workSeconds",
+     "creditSeconds",
+     "rawWorkSeconds",
+     "breakSeconds",
+     "breakDeductionSeconds",
+     "travelSeconds",
+     "schoolSeconds",
+     "balanceSeconds",
+     "firstStart",
+     "lastEnd",
+     "segmentsCount",
+     "absences",
+     "provisional",
+     "isToday",
+     "isFuture"
     ],
     "type": "object"
    },
@@ -3226,9 +3769,9 @@
   }
  },
  "info": {
-  "description": "Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und\nPWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).\nAnnahmen (ADR-0003): Basispfad /api/v1; Sitzung per HttpOnly-Cookie `tt_session`;\nschreibende Requests mit Sitzung senden Header `X-CSRF-Token` (Wert aus GET /api/v1/auth/session).\nWebAuthn-Optionen/-Antworten folgen den JSON-Formen der W3C-Spezifikation (base64url-Felder).\nFehler immer als application/json `{ \"error\": { \"code\": string, \"message\": string } }`.\nAntworten verraten nie, ob eine Kontoadresse existiert.\nError codes (English, stable): bad_request, unauthorized, forbidden, not_found, conflict, handle_taken,\nlast_passkey, too_many_requests, not_implemented, invalid_code, csrf_invalid,\nrecovery_session_restricted, reauth_required, not_ready.\nDecisions (Lead, 14.10.2026): (1) register/options returns 409 handle_taken for duplicate handle and 400 bad_request\nfor validation errors. (2) Adding/revoking passkeys and changing recovery settings require a \"fresh\" session\n(login within the last 10 minutes) or a recovery session; otherwise 403 reauth_required, and the client signs in again.\n(3) A successful POST /me/passkeys/verify inside a recovery session upgrades it to a normal session (recovery=false).\n(4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form\n`<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.\n(6) No session listing endpoint in stage 1; only revoking other sessions.\nv0.16.0: Arbeitsmodell-Korrektur (M1, ADR-0004-Nachtrag, additiv): PUT /work-models/{id} ersetzt alle bearbeitbaren Felder einer Version (optional If-Match mit `version`, sonst 412 stale_version; 409 model_overlap bei Überschneidung; die Vorversion wird am Vortag von validFrom neu begrenzt), POST /work-models/{id}/preview liefert dieselbe Prüfung als Vorschau ohne Speichern (Zeitkonto vorher/nachher, betroffene Tage, geänderte Felder). WorkModel.version (additiv). Auswertungen werden beim Lesen berechnet; die Korrektur ändert sie bewusst nur auf ausdrücklichen Nutzerwunsch.\nv0.15.0: Leuchteffekt und weitere Akzentfarben (G1, ADR-0020 Nachtrag, additiv): Preferences.glow (off|subtle|medium|strong, Standard subtle, auch bei zuvor gespeicherten Konten) ist per PATCH /me/preferences schreibbar; AccentId um indigo, navy, purple, magenta, crimson, forest, petrol, bronze erweitert (dunkle Töne mit weißer Schrift). Ältere Clients ignorieren das neue Feld; unbekannte Akzent-IDs zeigen sie als Blau.\nv0.14.0: Darstellung je Konto (P2, ADR-0020, additiv): GET/PATCH /me/preferences (accent, accentCustomHex, colorScheme, updatedAt; Standard blue/system ohne gespeicherte Zeile; Merge-Patch, unbekannte Schlüssel 400, Body über 1 KiB 413) und Account.preferences in der Sitzungsantwort; GET /me/export enthält preferences.json. App-Icon und Transparenz bleiben gerätelokal. Keine Modulbindung; Recovery-Sitzungen erhalten 403.\nv0.13.0: Profil und Einrichtung (P1, ADR-0019, additiv): GET/PATCH /me/profile (Anzeigename; Handle nur lesend), E-Mail-Adresse ändern per Bestätigungscode (PUT /me/profile/email, POST /me/profile/email/verify, DELETE /me/profile/email; frische Sitzung, 501 ohne SMTP, 409 email_taken, Versuchsgrenze 5, Gültigkeit 10 Minuten, Rate-Limit wie Recovery-E-Mail) und der Einrichtungsmerker PUT /me/onboarding (pending|completed|skipped). Account.onboardingState in der Sitzungsantwort. Keine Modulbindung; Recovery-Sitzungen erhalten 403.\nv0.11.0: Kontenverwaltung und Datenschutz (ADR-0016, additiv): Admin-API /admin/accounts (Liste, Deaktivieren/Reaktivieren, Rollenwechsel, Sitzungen widerrufen, Löschen), GET /me/export (ZIP der eigenen Daten), DELETE /me (Selbstlöschung). Fehlercodes: self_lockout (409), last_admin (409), confirmation_mismatch (400), account_deletion_incomplete (503). Löschen/Rollenwechsel verlangen eine frische Sitzung (403 reauth_required). Die Endpunkte sind keinem Modul zugeordnet.\nv0.10.4: GET /.well-known/apple-app-site-association (additiv, ADR-0015; 404 ohne APPLE_APP_IDS). Native Apple-Passkeys melden den Origin `https://<rpId>` (ohne Port); das Backend akzeptiert ihn zusätzlich zu WEBAUTHN_ORIGIN (exakter Abgleich, RP-ID-Hash unverändert), sofern die RP-ID eine echte Domain ist.\nv0.10.3: ImportResult.warnings (additiv, wie in der Vorschau); school_on_holiday für Schulzeilen an Feiertagen neben holiday_times_discarded für Arbeitszeilen.\nv0.10.2: Import-Profil: holidayTimes/partialCredit, Warnungen holiday_times_discarded/credit_partial_as_work (zusammengefasst mit count), Vorschau sheetBalanceUpToTodaySeconds/sheetBalanceFutureSeconds/firstContentDate (Befund L20: Abweichung Tabelle/App erklärt sich aus Feiertagszeilen, Teilgutschriften, Modellbeginn und Zeilen nach heute).\nv0.10.1: Klarstellungen C21: rules leer = keine Regeln; Vorschau-warnings (pause_exceeds_day); Zeilenfehler planning_disabled (Abwesenheits-/Feiertagsaktionen bei ausgeschaltetem Modul planning, Arbeit/Schule bleiben importierbar); ImportResult.conflictItems; Notizen über 500 bzw. Feiertagsnamen über 80 Zeichen → note_too_long (keine stille Kürzung). Export worktime-xlsx ist kein verlustfreies Sicherungsformat (siehe docs/handoffs/C22.md).\nv0.10.0: Arbeitszeit-Tabelle als Import-/Exportprofil und Typ excused (ADR-0013).\nv0.9.0: Modulschalter (ADR-0012). Abgeschaltete Module antworten 404 mit Code module_disabled, Änderungen an gesperrten Modulen 409 module_locked. Betreiber-Override per Umgebung MODULES_DISABLED.\nv0.8.1: C19-Review-Fixes: DELETE /files/{id} → 503 storage_unavailable, wenn das Objekt nicht entfernt werden konnte (Datensatz bleibt mit Retry-Marker); POST /oauth/token → 429 temporarily_unavailable bei Überschreitung des Limits; Push-Endpunkte nur https:443 auf erlaubten Push-Diensten (Apple/Google/Mozilla/Microsoft), sonst 400 bad_request; Datums- und Zahlenbereiche strikt validiert (Int.min/Int.max → 400).\nv0.8.0: Hinweise/Web Push (ADR-0010). Push-Nutzlast ohne Details, Ruhezeiten stellen Push zurück; REST-Fehlercodes: push_unavailable (501), too_many_subscriptions (409).\nv0.7.0: MCP/OAuth/persönliche Tokens (ADR-0009). Fehlercodes REST: reauth_required, insufficient_scope; OAuth-Endpunkte folgen RFC 6749/7009/7591/8414/9728 (Fehler als JSON `error`/`error_description`).\nv0.6.0: Berichtsheft (ADR-0008). Fehlercodes: stale_version (412), not_found; Quellen mit fileId benötigen eine eigene Datei (404 sonst).\nv0.5.1: Speicher: 503 storage_unavailable (Backend einer bestehenden Datei nicht konfiguriert), 500 storage_corrupt, 409 conflict bei mehr als 20 Anhängen je Abwesenheit; PUT /admin/storage ersetzt die gesamte Konfiguration (`s3: null` löscht S3-Konfiguration und Secret, `s3` ohne secretAccessKey behält das gespeicherte Secret). OIDC: für purpose=link führen Fehler nach `/settings/identities?oidc_error=<code>`; 'frische Sitzung nötig' ist 403 reauth_required; ungültiges inviteToken bei start = 404; pendingId gilt 10 Minuten (danach 404); der Passkey-Widerruf zählt externe Identitäten als Anmeldemethode.\nv0.5.0: OIDC (optional) siehe ADR-0007. Konfiguration: OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET (optional), OIDC_NAME, OIDC_SCOPES (Standard `openid email profile`). Kein Pflicht-Authentik; Registrierung weiter nur mit Einladung.\nv0.4.1: Import-Ergänzungen (allowOvernight, errorCount, rolledBack, Fehlercodes unknown_kind/note_too_long/too_many_rows; rollback_conflict liefert conflicts auch oben; je Konto max. 20 offene Importe, 50 Vorlagen).\nv0.4.0: Export/Import/Dateispeicher, siehe docs/decisions/ADR-0006. Fehlercodes: file_too_large (413), unsupported_type (415), import_not_ready, import_has_errors, rollback_conflict.\nv0.3.2: Tagesmarkierung Feiertag hat Vorrang vor Urlaub am selben Tag; Krankheit wirkt nur mit Status approved/taken; Freigabe an sich selbst 400 `cannot_share_with_self`; DayEvaluation.markSource/targetOverrideSeconds.\nStage 3 (v0.3.0/0.3.1): see docs/decisions/ADR-0005 (Entscheidungen 0.3.1: GET vacation/settings liefert Standardwerte mit configured=false; Übertrag je Jahr; Abwesenheiten rejected/cancelled blockieren keine Überlappung\nund haben countedHalfDays 0, countedHalfDays nur für kind=vacation; doppelte Freigabe 409 share_exists; Freigabe an sich selbst 400; Urlaubsansicht nur approved/taken; actual nur Tage mit Arbeitszeit;\nmaximale Zeiträume für absences/plan/shared view 366 Tage, time/days 93 Tage, sonst 400 range_too_large). Half days as integers (30 days = 60). Sick absences and documents are never part of shares.\nStage 2 decisions (v0.2.1): a work model `validFrom` may lie in the past but must be later than the previous version's `validFrom` (else 409 model_overlap);\ndays on or after it are then evaluated by the new version (explicit user act). Future days are never `provisional`; today and days with a running segment are.\nA second accept of a suggestion returns 409 `suggestion_resolved`. Further codes: timer_already_running, no_running_timer, segment_overlap, stale_version, model_overlap.\n--- B2 (v0.10.5, additiv; zusammen mit B1 als v0.12.0 ausgeliefert) ---\nv0.10.5 (B2, ADR-0017): POST /api/v1/me/push-subscriptions/replace für `pushsubscriptionchange` (ersetzt ein Abo atomar, behält Id und wartende Pushes). Gleichzeitiges Anlegen desselben Lernfelds liefert 409 `learning_field_exists` statt 500. Kein Schemawechsel; Aufräumjob (`MAINTENANCE_INTERVAL_MINUTES`, CLI `maintenance`) ohne API-Änderung.\n",
+  "description": "Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und\nPWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).\nAnnahmen (ADR-0003): Basispfad /api/v1; Sitzung per HttpOnly-Cookie `tt_session`;\nschreibende Requests mit Sitzung senden Header `X-CSRF-Token` (Wert aus GET /api/v1/auth/session).\nWebAuthn-Optionen/-Antworten folgen den JSON-Formen der W3C-Spezifikation (base64url-Felder).\nFehler immer als application/json `{ \"error\": { \"code\": string, \"message\": string } }`.\nAntworten verraten nie, ob eine Kontoadresse existiert.\nError codes (English, stable): bad_request, unauthorized, forbidden, not_found, conflict, handle_taken,\nlast_passkey, too_many_requests, not_implemented, invalid_code, csrf_invalid,\nrecovery_session_restricted, reauth_required, not_ready.\nDecisions (Lead, 14.10.2026): (1) register/options returns 409 handle_taken for duplicate handle and 400 bad_request\nfor validation errors. (2) Adding/revoking passkeys and changing recovery settings require a \"fresh\" session\n(login within the last 10 minutes) or a recovery session; otherwise 403 reauth_required, and the client signs in again.\n(3) A successful POST /me/passkeys/verify inside a recovery session upgrades it to a normal session (recovery=false).\n(4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form\n`<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.\n(6) No session listing endpoint in stage 1; only revoking other sessions.\nv0.17.0: Wochenplanung und Wochenübersicht (K1, ADR-0021, additiv): PlanDayInput/PlanDay erhalten optional plannedStart/plannedEnd (lokale Uhrzeit \"HH:mm\" in der Zeitzone des Arbeitsmodells; beide oder keine; Beginn < Ende am selben Tag, keine Nachtschicht), plannedBreakMinutes (0..600, nur mit Zeiten) und schreibgeschützt plannedSeconds (Ende − Beginn − Pause, nie negativ; feste Pausen des Arbeitsmodells werden nicht abgezogen); Modus off ignoriert Zeiten. Alte Clients ohne die Felder funktionieren unverändert. Neue Pfade: GET/PUT /plan/weeks/{isoWeek} (Modul planning; PUT höchstens 7 Tage in einer Transaktion, replace=true löscht nicht genannte Tage der Woche; Antwort Soll je Tag aus dem Arbeitsmodell, plannedSeconds, blockedBy bei Feiertag/Abwesenheit, Summen) und GET /time/weeks/{isoWeek} (Kern; Wochenübersicht in einem Aufruf). Die Freigabe plan enthält nun auch die geplanten Zeiten (nie Notiz oder Ort). Neue Fehlercodes (400): plan_time_invalid, plan_break_invalid, invalid_week, week_day_invalid.\nv0.16.0: Arbeitsmodell-Korrektur (M1, ADR-0004-Nachtrag, additiv): PUT /work-models/{id} ersetzt alle bearbeitbaren Felder einer Version (optional If-Match mit `version`, sonst 412 stale_version; 409 model_overlap bei Überschneidung; die Vorversion wird am Vortag von validFrom neu begrenzt), POST /work-models/{id}/preview liefert dieselbe Prüfung als Vorschau ohne Speichern (Zeitkonto vorher/nachher, betroffene Tage, geänderte Felder). WorkModel.version (additiv). Auswertungen werden beim Lesen berechnet; die Korrektur ändert sie bewusst nur auf ausdrücklichen Nutzerwunsch.\nv0.15.0: Leuchteffekt und weitere Akzentfarben (G1, ADR-0020 Nachtrag, additiv): Preferences.glow (off|subtle|medium|strong, Standard subtle, auch bei zuvor gespeicherten Konten) ist per PATCH /me/preferences schreibbar; AccentId um indigo, navy, purple, magenta, crimson, forest, petrol, bronze erweitert (dunkle Töne mit weißer Schrift). Ältere Clients ignorieren das neue Feld; unbekannte Akzent-IDs zeigen sie als Blau.\nv0.14.0: Darstellung je Konto (P2, ADR-0020, additiv): GET/PATCH /me/preferences (accent, accentCustomHex, colorScheme, updatedAt; Standard blue/system ohne gespeicherte Zeile; Merge-Patch, unbekannte Schlüssel 400, Body über 1 KiB 413) und Account.preferences in der Sitzungsantwort; GET /me/export enthält preferences.json. App-Icon und Transparenz bleiben gerätelokal. Keine Modulbindung; Recovery-Sitzungen erhalten 403.\nv0.13.0: Profil und Einrichtung (P1, ADR-0019, additiv): GET/PATCH /me/profile (Anzeigename; Handle nur lesend), E-Mail-Adresse ändern per Bestätigungscode (PUT /me/profile/email, POST /me/profile/email/verify, DELETE /me/profile/email; frische Sitzung, 501 ohne SMTP, 409 email_taken, Versuchsgrenze 5, Gültigkeit 10 Minuten, Rate-Limit wie Recovery-E-Mail) und der Einrichtungsmerker PUT /me/onboarding (pending|completed|skipped). Account.onboardingState in der Sitzungsantwort. Keine Modulbindung; Recovery-Sitzungen erhalten 403.\nv0.11.0: Kontenverwaltung und Datenschutz (ADR-0016, additiv): Admin-API /admin/accounts (Liste, Deaktivieren/Reaktivieren, Rollenwechsel, Sitzungen widerrufen, Löschen), GET /me/export (ZIP der eigenen Daten), DELETE /me (Selbstlöschung). Fehlercodes: self_lockout (409), last_admin (409), confirmation_mismatch (400), account_deletion_incomplete (503). Löschen/Rollenwechsel verlangen eine frische Sitzung (403 reauth_required). Die Endpunkte sind keinem Modul zugeordnet.\nv0.10.4: GET /.well-known/apple-app-site-association (additiv, ADR-0015; 404 ohne APPLE_APP_IDS). Native Apple-Passkeys melden den Origin `https://<rpId>` (ohne Port); das Backend akzeptiert ihn zusätzlich zu WEBAUTHN_ORIGIN (exakter Abgleich, RP-ID-Hash unverändert), sofern die RP-ID eine echte Domain ist.\nv0.10.3: ImportResult.warnings (additiv, wie in der Vorschau); school_on_holiday für Schulzeilen an Feiertagen neben holiday_times_discarded für Arbeitszeilen.\nv0.10.2: Import-Profil: holidayTimes/partialCredit, Warnungen holiday_times_discarded/credit_partial_as_work (zusammengefasst mit count), Vorschau sheetBalanceUpToTodaySeconds/sheetBalanceFutureSeconds/firstContentDate (Befund L20: Abweichung Tabelle/App erklärt sich aus Feiertagszeilen, Teilgutschriften, Modellbeginn und Zeilen nach heute).\nv0.10.1: Klarstellungen C21: rules leer = keine Regeln; Vorschau-warnings (pause_exceeds_day); Zeilenfehler planning_disabled (Abwesenheits-/Feiertagsaktionen bei ausgeschaltetem Modul planning, Arbeit/Schule bleiben importierbar); ImportResult.conflictItems; Notizen über 500 bzw. Feiertagsnamen über 80 Zeichen → note_too_long (keine stille Kürzung). Export worktime-xlsx ist kein verlustfreies Sicherungsformat (siehe docs/handoffs/C22.md).\nv0.10.0: Arbeitszeit-Tabelle als Import-/Exportprofil und Typ excused (ADR-0013).\nv0.9.0: Modulschalter (ADR-0012). Abgeschaltete Module antworten 404 mit Code module_disabled, Änderungen an gesperrten Modulen 409 module_locked. Betreiber-Override per Umgebung MODULES_DISABLED.\nv0.8.1: C19-Review-Fixes: DELETE /files/{id} → 503 storage_unavailable, wenn das Objekt nicht entfernt werden konnte (Datensatz bleibt mit Retry-Marker); POST /oauth/token → 429 temporarily_unavailable bei Überschreitung des Limits; Push-Endpunkte nur https:443 auf erlaubten Push-Diensten (Apple/Google/Mozilla/Microsoft), sonst 400 bad_request; Datums- und Zahlenbereiche strikt validiert (Int.min/Int.max → 400).\nv0.8.0: Hinweise/Web Push (ADR-0010). Push-Nutzlast ohne Details, Ruhezeiten stellen Push zurück; REST-Fehlercodes: push_unavailable (501), too_many_subscriptions (409).\nv0.7.0: MCP/OAuth/persönliche Tokens (ADR-0009). Fehlercodes REST: reauth_required, insufficient_scope; OAuth-Endpunkte folgen RFC 6749/7009/7591/8414/9728 (Fehler als JSON `error`/`error_description`).\nv0.6.0: Berichtsheft (ADR-0008). Fehlercodes: stale_version (412), not_found; Quellen mit fileId benötigen eine eigene Datei (404 sonst).\nv0.5.1: Speicher: 503 storage_unavailable (Backend einer bestehenden Datei nicht konfiguriert), 500 storage_corrupt, 409 conflict bei mehr als 20 Anhängen je Abwesenheit; PUT /admin/storage ersetzt die gesamte Konfiguration (`s3: null` löscht S3-Konfiguration und Secret, `s3` ohne secretAccessKey behält das gespeicherte Secret). OIDC: für purpose=link führen Fehler nach `/settings/identities?oidc_error=<code>`; 'frische Sitzung nötig' ist 403 reauth_required; ungültiges inviteToken bei start = 404; pendingId gilt 10 Minuten (danach 404); der Passkey-Widerruf zählt externe Identitäten als Anmeldemethode.\nv0.5.0: OIDC (optional) siehe ADR-0007. Konfiguration: OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET (optional), OIDC_NAME, OIDC_SCOPES (Standard `openid email profile`). Kein Pflicht-Authentik; Registrierung weiter nur mit Einladung.\nv0.4.1: Import-Ergänzungen (allowOvernight, errorCount, rolledBack, Fehlercodes unknown_kind/note_too_long/too_many_rows; rollback_conflict liefert conflicts auch oben; je Konto max. 20 offene Importe, 50 Vorlagen).\nv0.4.0: Export/Import/Dateispeicher, siehe docs/decisions/ADR-0006. Fehlercodes: file_too_large (413), unsupported_type (415), import_not_ready, import_has_errors, rollback_conflict.\nv0.3.2: Tagesmarkierung Feiertag hat Vorrang vor Urlaub am selben Tag; Krankheit wirkt nur mit Status approved/taken; Freigabe an sich selbst 400 `cannot_share_with_self`; DayEvaluation.markSource/targetOverrideSeconds.\nStage 3 (v0.3.0/0.3.1): see docs/decisions/ADR-0005 (Entscheidungen 0.3.1: GET vacation/settings liefert Standardwerte mit configured=false; Übertrag je Jahr; Abwesenheiten rejected/cancelled blockieren keine Überlappung\nund haben countedHalfDays 0, countedHalfDays nur für kind=vacation; doppelte Freigabe 409 share_exists; Freigabe an sich selbst 400; Urlaubsansicht nur approved/taken; actual nur Tage mit Arbeitszeit;\nmaximale Zeiträume für absences/plan/shared view 366 Tage, time/days 93 Tage, sonst 400 range_too_large). Half days as integers (30 days = 60). Sick absences and documents are never part of shares.\nStage 2 decisions (v0.2.1): a work model `validFrom` may lie in the past but must be later than the previous version's `validFrom` (else 409 model_overlap);\ndays on or after it are then evaluated by the new version (explicit user act). Future days are never `provisional`; today and days with a running segment are.\nA second accept of a suggestion returns 409 `suggestion_resolved`. Further codes: timer_already_running, no_running_timer, segment_overlap, stale_version, model_overlap.\n--- B2 (v0.10.5, additiv; zusammen mit B1 als v0.12.0 ausgeliefert) ---\nv0.10.5 (B2, ADR-0017): POST /api/v1/me/push-subscriptions/replace für `pushsubscriptionchange` (ersetzt ein Abo atomar, behält Id und wartende Pushes). Gleichzeitiges Anlegen desselben Lernfelds liefert 409 `learning_field_exists` statt 500. Kein Schemawechsel; Aufräumjob (`MAINTENANCE_INTERVAL_MINUTES`, CLI `maintenance`) ohne API-Änderung.\n",
   "title": "Timetrack API",
-  "version": "0.16.0"
+  "version": "0.17.0"
  },
  "openapi": "3.1.0",
  "paths": {
@@ -7436,6 +7979,80 @@
     ]
    }
   },
+  "/api/v1/plan/weeks/{isoWeek}": {
+   "get": {
+    "description": "Wochenplan (K1, ADR-0021, Modul planning). Sieben Tage mit Plan, Soll aus dem Arbeitsmodell (ohne Ist), effektiv geplanten Sekunden und blockedBy (holiday, vacation, sick, excused), wenn Feiertag oder Abwesenheit den Plan überstimmt (ein halber Urlaubstag blockiert nicht). Summen der Woche.",
+    "operationId": "getPlanWeek",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/IsoWeek"
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlanWeek"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   },
+   "put": {
+    "description": "Schreibt bis zu 7 Tagespläne der Woche in einer Transaktion (alles oder nichts). Jeder Eintrag ersetzt den Tag vollständig. replace=true löscht zusätzlich alle nicht genannten Pläne der Woche. Antwort wie GET.",
+    "operationId": "putPlanWeek",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/IsoWeek"
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PlanWeekInput"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlanWeek"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    },
+    "security": [
+     {
+      "csrf": [],
+      "session": []
+     }
+    ]
+   }
+  },
   "/api/v1/push/config": {
    "get": {
     "description": "Ob Web Push auf diesem Server verfügbar ist (VAPID konfiguriert) und der öffentliche Schlüssel.",
@@ -8877,6 +9494,37 @@
     ]
    }
   },
+  "/api/v1/time/weeks/{isoWeek}": {
+   "get": {
+    "description": "Wochenübersicht in einem Aufruf (K1, ADR-0021): sieben Tage Montag..Sonntag mit Markierung, Soll, Ist, Saldo, Plan und Wochensumme samt Zeitkontostand vor und nach der Woche.\nAlles stammt aus der Tagesbewertung; für Tage nach heute ist balanceSeconds null, die Wochen-balanceSeconds summiert nur Tage bis heute. Kontostände: wie GET /time/account mit asOf = Vortag der Woche bzw. Sonntag (laufende Woche: bis heute).\n",
+    "operationId": "getTimeWeek",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/IsoWeek"
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TimeWeek"
+        }
+       }
+      },
+      "description": "ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     }
+    },
+    "security": [
+     {
+      "session": []
+     }
+    ]
+   }
+  },
   "/api/v1/vacation/adjustments": {
    "post": {
     "operationId": "createVacationAdjustment",
@@ -9809,5 +10457,5 @@
    "url": "/"
   }
  ],
- "x-source-sha256": "e66b2f30fd4b0caf4c6a495a5b5f1bf8fbec6e68a0a1b7d01348241e5d22b125"
+ "x-source-sha256": "b7f1097e0763e4d38bfd665531885687793d3f6a06e78fab4e08033e38327732"
 }

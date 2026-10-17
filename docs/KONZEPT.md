@@ -254,3 +254,5 @@ Konfigurierbare betriebliche Regeln sind keine Zusage allgemeiner rechtlicher Ko
 ## Kalenderanbindung (Entscheidung 17.10.2026)
 
 Die Anbindung an Kalender (Apple-Kalender, EventKit) erfolgt **nur über die native App** auf dem Gerät, ohne Server-Zugriff auf Kalenderkonten und damit ohne App-spezifische Passwörter. Das Backend bleibt kalenderfrei. Umsetzung: späteres Paket der Apple-Apps (Opt-in, Standard: lesen; Schreiben nur nach eigener Entscheidung; private Titel werden nicht geteilt).
+
+Umsetzungsstand Wochenplanung (K1, ADR-0021): **umgesetzt** – Plantage tragen optional geplante Zeiten (Beginn, Ende, Pause) und die PWA bietet Wochenplaner und Wochenübersicht; Native Apps folgen in einem späteren Paket. Offen: Plan/Ist-Hinweise, Nachtschichten über Mitternacht (bewusst nicht unterstützt).

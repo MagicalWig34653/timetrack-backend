@@ -302,3 +302,12 @@ Zusammenarbeit durch Dritte (Pull Requests, Issues) ist über die GitHub-Vorlage
 Zurückgestellt (auf Nutzerwunsch): IHK-Berichtsheft-Format, Selbstständigenfunktionen.
 
 Entscheidungen (17.10.2026, Nachtrag): **Pause** = normale Pause (Timer anhalten, Lücke bleibt Pause, kein eigener Typ). **Fokus-Filter** wie vorgeschlagen (Modus aus/Vorschlag/direkt plus Art), muss am Ende selbsterklärend sein. **Claude-Kontingent** bis 19.10.2026, 8 Uhr schonen (Stand 93 %): keine neuen Agent-Pakete bis dahin; K1 und A12 sind pausiert.
+
+## K1 – Wochenplanung und Wochenübersicht (17.10.2026)
+
+Claude-Agent in getrennten Worktrees (Branches `k1-week`), nicht gemergt.
+
+| ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
+| --- | --- | --- | --- | --- | --- |
+| K1 | Geplante Zeiten am Plantag, `GET/PUT /plan/weeks/{isoWeek}`, `GET /time/weeks/{isoWeek}`, Vertrag v0.17.0, ADR-0021; PWA: „Woche“ mit Übersicht (Tageskarten, Summen, Icons) und Planer (Schnellaktionen, Speichern, Schutz vor Verlassen); Details `docs/handoffs/K1.md` | Claude-Agent | 8 | umgesetzt, Lead-Prüfung offen | X1, M1 |
+
