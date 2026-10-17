@@ -31,6 +31,16 @@ Swift 6 / Vapor / Fluent als modularer Monolith (`Sources/TimetrackKit`, Einstie
 
 Ablage nebeneinander: `<workspace>/timetrack-backend`, `<workspace>/timetrack-pwa`, `<workspace>/timetrack-apple` (siehe [docs/REPOSITORIES.md](docs/REPOSITORIES.md)).
 
+## Selbst betreiben (Schnellinstallation)
+
+```sh
+mkdir timetrack && cd timetrack     # Dateien aus deploy/compose/ holen, .env anpassen, dann:
+./init-secrets.sh --generate-db-password && docker compose --profile db up -d
+docker compose run --rm --no-deps -T backend bootstrap-admin --env production   # Einladungslink für den ersten Admin
+```
+
+Schritt für Schritt mit Reverse Proxy: [docs/INSTALLATION.md](docs/INSTALLATION.md). Ausführlich (Swarm, MariaDB-Rechte): [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
 ## Schnellstart (Entwicklung)
 
 Voraussetzungen: Swift-Toolchain (Xcode bzw. Swift 6.x), Docker mit Compose (z. B. Colima). Ausführliche Anleitung mit allen Varianten: [EINRICHTUNG.md](EINRICHTUNG.md).

@@ -2,7 +2,7 @@
 
 Stand: 17.10.2026 (Paket D2). Diese Anleitung führt Schritt für Schritt zu einer laufenden Instanz unter
 `https://timetrack.example.org`. Sie ersetzt nicht [BETRIEB.md](BETRIEB.md) (Backup, Restore, Hintergründe, Nachweise),
-sondern verweist dorthin. Beispielwerte (`timetrack.example.test`, `db.internal.example.test`, `ABCDE12345`) sind
+sondern verweist dorthin. Für den schnellen Einstieg: [INSTALLATION.md](INSTALLATION.md). Beispielwerte (`timetrack.example.test`, `db.internal.example.test`, `ABCDE12345`) sind
 **Platzhalter**; ersetzen Sie sie. Alles Genannte ist aus dem Code und den Skripten abgeleitet; was **nicht** auf einem echten
 Swarm, einem echten Proxy oder gegen die echte MariaDB 12.3.3 ausprobiert wurde, steht in Abschnitt 17 („Bekannte Lücken“) und ist an den Stellen mit
 „nicht erprobt“ markiert.
@@ -416,7 +416,9 @@ docker exec -it "$(docker ps -q -f name=timetrack_backend | head -n 1)" \
 ```
 
 Ausgabe: `https://timetrack.example.org/invite/<token>`. Link im Browser öffnen, Anzeigenamen und Passkey anlegen (siehe Wiederherstellungsoption in der PWA wählen).
-Der Befehl schreibt den Link nur auf die Konsole; das Backend protokolliert Einladungs-URLs nicht. Dieser Weg ist **nicht auf einem echten Swarm erprobt**; im Compose-Betrieb ist `docker compose run --rm -T backend bootstrap-admin` belegt (TESTUMGEBUNGEN.md).
+Der Befehl schreibt den Link nur auf die Konsole; das Backend protokolliert Einladungs-URLs nicht. Dieser Weg ist **nicht auf einem echten Swarm erprobt**; im Compose-Betrieb ist `docker compose run --rm --no-deps -T backend bootstrap-admin --env production` belegt (mit dem Image und der gebündelten Datenbank geprüft).
+
+**Wichtig:** `docker exec … bootstrap-admin` (ohne `/app/docker-entrypoint.sh`) schlägt fehl mit `executable file not found in $PATH`, weil `bootstrap-admin` ein Unterbefehl des Einstiegspunkts ist, keine Programmdatei. Der Einstiegspunkt muss mit angegeben werden, oder man nutzt `docker compose run`.
 
 Alternative, wenn das Backend nicht läuft oder auf einem anderen Knoten: einen einmaligen Dienst starten, der das Secret einhängt (Link steht dann in `docker service logs`; danach sofort den Dienst entfernen):
 

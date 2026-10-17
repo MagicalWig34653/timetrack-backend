@@ -40,14 +40,16 @@ export default defineConfig({
     logo: '/logo.svg',
     siteTitle: 'Timetrack',
     nav: [
-      { text: 'Dokumentation', link: '/docs/', activeMatch: '^/docs/' },
+      { text: 'Installieren', link: '/docs/installation' },
+      { text: 'Dokumentation', link: '/docs/', activeMatch: '^/docs/(?!installation)' },
       { text: 'API', link: '/api/', target: '_self' },
       { text: 'Entscheidungen', link: '/adr/', activeMatch: '^/adr/' },
     ],
     sidebar: {
       '/docs/': [
+        { text: 'Installieren', items: [...item('In 10 Minuten zum Laufen', 'docs/installation'), ...item('Ausführliche Deployment-Anleitung', 'docs/deployment')] },
         { text: 'Überblick', items: [{ text: 'Startseite der Dokumentation', link: '/docs/' }, ...item('Konzept', 'docs/konzept'), ...item('Architektur', 'docs/architektur'), ...item('Umsetzung in Etappen', 'docs/umsetzung')] },
-        { text: 'Betrieb', items: [...item('Einrichtung', 'docs/einrichtung'), ...item('Betrieb und Backup', 'docs/betrieb'), ...item('Deployment', 'docs/deployment'), ...item('CI und Pages', 'docs/ci')] },
+        { text: 'Betrieb', items: [...item('Einrichtung', 'docs/einrichtung'), ...item('Betrieb und Backup', 'docs/betrieb'), ...item('CI und Pages', 'docs/ci')] },
         { text: 'Nutzung und Anbindung', items: [...item('MCP (ChatGPT, Claude)', 'docs/mcp'), ...item('Kurzbefehle', 'docs/shortcuts'), { text: 'API-Referenz', link: '/api/', target: '_self' }] },
         { text: 'Projekt', items: [...item('Designsprache', 'docs/design'), ...item('Entwicklungsablauf', 'docs/entwicklungsablauf'), ...item('Lizenzen', 'docs/lizenzen')] },
       ],

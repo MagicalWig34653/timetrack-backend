@@ -10,11 +10,11 @@ hero:
     alt: Timetrack-Symbol
   actions:
     - theme: brand
+      text: Installieren
+      link: /docs/installation
+    - theme: alt
       text: Dokumentation
       link: /docs/
-    - theme: alt
-      text: Einrichtung
-      link: /docs/einrichtung
     - theme: alt
       text: GitHub
       link: https://github.com/MagicalWig34653/timetrack-backend
@@ -64,10 +64,23 @@ features:
 
 Details stehen in der [Architektur](/docs/architektur) und in den [Architekturentscheidungen](/adr/).
 
+## Selbst installieren
+
+<div class="install-cta">
+  <div>
+    <strong>In 10 Minuten zum Laufen</strong>
+    <p>Docker Compose, mitgelieferte Datenbank, Reverse Proxy und erster Admin mit Passkey. Eine Seite, Schritt für Schritt zum Kopieren.</p>
+  </div>
+  <div class="install-cta-actions">
+    <a class="install-btn" href="./docs/installation">Installationsanleitung</a>
+    <a class="install-link" href="./docs/deployment">Ausführliche Deployment-Anleitung (Swarm, MariaDB-Rechte, Checklisten)</a>
+  </div>
+</div>
+
 ## Loslegen
 
 <div class="link-grid">
-  <a href="./docs/einrichtung">Einrichtung<span>Lokal starten, Tests, Konfiguration</span></a>
+  <a href="./docs/einrichtung">Entwicklung<span>Lokal starten, Tests, Konfiguration</span></a>
   <a href="./docs/betrieb">Betrieb<span>Backup, Restore, Swarm, Reverse Proxy</span></a>
   <a href="./docs/mcp">MCP-Anbindung<span>ChatGPT, Claude und eigene Clients</span></a>
   <a href="./api/" target="_self">API-Referenz<span>OpenAPI-Vertrag, durchsuchbar</span></a>

@@ -111,6 +111,7 @@ SQLITE_PATH=/tmp/tt.sqlite AUTO_MIGRATE=true swift run --build-system native App
 scripts/dev-env.sh up-app          # baut das Image und startet db + backend (Profil app), Port 18080
 scripts/dev-env.sh up-sqlite       # nur Backend mit SQLite im Volume timetrack-dev-sqlite (Profil sqlite)
 docker compose --project-name timetrack-dev --profile app run --rm -T backend bootstrap-admin
+# im laufenden Container per exec nur mit Einstiegspunkt: docker exec -it <container> /app/docker-entrypoint.sh bootstrap-admin
 scripts/dev-env.sh build-multiarch # amd64+arm64 per buildx als OCI-Archiv, nicht gepusht (amd64 nur emuliert, QEMU_LIMIT=1; siehe unten)
 ```
 
