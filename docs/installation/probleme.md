@@ -38,3 +38,7 @@ Gehe zuerst diese Reihenfolge durch: (1) `/ready` aufrufen, (2) Logs von Migrati
 | MCP-Client verbindet nicht | Modul `mcp` gesperrt; `/.well-known/oauth-*` nicht durchgereicht; `PUBLIC_BASE_URL` falsch | [Reverse Proxy und TLS](proxy.md); `MODULES_DISABLED` prüfen; [MCP-Anbindung](../MCP.md). |
 
 Weitere Hintergründe und Checklisten: [Deployment-Anleitung](../DEPLOYMENT.md), [Betrieb und Backup](../BETRIEB.md).
+
+## „Zu viele Versuche. Bitte warte einen Moment."
+
+Das ist ein HTTP 429. Es kommt entweder vom **Backend** (nur bei Anmelde-, Registrierungs- und Wiederherstellungsaufrufen; im Log steht eine Warnung `rate limit …`, und ohne `TRUSTED_PROXY_CIDRS` teilen sich alle Clients hinter dem Proxy einen Zähler) oder vom **Reverse Proxy** (zu niedrige Ratenbegrenzung, siehe [Reverse Proxy](proxy.md)). Prüfe zuerst das Backend-Log: Ohne `rate limit`-Zeile ist es der Proxy.

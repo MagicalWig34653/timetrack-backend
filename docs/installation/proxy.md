@@ -145,6 +145,15 @@ Das Traefik-Beispiel wurde **nicht** gegen eine laufende Traefik-Instanz geteste
 
 Damit Traefik die echte Client-IP sieht: Ports 80/443 des Traefik-Dienstes im **Host-Modus** veröffentlichen (`mode: host`), nicht über das Routing Mesh.
 
+## Eigene Ratenbegrenzung am Proxy
+
+Setzt du am Proxy eine Begrenzung (nginx `limit_req`/`limit_conn`, Traefik `rateLimit`, Cloudflare o. Ä.), plane großzügig:
+
+- Eine geöffnete Seite löst **viele Anfragen in kurzer Zeit** aus (Oberfläche, Sitzung, Zeitabschnitte, Zeitkonto, Hinweise, Widgets und mehrere Geräte desselben Nutzers kommen von derselben Adresse).
+- Ein zu niedriges Limit zeigt sich in der App als „**Zu viele Versuche. Bitte warte einen Moment.**" (HTTP 429 vom Proxy) oder als Seite, die sporadisch nicht lädt. Diese Meldung kann also vom Proxy stammen und nicht vom Backend. Das Backend begrenzt nur Anmelde-, Registrierungs- und Wiederherstellungsaufrufe (Konto 15, Adresse 60 je 5 Minuten) und schreibt dazu eine Warnung `rate limit …` ins Log; steht dort nichts, kam das 429 vom Proxy.
+- Faustregel für nginx: `limit_req` mit `burst=100 nodelay` auf `/api/` statt eines harten Limits pro Verbindung. Ein Limit von mehreren hundert Anfragen pro Sekunde und Adresse ist für einen Einzelnutzer-Betrieb unproblematisch, die strengere Grenze gehört auf `/api/v1/auth/`.
+- Das Backend sieht die echte Adresse nur mit `TRUSTED_PROXY_CIDRS` (siehe unten).
+
 ## TRUSTED_PROXY_CIDRS bestimmen
 
 1. **Swarm:** Subnetz des `ingress`-Netzes (das Backend sieht hinter dem Routing Mesh diese Adresse als Verbindungspartner): `docker network inspect ingress --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'` (z. B. `10.0.0.0/24`).
