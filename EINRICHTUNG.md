@@ -1,13 +1,13 @@
 # Einrichtung und Startbefehle
 
-Stand: 15.10.2026. Diese Anleitung führt von einem frischen Checkout zu einem laufenden Backend, einer
+Stand: 17.10.2026. Diese Anleitung führt von einem frischen Checkout zu einem laufenden Backend, einer
 Entwicklungsdatenbank, Tests und der PWA. Den tatsächlich geprüften Stand und offene Punkte führt
 [docs/STATUS.md](docs/STATUS.md); Testdienste und Ports im Detail: [docs/TESTUMGEBUNGEN.md](docs/TESTUMGEBUNGEN.md).
 Alle Befehle laufen im jeweiligen Repo-Hauptordner (Backend: dieses Repository, PWA: `../timetrack-pwa`).
 
 ## 1. Umgebung
 
-Versionen laut `docs/STATUS.md` (Stand 15.10.2026, vom Lead gemeldet): Swift 6.4 (Xcode 27), Node 26.5 / npm 11.17,
+Versionen laut `docs/STATUS.md` (Stand 17.10.2026, vom Lead gemeldet): Swift 6.4 (Xcode 27), Node 26.5 / npm 11.17,
 Docker 29.5.2 über Colima (arm64), Compose 5.3.1, Buildx 0.38. Kein pnpm, kein Docker Desktop. Das Claude-Codex-Plugin
 `codex@openai-codex` war am 13.10.2026 in Version 1.0.6 installiert (nicht erneut geprüft).
 
@@ -193,7 +193,7 @@ Die PWA wird produktiv nicht mit Node betrieben: das Backend liefert `build/` ü
 
 ### Xcode/timetrack-apple
 
-Das Apple-Projekt ist ein XcodeGen-Grundgerüst; native Apps sind nicht begonnen (Etappe 5).
+Das Apple-Projekt wird mit XcodeGen erzeugt (`project.yml`); es enthält die macOS-, iOS/iPadOS- und watchOS-App samt Widgets (Pakete A1–A8, Etappe 5). Test-, Build- und TestFlight-Befehle: `timetrack-apple/docs/STATUS.md` und `scripts/testflight.sh` dort.
 
 ```sh
 xcodegen generate
@@ -272,7 +272,7 @@ Bind-Adressen und Host-Ports der Compose-Dienste (`BACKEND_BIND_ADDR`, `BACKEND_
 Details, Grenzen (Mailpit ohne TLS/AUTH, S3Mock ohne Signaturprüfung, Dex nur HTTP) und Testnutzer: `docs/TESTUMGEBUNGEN.md`.
 Alle Dienste sind reine Testdoubles der Entwicklung.
 
-Öffentliche Testdomain: `test.example.org` (Reverse Proxy und TLS beim Nutzer, Ziel
+Öffentliche Testdomain (hier als Platzhalter `test.example.org`; die echten Adressen stehen nur in der privaten `.env`) (Reverse Proxy und TLS beim Nutzer, Ziel
 `192.0.2.10:18080`). Dafür in `.env` `BACKEND_BIND_ADDR=0.0.0.0` und `PUBLIC_BASE_URL`, `WEBAUTHN_ORIGIN`, `WEBAUTHN_RP_ID`
 auf die Domain setzen, danach `up-app`. Auf dieser Instanz keine automatisierten Registrierungen mit virtuellen Passkeys;
 der erste Admin soll der Nutzer mit echtem Passkey sein (Link noch zu erzeugen, `docs/STATUS.md`). Nichts davon wird vom
@@ -290,7 +290,7 @@ Vorhandene Colima-Ressourcen nicht zurücksetzen, fremde Volumes/Images nie lös
 
 Claude koordiniert mehrere Agents; Codex soll ungefähr die Hälfte der Implementierung übernehmen (Richtwert 40–60 %),
 Review allein zählt nicht. Wegen des erschöpften Codex-Kontingents setzten Claude-Agents C9–C18 um (Nutzerentscheidung
-14.10.2026); Zahlen und Abweichung in `docs/ARBEITSPLAN.md`. Pro Paket genau ein Schreibverantwortlicher,
+14.10.2026); Zahlen und Abweichung (Stand 17.10.: Codex ca. 19,5 %) in `docs/ARBEITSPLAN.md`. Pro Paket genau ein Schreibverantwortlicher,
 eigener Worktree je Schreiber (Regeln: `docs/ENTWICKLUNGSABLAUF.md`). Gemeinsame Verträge, Migrationen und Lockfiles
 koordiniert ändern.
 

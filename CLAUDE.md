@@ -1,6 +1,6 @@
 # Timetrack – Arbeitsgrundlage für Claude Code
 
-Backend und PWA implementiert (Etappe 1–4); tatsächlicher Prüfstand in docs/STATUS.md. Die Implementierung soll Claude Code übernehmen;
+Backend und PWA implementiert (Etappe 1–4), native Apple-Apps implementiert (Etappe 5, Geräteprüfung offen); alle drei Repos sind öffentlich (seit 17.10.2026). Tatsächlicher Prüfstand in docs/STATUS.md. Die Implementierung soll Claude Code übernehmen;
 der Nutzer plant, selbst kaum Code zu schreiben. Fragen gesammelt und nummeriert im
 normalen Chat stellen, keine interaktiven Frageformulare.
 
@@ -32,11 +32,11 @@ im Repository sichern. Dokumentationspflege ist Teil jeder Implementierung und i
 
 ## Festgelegte Richtung
 
-- Open Source unter AGPLv3; Lizenztext vorhanden; Abhängigkeitsinventar in docs/LIZENZEN.md (Release-Prüfung offen).
+- Open Source unter AGPLv3 (AGPL-3.0-only); Lizenztext vorhanden; Abhängigkeitsinventar in docs/LIZENZEN.md (Release-Prüfung offen).
 - Backend Swift/Vapor/Fluent; MariaDB empfohlen, SQLite unterstützt, kein PostgreSQL.
 - PWA Svelte/shadcn-svelte; Node für Entwicklung/Build erlaubt, nicht im Produktionsbetrieb.
 - Kein VS Code. PhpStorm für PWA und Backend (Noctule), Xcode für native Apps.
-- Drei Repositories, Backend als Hauptrepo; Pfade und Einrichtung: `docs/REPOSITORIES.md`.
+- Drei öffentliche Repositories, Backend als Hauptrepo; URLs, Pfade und Einrichtung: `docs/REPOSITORIES.md`.
 - Linux Docker/Swarm, amd64 und arm64; vorhandene DB 12.3.3-MariaDB-ubu2404.
 - Reverse Proxy, Domains, TLS und vorhandene Identitätsinfrastruktur nicht provisionieren.
 - App-eigene Passkeys primär, mehrere pro Konto; OpenID Connect optional, kein Pflicht-Authentik.
@@ -64,8 +64,8 @@ Diese Regel bei jedem Agent-Auftrag mitgeben.
 - Rohzeit, Korrektur und gerundete Bewertung trennen. Rundung standardmäßig an,
   15 Minuten zugunsten des Arbeitnehmers, nur erster Tagesbeginn/letztes Tagesende.
   Innere Abschnittsgrenzen und tatsächliche Pausen/Lücken bleiben unverändert.
-- Nutzer ist erwachsen. Berufsschulstunden unterhalb der konfigurierten Schwelle manuell ergänzen;
-  keine automatische Rückkehrpflicht ableiten.
+- Berufsschulstunden unterhalb der konfigurierten Schwelle manuell ergänzen;
+  keine automatische Rückkehrpflicht ableiten. Rechtsprofile für Jugendliche fehlen noch (nur `arbzg-adult-de`).
 - Berichtsheftfelder: Lernfeld, Zeit, Notizen; kopierbare Ausgabe für das IHK-Portal.
 - Pausenhinweise anhand tatsächlicher Zeiten; keine nicht genommenen Pausen erfinden.
 - Automatik direkt/Vorschlag/aus je Ort und global abschaltbar; Vorbeifahrt nicht buchen.
@@ -73,5 +73,11 @@ Diese Regel bei jedem Agent-Auftrag mitgeben.
 - KI erstellt bearbeitbare Entwürfe, erfindet keine Tätigkeiten. KI-Zugang getrennt vom App-Login.
 - Kontentrennung auch für MCP, Exporte, Anhänge, Jobs, Suche und Push durchsetzen.
 - Vorschläge nicht als Nutzerentscheidungen darstellen; offene Details kenntlich halten.
+
+## Öffentliches Repository, Kennungen, Namen
+
+- **Commit-Autor ist die Pseudonym-Identität des Projekts** (Git-Konfiguration nicht ändern, kein `--author`). Keine privaten E-Mail-Adressen, Pfade, Hostnamen, IP-Adressen oder Domains in Repos; keine Namen oder Altersangaben realer Personen.
+- **Namensentscheidung (17.10.2026):** Das Projekt heißt Timetrack; „Chronolog“ ist nur der App-Store-Eintrag, Anzeigename in Apps und PWA bleibt Timetrack. Die produktive Domain (Passkey-RP-ID) und die Bundle-ID bleiben unverändert. Das **Backend-Repo verwendet dafür Platzhalter** (`timetrack.example.org`, `com.example.timetrack`, Team-ID `ABCDE12345`); die echten Werte stehen nur im Apple-Repo (funktional nötig) und in der privaten Betreiber-Konfiguration. Diese Konvention beibehalten.
+- Commit-Hashes in Handoffs vor dem 17.10.2026 sind durch die Historienbereinigung ungültig; mit Paket-ID und `git log --grep` arbeiten.
 
 Build-, Start- und Testbefehle stehen in EINRICHTUNG.md; produktionsnahes Deployment (Swarm) ist noch offen. Dokumentationslandkarte: docs/README.md.

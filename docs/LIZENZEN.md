@@ -1,6 +1,6 @@
 # Lizenzinventar C4
 
-Stand: 15.10.2026 (Paket D1 hat Lockfile, Manifest und das npm-Lockfile erneut abgeglichen; die Texte der übrigen Pakete stammen aus C4, 14.10.2026). Projektlizenz: `AGPL-3.0-only`.
+Stand: 17.10.2026 (Paket D3: SwiftPM-Pins gegen `Package.resolved` abgeglichen, 43 Pins unverändert; npm-Abschnitt neu ausgezählt, Website und Apple-Repo ergänzt; die Texte der übrigen Pakete stammen aus C4, 14.10.2026, und D1, 15.10.2026). Projektlizenz: `AGPL-3.0-only`.
 
 ## SwiftPM
 
@@ -90,20 +90,27 @@ Besonders beachten: NIO-/TLS-NOTICE verweist auf Netty und weitere Ableitungen; 
 
 ## PWA / npm
 
-Read-only geprüft: `../../timetrack-pwa/package-lock.json`, lockfileVersion `3`, SHA-256 `b1a4848f631d6d63032e58b7afc6870acc2fadb44fe8ea0be8a0a29b95f63fce`. Gezählt werden **201 Lockfile-Pfade**, einschließlich dev-/optionaler Plattformpakete und mehrfacher Versionen; Root-Projekt ausgeschlossen. Alle Einträge besitzen ein `license`-Feld; kein Fallback auf `node_modules` nötig, keine unbekannten Felder. Diese Metadaten sind keine vollständige Quellcode-Lizenzprüfung.
+Stand 17.10.2026 (Paket D3, maschinell aus dem Lockfile ausgezählt, nicht erneut manuell geprüft): `timetrack-pwa/package-lock.json`, lockfileVersion `3`, SHA-256 `822d01885c7a590b03d6c00936a845133c74c8f1fe6569f363c4d3e616349bc9`. Gezählt werden **393 Lockfile-Pfade** (ohne Root-Projekt), einschließlich Plattformpakete und mehrfacher Versionen; alle Abhängigkeiten sind Entwicklungs-/Build-Abhängigkeiten (`devDependencies`: SvelteKit, Svelte, Vite, Tailwind, Vitest, Playwright, Testing Library, `exceljs` für Test-Leser, Schriftpaket Inter, Icons `@lucide/svelte` u. a.). Ausgeliefert wird nur der statische Build. Gegenüber dem Stand 15.10. (201 Pfade) kamen u. a. `exceljs` samt Abhängigkeiten und Playwright-Ausbau hinzu. Das `license`-Feld fehlt bei einem Eintrag (`buffers` 0.1.1, ungeprüft). Diese Metadaten sind keine vollständige Quellcode-Lizenzprüfung.
 
-| SPDX | Anzahl Lockfile-Einträge |
+| SPDX (Lockfile-Angabe) | Anzahl Lockfile-Einträge |
 | --- | ---: |
-| `Apache-2.0` | 10 |
+| `MIT` | 325 |
+| `MPL-2.0` | 24 |
+| `ISC` | 16 |
+| `Apache-2.0` | 12 |
+| `BSD-3-Clause` | 4 |
 | `BSD-2-Clause` | 2 |
-| `BSD-3-Clause` | 2 |
+| `MIT-0` | 2 |
 | `BlueOak-1.0.0` | 1 |
 | `CC0-1.0` | 1 |
-| `ISC` | 4 |
-| `MIT` | 154 |
-| `MIT-0` | 2 |
-| `MPL-2.0` | 24 |
 | `OFL-1.1` | 1 |
+| `Unlicense` (`big-integer`) | 1 |
+| `MIT/X11` (`chainsaw`) | 1 |
+| `(MIT OR GPL-3.0-or-later)` (`jszip`) | 1 |
+| `(MIT AND Zlib)` (`pako`) | 1 |
+| kein Feld (`buffers`) | 1 |
+
+`jszip` (Dual-Lizenz, MIT wählbar) und `pako` sind Abhängigkeiten von `exceljs` und nur in Tests der PWA verwendet; nicht in der Auslieferung (ungeprüft, dass sie nicht gebündelt werden).
 
 ### Nicht-permissive Einträge (vollständig)
 
@@ -143,8 +150,20 @@ Weitere Sonderkennungen: `MIT-0` (zwei @csstools-Pakete) ist permissiv ohne MIT-
 
 ### Verifiziert und offen
 
-- Stand 15.10.2026 erneut abgeglichen (D1): Tabelle gegen `Package.resolved` (43 Pins, Versionen und Revisionen identisch), `ZIPFoundation`-Lizenztext (MIT, kein NOTICE) und npm-Lockfile (SHA-256 unverändert, 201 Einträge, gleiche Verteilung). Alles Übrige unten stammt aus C4.
+- Stand 15.10.2026 abgeglichen (D1): Tabelle gegen `Package.resolved` (43 Pins, Versionen und Revisionen identisch), `ZIPFoundation`-Lizenztext (MIT, kein NOTICE). Stand 17.10.2026 (D3): Pin-Namen und -Versionen erneut gegen `Package.resolved` abgeglichen (43, unverändert); npm-Lockfile der PWA hat sich verändert (393 Einträge), neu ausgezählt. Alles Übrige unten stammt aus C4.
 - Verifiziert: sämtliche SwiftPM-Pins, Checkout-Revisionen und Hauptlizenztexte; lokale NOTICE-Dateien; Argon2-C-Duallizenz; sämtliche npm-Lizenzfelder und obige Zählung, einschließlich aller MPL-/OFL-Einträge.
 - Offen: vollständiger Audit eingebetteter C-/Assembly-/Testanteile, BoringSSL/OpenSSL-Kompatibilitätsklärung, konkrete npm-Quelllizenzen jenseits der Metadaten und Inter-Lizenz, MPL-Marker, Fonts/Icons außerhalb des Lockfiles, Lizenzbeilagen und Attribution im tatsächlichen PWA-/Container-/Binary-Release.
 - Betriebssystembibliotheken, Container-Basisimages und Swift-Toolchain sind nicht Teil von Package.resolved und hier nicht inventarisiert. Keine Abhängigkeiten oder PWA-Dateien für C4 verändert.
 - Ergebnis: Hauptpakete weitgehend kompatibel; **Release-Prüfung bleibt wegen BoringSSL und der genannten Auslieferungspflichten offen**.
+
+## Website (`site/`, nur Entwicklungswerkzeug)
+
+`site/package-lock.json` (VitePress 1.6.4, Vue 3.5.44, `@redocly/cli` 1.34.5 als Dev-Werkzeuge; lockfileVersion `3`): **426 Lockfile-Pfade**, maschinell ausgezählt am 17.10.2026: `MIT` 357, `BSD-3-Clause` 21, `Apache-2.0` 19, `ISC` 19, `BSD-2-Clause` 4, `CC0-1.0` 1 (`@iconify-json/simple-icons`), `Python-2.0` 1 (`argparse`), `BSD` 1 (`url-template`), `(MPL-2.0 OR Apache-2.0)` 1 (`dompurify`), ohne `license`-Feld 2 (`decko`, `stickyfill`; ungeprüft). Die Website wird zur Build-Zeit erzeugt und als statisches HTML auf GitHub Pages veröffentlicht; die Werkzeuge werden nicht ausgeliefert. Die API-Referenz wird mit Redocly erzeugt (`site/scripts/build-api.mjs`); ob und welche Redocly-Teile in die erzeugte Seite gelangen, ist nicht geprüft. Dependabot schlägt Updates vor (Redocly 2.x, Vue u. a.), nicht ungeprüft übernehmen.
+
+## Apple-Repo
+
+`timetrack-apple` hat **keine externen Swift-Abhängigkeiten**: die lokalen Pakete `TimetrackCore` und `TimetrackDesign` (eigener Code, AGPL-3.0-only) hängen nur voneinander und von Apple-Frameworks ab; es gibt kein `Package.resolved`. Schriften: Systemschriften. XcodeGen (lokales Werkzeug, 2.46.0) ist kein Bestandteil des Produkts. App-Symbole sind eigene Gestaltung. Prüfung der Lizenz von Apple-SDK-Bestandteilen und der App-Store-Bedingungen im Zusammenspiel mit AGPL-3.0: **offen** (vor einer App-Store-Veröffentlichung rechtlich klären; keine Rechtsberatung in diesem Dokument).
+
+## Release-Prüfung
+
+Weiterhin **offen** (siehe oben): BoringSSL/OpenSSL in `swift-nio-ssl`, Beilage der Lizenztexte und NOTICE-Inhalte in Container-Image, PWA-Build und Apps, MPL-Marker, Quellcode-Lizenzprüfung der npm-Pakete über die Metadaten hinaus.

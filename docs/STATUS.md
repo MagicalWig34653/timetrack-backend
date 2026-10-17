@@ -1,56 +1,91 @@
 # Aktueller Projektstand
 
-Stand: 15.10.2026. Backend und PWA decken Etappe 1–4 ab (siehe unten); native Apps, KI und spätere Etappen fehlen. `main` in beiden Repos, keine Remotes, nichts veröffentlicht.
+Stand: 17.10.2026 (Paket D3, Dokumentationsabgleich). Alle drei Repositories (Backend, PWA, Apple) sind seit 17.10.2026 öffentlich auf GitHub (AGPL-3.0-only), Historie von persönlichen Angaben bereinigt (siehe `ARBEITSPLAN.md`, Abschnitt „Veröffentlichung“). Das Projekt ist **Alpha**: Backend und PWA decken Etappe 1–4 ab, die nativen Apps (Etappe 5) sind implementiert, aber noch nicht auf Echtgeräten erprobt; KI, Kalenderbrücke und Selbstständigenfunktionen (Etappe 6) fehlen.
+Zahlen unten sind die zuletzt vom Lead selbst gemessenen (Stand der Pakete P2/A8 vom 16./17.10.); seitdem änderten sich in Backend und PWA nur CI, Website und Dokumentation, keine Quellen.
 
-## Was läuft (vom Lead selbst ausgeführt)
+## Was läuft wo
 
-- **Backend** (Swift/Vapor/Fluent, MariaDB 12.3 und SQLite): Konten, Einladungen, Passkeys, Sitzung/CSRF, Recovery (Codes, Rückfallpasswort, E-Mail via SMTP-Sender), optionales OIDC, Zeittracking (Modelle, Orte, Segmente mit Revisionen, idempotenter Timer,
-  Rundung nur äußerste Grenzen, Pausen, Schulregel, Zeitkonto), Automation per Geräte-Token (Shortcuts), Urlaub/Abwesenheiten/Feiertage (alle Bundesländer)/Planung/Freigaben, Export (XLSX/PDF/CSV), Import (CSV/XLSX mit Vorschau/Commit/Rollback),
-  Dateispeicher (DB/lokal/S3, Admin-Regeln, Anhänge), Berichtsheft (Standardformat, kopierbarer Text), OAuth-Server (DCR, PKCE, Refresh-Rotation), persönliche Tokens, Grants, MCP-Endpunkt `/mcp` mit 22 Tools.
-  Dazu Hinweise/Erinnerungen/Web Push (RFC 8291/8292, VAPID) mit Scheduler und Lease.
-  **193 Tests, 0 Fehler** (`swift test --build-system native`; mit frischer MariaDB-Testdatenbank 0 übersprungen). Linux-Image baut (`docker compose --profile app build backend`). Codex-Adversarial-Review C9–C18 lieferte 12 Befunde, alle behoben (C19, `docs/reviews/2026-10-15-codex-review.md`).
-- **PWA** (Svelte 5/SvelteKit statisch, Tailwind/shadcn-Stil): alle zugehörigen Seiten inkl. Berichtsheft, Export/Import, Speicher-Admin, Verbindungen/Tokens/MCP-Hilfe, OIDC. `npm run check` ohne Fehler, **426 Unit-Tests (1 flackernder Altest L4), 53 Mock-E2E, 128 Echt-E2E, 6 PWA-Produktionsbuild-Specs** (Playwright gegen echte Wegwerf-Backends, virtueller Passkey, S3Mock-Test).
-- **Live-Testinstanz**: `https://test.example.org` (→ 192.0.2.10:18080, Compose-Profil `app`, MariaDB) mit Backend (inkl. C23) und PWA (inkl. L22: Import-Assistent mit Optionen, Warnungen, Salden, Modellbeginn-Hinweis; Stand 2026-10-16); erster Admin-Link noch zu erzeugen (siehe EINRICHTUNG.md/TESTUMGEBUNGEN.md).
-- **Testumgebungen** (`docs/TESTUMGEBUNGEN.md`): Mailpit (Mail-Recovery Ende-zu-Ende belegt), Adobe S3Mock, Dex (OIDC), Bind-Adressen.
+| Ort | Stand |
+| --- | --- |
+| Entwicklungsstack (lokal, Colima, Compose-Projekt `timetrack-dev`) | Backend (Swift/Vapor/Fluent) mit MariaDB 12.3 oder SQLite, Mailpit, S3Mock, Dex; Befehle in `EINRICHTUNG.md` |
+| Live-Testinstanz (privat, hinter dem Reverse Proxy des Betreibers, Compose-Profil `app`, MariaDB) | Backend und PWA im Stand P2 (Vertrag v0.14.0), ausgerollt am Abend des 16.10.2026. **Nicht** auf der Testinstanz: der Apple-Endpunkt `/.well-known/apple-app-site-association` ist aus (`APPLE_APP_IDS` nicht gesetzt); Stack-Vorlage und Deployment-Anleitung (B3/D2) laufen dort nicht (Compose-Dev-Profil). Zugang für Dritte: keiner (Einladungsprinzip) |
+| Produktionsinstanz | Wird vom Betreiber gerade eingerichtet (Swarm, eigene MariaDB; Anleitung `DEPLOYMENT.md`; im Repo steht als Platzhalter die Domain `timetrack.example.org`). Noch nichts ausgerollt, Go-Live-Checkliste nicht durchlaufen |
+| GitHub (öffentlich) | Repos mit Workflows (W1), GitHub-Pages-Website aus `site/` (Pages-Lauf grün), Dependabot-Pull-Requests offen (Stand 17.10.: Backend 2, PWA 3, Apple 1) |
+| TestFlight | Archiv und Export lokal mit `scripts/testflight.sh` im Apple-Repo bestätigt; **Upload steht aus**, weil er auf die AASA-Auslieferung der Produktionsdomain wartet |
 
-## Offen / nicht belegt
+## Was gebaut ist (Backend, vom Lead ausgeführt)
 
-- **Geräte/Clients**: Shortcuts auf echtem iPhone/Mac, echter Plattform-Passkey, ChatGPT-/Claude-Connector gegen `/mcp` (Anleitung `docs/MCP.md`, nicht erprobt), Safari-Zwischenablage, Firefox/WebKit, Screenreader.
-- **Betrieb**: Colima-Datenplatte nahezu voll (40 GB) – `docker builder prune` oder größere Platte (TESTUMGEBUNGEN.md); amd64 nur emuliert und für SQLite belegt (Stand 14.10., nicht für den aktuellen Stand); hinter Reverse Proxy nutzt das Rate-Limit die Peer-IP; globale `auth_lock`-Serialisierung begrenzt Durchsatz.
-- **Fachlich offen**: IHK-Berichtsheft-Ausgabeformat (Standardprofil angenommen), E-Mail-SMTP nur gegen Mailpit/Fake (kein TLS/Auth real), Token-Ablauf (1 h Access) und abgelaufene Tokens nicht zeitgesteuert getestet, XLSX/PDF nicht in Excel/Viewer geöffnet, Import mit 20 000 Zeilen auf MariaDB nicht gemessen,
-  MariaDB-Blobs nahe 64 MiB, S3 nur gegen S3Mock, Aufräumjob (B2, ADR-0017) umgesetzt, Lead-Prüfung offen, einzelne Testdatenbank-Kollisionen bei paralleler Agent-Arbeit.
-- **Codex-Anteil**: gesamt ca. 29 % der Punkte (71 von 246, Unterschreitung des Richtwerts, Details `docs/ARBEITSPLAN.md`); Kontingent war vom 14.10. bis 15.10. erschöpft; C9–C18 setzten deshalb Claude-Agents um (Nutzerentscheidung 14.10.), Codex prüfte sie anschließend (R1, 12 Befunde) und behob sie (C19). Dockerfile/Compose ohne Befund im Review; PWA-Code seit L3b nicht mehr von Codex geprüft.
-- **Nicht begonnen**: native Apps macOS/iOS/watchOS und Kalenderbrücke (Etappe 5), KI/Mac-Worker, Selbstständigenfunktionen, Google-Kalender, Offline-Sync (Etappe 6), strukturierte PDF-Altberichte.
+Konten, Einladungen, Passkeys, Sitzung/CSRF, Recovery (Codes, Rückfallpasswort, E-Mail via SMTP), optionales OIDC, Profil und E-Mail-Änderung per Code, geführte Einrichtung (P1), Darstellung je Konto (P2), Kontenverwaltung mit Selbstauskunft/-löschung (B1), Aufräumjob (B2), vertrauenswürdige Proxys (B4), abschaltbare Module (C20), Zeittracking (Modelle mit Gültigkeit, Orte, Segmente mit Revisionen, idempotenter Timer, Rundung nur äußerste Grenzen, Pausenhinweise, Schulregel, Zeitkonto), Automation per Geräte-Token, Urlaub/Abwesenheiten (inkl. „Freigestellt“)/Feiertage/Planung/Freigaben, Export (XLSX/PDF/CSV, Arbeitszeit-Tabelle), Import (CSV/XLSX mit Vorschau/Commit/Rollback, Arbeitszeit-Tabelle), Dateispeicher (DB/lokal/S3), Berichtsheft (Standardformat, kopierbarer Text), OAuth-Server (DCR, PKCE, Refresh-Rotation), persönliche Tokens, MCP-Endpunkt `/mcp` mit 22 Tools, Hinweise/Erinnerungen/Web Push mit Scheduler, Apple-App-Site-Association (A2), Backup/Restore-Skripte und Swarm-Stack-Vorlage (B3).
+API-Vertrag: `contracts/openapi.yaml` **v0.14.0**.
+
+| Messung | Ergebnis | Quelle |
+| --- | --- | --- |
+| Backend-Tests (SQLite) | **305, 0 Fehler** (`swift test --build-system native`) | Lead, Paket P2 |
+| Backend-Tests (MariaDB 12.3) | zuletzt vom Lead vollständig 277 (B2); 295 laut Agent (B5); für den Stand P2 nicht erneut vom Lead | Handoffs B2/B5 |
+| Linux-Image | baut (`docker compose --profile app build backend`), arm64 nativ; amd64 nur unter Emulation und nur für einen älteren Stand belegt | L3a, B3 |
+| Restore-Beweis | 36 Prüfungen auf SQLite und MariaDB bestanden | B3 (Lead) |
+| Vertragstreue | Routenabgleich und ca. 55 Antwortformen ohne Abweichung; Anfrageschemas, MCP, OAuth, Dateien ungeprüft | B5 |
+| Codex-Review C9–C18 | 12 Befunde, alle in C19 behoben | `docs/reviews/2026-10-15-codex-review.md` |
+
+## PWA (Repo timetrack-pwa)
+
+Svelte 5/SvelteKit (statisch), Tailwind, shadcn-Stil, Designsprache nach ADR-0014/`DESIGN.md`. Alle Seiten der Etappen 1–4 inklusive Berichtsheft, Export/Import, Speicher-Admin, Verbindungen/Tokens/MCP-Hilfe, OIDC, Modulschalter, Konten-Verwaltung, Datenschutz, Profil/Einrichtung, Darstellung je Konto.
+Zuletzt vom Lead gemessen (Paket P2): `npm run check` ohne Fehler, **587 Unit-Tests, 84 Mock-E2E, 6 PWA-Produktionsbuild-Specs, 180 Echt-E2E** (gegen frisch gebautes Backend, virtueller Passkey). Auf GitHub: PWA-CI und CodeQL grün (17.10.).
+
+## Apple-Apps (Repo timetrack-apple)
+
+macOS, iOS/iPadOS und watchOS (Paketliste A1–A8: Kern `TimetrackCore`, Design `TimetrackDesign`, Apps, Uhr mit Komplikation, Widgets/Live Activity/Control Center, App-Symbole, Darstellung, Konto-Akzent). Letzte Messung (A8, Lead): **93 Kerntests + 14 Design-Tests**, Builds für iOS, macOS und watchOS erfolgreich (unsigniert), UI-Smoke auf iPhone- und iPad-Simulator gegen Wegwerf-Backend. Details und Grenzen: `timetrack-apple/docs/STATUS.md`.
+Signierung: bezahltes Apple Developer Program, Team im Apple-Repo hinterlegt; Associated Domains und App Groups funktionieren mit dem bezahlten Team (zuvor mit persönlichem Team nicht). Der Passkey-Weg in den Apps braucht die AASA-Datei auf der erreichbaren Produktionsdomain (ADR-0015).
+
+## CI auf GitHub (Stand 17.10.2026)
+
+- **Pages und CodeQL**: grün (Backend, PWA). **PWA-CI**: grün.
+- **Backend-CI rot (Swift-Jobs SQLite und MariaDB)**: `Tests/TimetrackKitTests/ExportTests.swift` nutzt `XMLParser`; unter Linux muss dafür `FoundationXML` importiert werden (Kompilierfehler, auf macOS unsichtbar). Vertrags- und Shell-Prüfungen grün. Behebung steht aus (Testcode, nicht Teil von D3).
+- **Dependency Review**: schlägt fehl, solange „Dependency graph“ in den Repository-Einstellungen nicht aktiviert ist (Einstellung durch den Betreiber).
+- **Apple-CI rot**: Der gehostete Runner hat nur Swift 6.3.3; die Pakete verlangen Swift Tools 6.4 (Xcode 27). XcodeGen-Drift-Prüfung grün. Lösung braucht einen Runner mit Xcode 27 (selbst gehostet, Variable `APPLE_RUNNER`).
+- Docker-Multi-Arch-Lauf (Backend): beim Abgleich noch in Arbeit, Ergebnis ungeprüft.
+
+## Nicht belegt / bekannte Lücken (konsolidiert)
+
+**Geräte und Clients**
+- Shortcuts mit echter Standortauslösung auf iPhone/Mac, echter Plattform-Passkey (PWA und Apps), Safari-Zwischenablage, Firefox/WebKit, Screenreader/VoiceOver.
+- ChatGPT-/Claude-Connector gegen `/mcp` (Anleitung `MCP.md`; nur Protokoll und Skript-Client belegt).
+- Web-Push-Zustellung auf echten Geräten (nur Fake-Dienst); echte E-Mail-Zustellung (SMTP nur gegen Mailpit/Fake, kein TLS/AUTH real).
+- Native Apps: alle Geräteprüfungen offen (WatchConnectivity auf gekoppeltem Paar, Komplikation auf dem Zifferblatt, Widgets, Live Activity, Control Center, Keychain-Lesen aus Erweiterungen, App Intents); macOS-Oberfläche nur als Hierarchie-Aufnahme bzw. Fensterbild gesichtet, keine vollständige visuelle Prüfung des Mac-Clients.
+- Konto-Akzent/Erscheinungsbild in den Apps: Offline-/Fehlerzustände und Zwei-Geräte-Konflikt ungeprüft.
+
+**Betrieb**
+- Produktionsstack (Swarm, eigene MariaDB 12.3.3, Proxy, TLS, AASA hinter dem Proxy) nie getestet; Lücke: `DB_TLS=required` ohne eigene CA (`DEPLOYMENT.md`). Restore auf anderem Host und Last ungeprüft; Metriken fehlen; amd64 nur nativ nachweisbar (Emulation > 60 min unfertig).
+- Colima-Datenplatte der Entwicklungsmaschine kann volllaufen (40 GB; `TESTUMGEBUNGEN.md`).
+- Globale `auth_lock`-Serialisierung begrenzt den Durchsatz (Bewertung in ADR-0017); Mehr-Replikas-Betrieb und S3Mock-Lauf von B2 ungeprüft.
+- Trusted-Proxy-Header (B4) ohne echten Proxy getestet.
+- Frühere Beobachtung: zwei C19-Push-Tests waren lastempfindlich; B5 machte sie deterministisch (20/20 stabil), Lead-Prüfung der Ursache nur teilweise.
+
+**Fachlich und Daten**
+- IHK-Berichtsheft-Ausgabeformat (Standardprofil angenommen, ADR-0008); Rechtsprofile für Jugendliche fehlen (nur `arbzg-adult-de`).
+- XLSX/PDF-Exporte nicht in Excel/LibreOffice/Viewer geöffnet; Import mit 20 000 Zeilen und Blobs nahe 64 MiB auf MariaDB nicht gemessen; S3 nur gegen S3Mock/In-Process-Fake; S3-Kontolöschung nicht gegen S3Mock getestet; sehr große Konto-Exporte ungeprüft.
+- Access-Token-Ablauf (1 h) zeitgesteuert nicht getestet.
+- Vertrag: 189 Redocly-Lint-Fehler (überwiegend fehlende `summary`), Request-Schemas nicht abgeglichen.
+
+**Lizenz und Veröffentlichung**
+- Release-Prüfung der Abhängigkeiten offen (`LIZENZEN.md`): insbesondere eingebettetes BoringSSL in `swift-nio-ssl` (OpenSSL/ISC-Hinweise) und Beilage der Lizenztexte in Binär-/PWA-Auslieferung.
+- Commit-Hashes in Handoffs und älteren Dokumenten sind seit der Historienbereinigung veraltet.
+
+**Nicht begonnen** (Etappe 5/6): KI-Entwurfs-Worker (Mac), Kalenderbrücke (EventKit/Google), Standortautomatik auf iOS (Region Monitoring), Selbstständigenfunktionen, strukturierter PDF-Altberichtimport, Offline-Schreiben, E-Mail als Hinweiskanal.
+
+## Codex-Anteil
+
+Nachgerechnet in `ARBEITSPLAN.md`: 77 von 395 Punkten ≈ 19,5 % (Richtwert 40–60 %). Das Kontingent war vom 14.10. bis 15.10. erschöpft; Codex schreibt nur im Backend-Hauptordner. Offene Codex-Reviews: Pakete B1–B5, P1/P2, A2, PWA.
 
 ## Umgebung
 
-Swift 6.4, Node 26.5/npm 11.17, Docker 29.5.2 (Colima arm64), Compose 5.3.1, Buildx 0.38. `swift test` nur mit `--build-system native` (Standard scheitert an Codesign-Xattrs). Parallele Agents: je eigener Worktree und eigene Test-Datenbank (`MARIADB_TEST_DB`).
-In Colima laufen fremde Projekte: nur `timetrack-dev-*` anfassen.
+Swift 6.4 (Xcode 27), Node 26.5/npm 11.17, Docker 29.5.2 (Colima arm64), Compose 5.3.1, Buildx 0.38. `swift test` nur mit `--build-system native` (Standard scheitert an Codesign-Xattrs). Parallele Agents: je eigener Worktree und eigene Test-Datenbank (`MARIADB_TEST_DB`). In Colima laufen fremde Projekte: nur `timetrack-dev-*` anfassen.
 
 ## Nächste Schritte
 
-0. Nutzer: Echtgeräte-Tests (Push-Zustellung iOS/Android/Desktop über die Testdomain, Installation als PWA, Shortcuts, ChatGPT-/Claude-Connector).
-1. Nutzer: ersten Admin-Link erzeugen, mit echtem Passkey registrieren, Shortcuts/Passkeys/MCP-Connector prüfen (`docs/SHORTCUTS.md` im PWA-Repo, `docs/MCP.md`).
-2. Flackernder Unit-Test `TimerCard … double click` (L4) stabilisieren; Backend-Findings aus L16 (Allowlist für weitere Push-Dienste prüfen).
-3. Native Apps (Etappe 5): A1 (Kern + macOS), A2 (AASA im Backend), A3 (iOS/iPadOS) integriert, A4 (watchOS) integriert; offen: Komplikation, Art-Auswahl auf der Uhr, Echtgerätetests. Passkeys in den Apps brauchen das bezahlte Apple Developer Program (ADR-0015, Nachtrag); bis dahin Debug-Cookie-Import. Danach KI-Entwürfe/Mac-Worker, Kalenderbrücke, Standortautomatik.
-4. Nach Rückkehr des Codex-Kontingents: Codex-Adversarial-Reviews für Backend-Pakete C9–C17.
-
-## C19-Prüfstand (Stand 15.10.2026, integriert)
-
-C19 (zwölf Reviewkorrekturen, Zahlen-/Datums-Sweep) ist laut Arbeitsplan integriert (Merge `94bfb1e`); der Lead lief 193 Tests inkl. MariaDB nach.
-Neue Migrationen `BindStorageLocations` und `HardenPushOutbox`. Details: `handoffs/C19.md`, ADR-0011. Der Handoff
-beschreibt noch den Sandbox-Stand vor der Integration (Socket-blockierte Tests); maßgeblich sind die Zahlen oben.
-
-## B1-Prüfstand (Stand 16.10.2026, Branch `b1-accounts`, nicht gemerged)
-
-Kontenverwaltung (Admin-API, Deaktivieren, Rollen, Sitzungen widerrufen, Löschen mit Kaskade inkl. Dateien), `GET /me/export` und `DELETE /me`; Vertrag v0.11.0, ADR-0016, `handoffs/B1.md`. 14 neue Tests (SQLite und MariaDB). Lead-Prüfung und PWA-Oberfläche offen; S3-Löschpfad nur über den gemeinsamen `purge`, nicht gegen S3Mock getestet.
-
-## Stand 16.10.2026 (abends)
-
-- Integriert seit dem letzten Stand: Kontenverwaltung B1 (Vertrag 0.11.0), Wartung B2 (0.12.0, inkl. MariaDB-Isolationskorrektur unter `auth_lock`), Betrieb B3 (Backup/Restore bewiesen, Swarm-Stack-Vorlage, `check-all.sh`), vertrauenswürdige Proxys B4, PWA L23. Testinstanz läuft mit diesem Stand (AASA noch aus: `APPLE_APP_IDS` nicht gesetzt).
-- Die zwei zeitabhängigen Push-Tests (`testC19PushClaimsAndHeartbeatSQLite`, `testC19PushStopsAfterLeaseOwnershipLoss`) sind in B5 behoben (Lead-Prüfung offen): eigentliche Ursache war nicht nur Last, sondern die tagesabhängige `report_gap`-Erinnerung (ab Freitag), die eine zusätzliche Outbox-Zeile erzeugte; die Tests nutzen jetzt festes Datum und Torsteuerung statt Schlafzeiten (`handoffs/B5.md`).
-- amd64-Build nur nativ nachweisbar (Emulation > 60 min unfertig). Echter Swarm, Last, Restore auf anderem Host, echter Apple-Passkey ungeprüft.
-
-## P2-Prüfstand (Stand 16.10.2026, Branch `p2-accent`, nicht gemergt)
-
-Darstellung je Konto: `GET/PATCH /me/preferences`, `account.preferences` in der Sitzung, Export `preferences.json`; Vertrag v0.14.0, ADR-0020, `handoffs/P2.md` (mit Vertrag für die nativen Apps, deren Umstellung offen ist). Lead-Prüfung offen; Zahlen im Handoff.
+1. **Betreiber**: Produktionsinstanz fertig einrichten (`DEPLOYMENT.md`), `APPLE_APP_IDS` setzen, AASA von außen und über das Apple-CDN prüfen, ersten Admin mit echtem Passkey anlegen.
+2. **TestFlight-Upload** (iOS und macOS) ausführen, sobald die Produktions-AASA erreichbar ist; Build-Nummer vor jedem Upload erhöhen (`scripts/testflight.sh`, Apple-Repo).
+3. **Echtgerätetests**: Passkey in PWA und Apps, Shortcuts, Push, Widgets/Komplikation/Live Activity, WatchConnectivity, ChatGPT-/Claude-Connector (`MCP.md`).
+4. **CI reparieren**: Linux-Testkompilierung (`FoundationXML`), „Dependency graph“ aktivieren, Apple-Runner mit Xcode 27 oder Apple-CI auf manuell/lokal beschränken; Dependabot-Pull-Requests sichten (große Sprünge wie TypeScript 7 oder Redocly 2 nicht blind mergen).
+5. **Produktpunkte**: IHK-Berichtsheft-Format klären (Beispiel vom Betreiber), Rechtsprofile für Jugendliche, Standortautomatik auf iOS, KI-Entwurfs-Worker, Kalenderbrücke, Selbstständigenfunktionen, visuelle Prüfung des nativen Mac-Clients.
+6. **Qualität**: Codex-Reviews für B1–B5/P1/P2/A2 nachholen (Kontingent prüfen); Lizenz-Release-Prüfung (BoringSSL); Vertrag: `summary` je Operation ergänzen.

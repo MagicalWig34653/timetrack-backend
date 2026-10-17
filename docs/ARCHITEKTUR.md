@@ -1,6 +1,6 @@
 # Technischer Entwurf
 
-Entwurf Stand 13.10.2026, Entscheidungs- und Umsetzungsvermerke Stand 15.10.2026. Stack/Anforderungen bestätigt.
+Entwurf Stand 13.10.2026, Entscheidungs- und Umsetzungsvermerke Stand 17.10.2026. Stack/Anforderungen bestätigt.
 Die ursprünglich als „zu erproben“ markierten Komponenten sind entschieden (Verweise auf ADR 0003–0012); mit
 **Umsetzungsstand** beginnende Absätze beschreiben den tatsächlichen Code, übrige Absätze sind weiterhin der Entwurf.
 Nicht gebaut und weiter Vorschlag bleiben: Kalenderbrücke, KI-/Mac-Worker, Hintergrundworker als eigener Prozess, Swarm-Betrieb.
@@ -31,7 +31,7 @@ MariaDB für mehrere API-Replikate. SQLite nur ein Backend auf persistentem Volu
 keine gemeinsam beschreibbare SQLite-Datei im Swarm. Migrationen einmalig koordiniert ausführen.
 
 Umsetzungsstand: Das Backend ist ein modularer Monolith (Swift-Paket `TimetrackKit`, Einstieg `App`); REST unter `/api/v1`
-nach `contracts/openapi.yaml` (v0.9.0), `/mcp` und `/oauth/*` als Adapter derselben Dienste. Der Erinnerungs-Scheduler läuft
+nach `contracts/openapi.yaml` (v0.14.0), `/mcp` und `/oauth/*` als Adapter derselben Dienste. Der Erinnerungs-Scheduler läuft
 im Prozess mit DB-Lease (`job_leases`, ADR-0010), kein eigener Worker-Prozess und kein Redis. Migrationen laufen derzeit über
 `AUTO_MIGRATE=true` beim Start; für den Swarm-Betrieb gibt es einen einmaligen Migrationsjob mit `AUTO_MIGRATE=false` (`deploy/swarm/stack.yaml`, `BETRIEB.md`; Stack nicht real deployt). Die PWA wird vom
 Backend statisch ausgeliefert (`PWA_STATIC_DIR`). Ein automatisierter Abgleich Implementierung ↔ OpenAPI-Vertrag fehlt (Backlog).
@@ -123,8 +123,8 @@ Freigegebene Ist-Zeiten/Urlaubsangaben über eine begrenzte Freigabeansicht ausl
 
 Umsetzungsstand: 22 Tools nach Scope (ADR-0009), Audit in `mcp_audit` ohne Parameter/Ergebnisse, persönliche Tokens (`ttp_…`,
 nur für `/mcp`, Ablauf Pflicht), Grants widerrufbar, Rate-Limit 120 Anfragen je 5 Minuten. Der ursprüngliche „Vorschlag mit
-Änderungstoken“ wurde durch `expectedVersion` und `clientEventId` ersetzt. Abschaltbar je Server/Konto über das geplante
-Modul `mcp` (ADR-0012, offen).
+Änderungstoken“ wurde durch `expectedVersion` und `clientEventId` ersetzt. Abschaltbar je Server/Konto über das
+Modul `mcp` (ADR-0012, umgesetzt).
 
 ## 4. Datenmodell und Zeitbewertung
 
@@ -219,6 +219,14 @@ Status wartend/in Arbeit/fertig/fehlgeschlagen; Lease/Retry, Idempotenz und Quel
 Keine zweite maßgebliche DB am Mac. Bei Schlaf/Offline/Modellfehler Auftrag sichtbar wartend/fehlerhaft,
 kein stiller Cloud-Fallback. Verfügbarkeit hängt auch von Hardware/Modell/Einstellungen ab, nicht nur OS 27.
 https://developer.apple.com/foundation-models-framework/
+
+## 7a. Umsetzungsstand Clients, Betrieb und Veröffentlichung (17.10.2026)
+
+- **Konten und Einstellungen:** Kontenverwaltung durch Admins, Selbstauskunft (`GET /me/export`) und Selbstlöschung (ADR-0016), Profil und geführte Einrichtung (ADR-0019), Darstellung (Akzent, Farbschema) je Konto über `GET/PATCH /me/preferences` (ADR-0020), abschaltbare Module (ADR-0012), Aufräumjob (ADR-0017), vertrauenswürdige Proxys für Client-Adressen (ADR-0018).
+- **Native Apps** (Repo timetrack-apple, ADR-0015): Swift-Kern `TimetrackCore` spricht dieselbe REST-API wie die PWA (Sitzung/CSRF), `TimetrackDesign` setzt `DESIGN.md` nativ um; die Uhr erhält die Sitzung per WatchConnectivity vom iPhone; Widgets und Komplikation lesen einen nicht geheimen Snapshot über eine App Group. Das Backend liefert `/.well-known/apple-app-site-association` aus `APPLE_APP_IDS` (A2). Nicht geprüft auf Echtgeräten.
+- **Betrieb:** Compose für Entwicklung; Swarm-Stack-Vorlage ohne DB-Container, Secrets per `*_FILE`, Migrationsjob, Backup/Restore-Skripte (B3, D2, `BETRIEB.md`, `DEPLOYMENT.md`); nie auf einem echten Swarm getestet.
+- **CI und Website:** GitHub Actions je Repo (W1, `CI.md`): Build/Test, Multi-Arch-Image (amd64 nativ, arm64 nativ), Pages-Website aus `site/`, CodeQL, Dependabot, Release-Workflow (nie ausgeführt). Stand und bekannte Fehler: `STATUS.md`.
+- **Lizenz und Veröffentlichung:** Alle drei Repos öffentlich unter AGPL-3.0-only; Release-Prüfung der Abhängigkeiten offen (`LIZENZEN.md`).
 
 ## 8. Referenzen und Validierung
 

@@ -1,6 +1,6 @@
 # Lokale Testumgebungen
 
-Stand: 14.10.2026 (Paket L10). Alle Dienste gehören zum Compose-Projekt `timetrack-dev`, laufen nur über
+Stand: 14.10.2026 (Paket L10), Abschnitt zur Testadresse am 17.10.2026 ergänzt. Alle Dienste gehören zum Compose-Projekt `timetrack-dev`, laufen nur über
 `scripts/dev-env.sh` und sind **nur Testdoubles für die Entwicklung**, nicht für den Produktivbetrieb.
 Zugangsdaten stehen nie im Repository: `scripts/dev-env.sh init` erzeugt `.env` (gitignoriert) aus `.env.example`.
 
@@ -76,7 +76,7 @@ Backend hinter einem vorhandenen Reverse Proxy (Domain, TLS und Proxy werden hie
 
 ## Öffentliche Testadresse (eingerichtet 14.10.2026)
 
-Domain `test.example.org` → Reverse Proxy des Nutzers (TLS dort) → `192.0.2.10:18080` (dieser Mac). Nichts davon wird vom Projekt provisioniert.
+Domain `test.example.org` → Reverse Proxy des Nutzers (TLS dort) → `192.0.2.10:18080` (dieser Mac). Nichts davon wird vom Projekt provisioniert. Domain und Adresse sind hier Platzhalter; die echten Werte stehen nur in der privaten `.env` des Betreibers. Stand 17.10.2026: Die Instanz läuft mit Backend und PWA im Stand P2 (ausgerollt 16.10. abends); die Apple-App-Site-Association ist dort aus (`APPLE_APP_IDS` nicht gesetzt). Die Produktionsinstanz ist davon getrennt (`DEPLOYMENT.md`).
 
 Lokale `.env` (nicht versioniert): `BACKEND_BIND_ADDR=0.0.0.0`, `PUBLIC_BASE_URL=https://test.example.org`, `WEBAUTHN_ORIGIN` identisch, `WEBAUTHN_RP_ID=test.example.org`,
 `PWA_STATIC_HOST_DIR=./deploy/pwa-static` (Kopie des PWA-Builds, ignoriert), `DATABASE_DRIVER=mariadb`, `AUTO_MIGRATE=true`; Start `scripts/dev-env.sh up-app`.

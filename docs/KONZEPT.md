@@ -1,6 +1,6 @@
 # Timetrack – Produktkonzept
 
-Anforderungen Stand 13.10.2026 (bestätigt), Umsetzungsvermerke Stand 15.10.2026. Bestätigt = Nutzervorgabe;
+Anforderungen Stand 13.10.2026 (bestätigt), Umsetzungsvermerke Stand 17.10.2026. Bestätigt = Nutzervorgabe;
 Vorschlag = fachliche Ausarbeitung, noch nicht ausdrücklich bestätigt; Details der Umsetzung stehen in den ADRs und
 sind dort teils Lead-Annahmen. Die Anforderungen selbst sind unverändert; neu sind nur die Vermerke
 „Umsetzungsstand“ je Abschnitt. Maßgeblich für geprüfte Zustände ist [STATUS.md](STATUS.md).
@@ -81,7 +81,7 @@ Umsetzungsstand: **umgesetzt** (ADR-0004 mit Zusatz C7) – Timer, manuelle Segm
 Rundung nur an den äußersten Tagesgrenzen, Roh-/korrigierte/bewertete Zeit getrennt, Nachtschicht gehört zum Tag des Beginns,
 Automatik per Gerätetoken je Ort `direct`/`suggest`/`off` mit Vorbeifahrtschutz (Standard 300 s Bestätigung, Rückdatierung auf
 Ankunft). **Nicht auf Echtgeräten geprüft**: Shortcuts mit echter Standortauslösung. Ein globaler Schalter für die Automatik ist
-als Modul `automation` **geplant** (ADR-0012, C20); bis dahin je Ort `off` bzw. Gerätetoken widerrufen.
+als Modul `automation` **umgesetzt** (ADR-0012, C20/L17); zusätzlich je Ort `off` bzw. Gerätetoken widerrufen.
 
 Pausenvorlagen nur innerhalb aktiver Arbeitszeit anwenden, Überschneidungen nicht doppelt abziehen.
 Eine übersprungene Pause bleibt als tatsächliche Arbeit erfasst. Keine Pause zur vermeintlichen
@@ -208,11 +208,11 @@ und manueller Freigabe. Kein systemweites Vordergrund-App-Tracking in der PWA vo
 
 Reihenfolge: Backend/PWA/Shortcuts → macOS → iOS/iPadOS; watchOS gewünscht, genaue Einordnung offen.
 Native Apps Swift/SwiftUI/Liquid Glass nach Apple HIG. Geräte laut Nutzer alle auf OS 27;
-Hardware und Modellverfügbarkeit später prüfen. Kein bezahlter Apple-Developer-Account vorhanden.
+Hardware und Modellverfügbarkeit später prüfen. Ein bezahlter Apple-Developer-Account ist inzwischen vorhanden (16.10.2026); Associated Domains (Voraussetzung für Passkeys) und App Groups sind damit möglich (ADR-0015); die Passkey-Anmeldung in den Apps ist noch nicht auf einem Gerät erprobt.
 MCP-Server mit OAuth für ChatGPT und Claude. Andere Clients können alternativ persönliche
 Bearer-Tokens verwenden. Erster Toolumfang bleibt als Vorschlag in der Architektur dokumentiert.
 
-Umsetzungsstand Abschnitt 8: Selbstständigkeit, App-Tracking und native Apps (macOS, iOS/iPadOS, watchOS): **geplant**.
+Umsetzungsstand Abschnitt 8: Selbstständigkeit und App-Tracking: **geplant**. Native Apps (macOS, iOS/iPadOS, watchOS inkl. Komplikation und Widgets): **implementiert** (A1–A8, Repo timetrack-apple), Geräteprüfung und TestFlight-Upload **offen**; Kalenderbrücke, KI-Worker und Standortautomatik der Apps **geplant**. Konto-Darstellung (Akzent, Farbschema): **umgesetzt** (P2, ADR-0020). Kontenverwaltung, Selbstauskunft und Selbstlöschung: **umgesetzt** (B1, ADR-0016).
 MCP: **umgesetzt** (ADR-0009) – `/mcp` mit 22 Tools nach Scope, OAuth-Server (Dynamic Client Registration, PKCE, Refresh-Rotation),
 persönliche Tokens, Grants; Anbindung in echtem ChatGPT/Claude **nicht geprüft** (`MCP.md`).
 Profil (Anzeigename, E-Mail-Adresse mit Bestätigungscode, Handle nur lesend): **umgesetzt** (P1, ADR-0019; Lead-Prüfung offen).
@@ -227,7 +227,7 @@ ein Server ohne Mailversand bleibt mit den anderen Optionen vollständig nutzbar
 
 ## 9. Noch offene Details
 
-Stand 15.10.2026. Erledigtes ist vermerkt, nicht gelöscht; offen bleibt, was nicht durch Nutzerentscheidung geklärt ist.
+Stand 17.10.2026. Erledigtes ist vermerkt, nicht gelöscht; offen bleibt, was nicht durch Nutzerentscheidung geklärt ist.
 
 1. Berichtsheft-Gruppierung und Zeitdarstellung anhand eines Exportbeispiels prüfen; Felder stehen fest.
    **Weiterhin offen**: Es liegt kein IHK-Beispiel vor; umgesetzt ist das angenommene Standardformat (ADR-0008,
@@ -240,7 +240,7 @@ Stand 15.10.2026. Erledigtes ist vermerkt, nicht gelöscht; offen bleibt, was ni
    (Onboarding seit P1 umgesetzt, ADR-0019; ob die Schritte und Vorschläge dem Nutzer genügen, ist nicht bestätigt. Anteiliger Urlaub im Eintrittsjahr bleibt bewusst aus, stattdessen Stichtagsbestand.)
 4. Kalender-Schreibzugriff, strukturierter PDF-Import und Hardwaredetails später klären. **Weiterhin offen.**
 5. Neu (15.10.2026, Nutzerentscheidung): Module sind durch Betreiber und je Konto abschaltbar (ADR-0012, Vertrag v0.9.0);
-   Umsetzung C20/L17 offen. Annahmen dazu (z. B. Wirkung auf Zeitkonto bei abgeschaltetem Modul `planning`) sind im ADR
+   Umgesetzt (C20/L17, 16.10.). Annahmen dazu (z. B. Wirkung auf Zeitkonto bei abgeschaltetem Modul `planning`) sind im ADR
    als Lead-Annahmen markiert.
 6. Rechtsprofil: Jugendliche und Sonderfälle sowie fachliche Validierung der Pausenhinweise stehen aus.
 

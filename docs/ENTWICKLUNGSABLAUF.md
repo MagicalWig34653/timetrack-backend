@@ -111,7 +111,7 @@ Ersetzte ADRs bleiben als Historie erhalten und verweisen auf ihren Nachfolger.
 
 ## Prüfbefehle
 
-Es gibt bewusst noch kein pauschales `make check` und kein `scripts/check-all.sh` (Backlog in `ARBEITSPLAN.md`).
+Es gibt kein `make check`; `scripts/check-all.sh` (B3, Option `--fast`) bündelt die Backend-Prüfungen (Details in `BETRIEB.md`).
 Der Lead führt vor jeder Übernahme selbst aus (Befehle und Voraussetzungen in `../EINRICHTUNG.md`):
 
 - Backend: `swift test --build-system native` (mit MariaDB-Variablen aus `scripts/dev-env.sh test-db` und eigener

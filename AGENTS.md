@@ -29,7 +29,8 @@ Abschnitt „Sprache von Code und Oberfläche“. Gilt auch für alle delegierte
 - Fachliche Regeln und Autorisierung zwischen REST, MCP und Apps gemeinsam verwenden.
 - Kontentrennung, Datenintegrität, Idempotenz und nachvollziehbare Roh-/Bewertungszeiten erhalten.
 - Bestehende Entscheidungen nicht still ändern; wesentliche Änderungen als ADR dokumentieren.
-- Keine Secrets, Tokens, privaten Beispieldaten oder vollständigen Chats ins Repository schreiben.
+- Keine Secrets, Tokens, privaten Beispieldaten oder vollständigen Chats ins Repository schreiben. Die Repos sind öffentlich: Commit-Autor ist die Pseudonym-Identität des Projekts (Git-Konfiguration nicht ändern); keine privaten E-Mail-Adressen, Pfade, Hostnamen, IP-Adressen oder Domains; im Backend-Repo nur Platzhalter (`timetrack.example.org`, `com.example.timetrack`, `ABCDE12345`), siehe `docs/README.md`, Abschnitt „Namensgebung und Kennungen“.
+- Name: Projekt Timetrack; „Chronolog“ nur App-Store-Eintrag.
 - Tests passend zur Änderung; nicht ausgeführte Prüfungen als offen markieren.
 - Dokumentation und Status im selben Arbeitsschritt aktualisieren.
 

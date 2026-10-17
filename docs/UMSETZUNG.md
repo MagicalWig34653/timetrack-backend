@@ -1,6 +1,6 @@
 # Umsetzung in Etappen
 
-Stand: 15.10.2026. Etappen 0–4 sind im Backend und in der PWA umgesetzt, Etappe 5 begonnen (A1, A2), Etappe 6 nicht begonnen.
+Stand: 17.10.2026. Etappen 0–4 sind im Backend und in der PWA umgesetzt; Etappe 5 (native Apps) ist mit den Paketen A1–A8 implementiert und integriert, aber noch nicht auf Echtgeräten erprobt; Etappe 6 ist nicht begonnen.
 Die Etappen setzen den bestätigten Umfang schrittweise um; **maßgeblich für geprüfte Zahlen und offene Punkte ist `STATUS.md`**,
 Pakete und Belege stehen in `ARBEITSPLAN.md` und `handoffs/`. Die Abnahmekriterien unten sind der ursprüngliche Maßstab;
 je Etappe steht darunter, welche davon belegt sind. „Belegt“ heißt: automatisierte Tests (SQLite und MariaDB, soweit
@@ -16,12 +16,14 @@ Offene fachliche Details jeweils vor dem betroffenen Schritt klären, nicht das 
 | 2 Zeittracking | erledigt (Backend + PWA) | C5–C7, L4, L5 | Shortcuts mit echtem Aufenthalt/Vorbeifahrt auf Gerät |
 | 3 Planung und Datenaustausch | erledigt bis auf Restore | C8–C13, L6–L9, L12 | gemeinsames DB/Datei-Restore ungeprüft; XLSX/PDF nicht in Excel/Viewer geöffnet; S3 nur gegen S3Mock |
 | 4 Berichtsheft, Hinweise, MCP | Backend und PWA umgesetzt, Geräteprüfung offen | C15–C19, L13–L16, X1 | IHK-Format nur Standardprofil; Push nur gegen Fake-Dienst; Connector in ChatGPT/Claude; Alt-PDF nur als Archivdatei |
-| 4d Modulschalter (neu, ADR-0012) | in Arbeit | C20 Backend, L17 PWA | beides offen (Stand 15.10.) |
-| 5 Native Apps | begonnen (16.10.2026) | A1 (integriert), A2 (Backend umgesetzt, Lead-Prüfung offen) | iOS/watchOS (A3/A4); echter Plattform-Passkey auf Gerät; Produktionsdomain `timetrack.example.org` und AASA-Auslieferung |
+| 4d Modulschalter (ADR-0012) | erledigt (Backend + PWA) | C20, L17, D1 | Betreiber-Sperre `MODULES_DISABLED` und Kontoschalter nur automatisiert belegt |
+| 4e/4f Arbeitszeit-Tabelle, Designsprache | erledigt (Backend + PWA) | C21–C23, L18–L22 | Export nicht in Excel/LibreOffice geöffnet; Tabellenformat nur mit synthetischer Mappe belegt |
+| B Konten, Wartung, Betrieb, Profil, Darstellung | erledigt (Backend + PWA) | B1–B5, L23, P1, P2, D2 | Produktionsstack nie real getestet; echte E-Mail-Zustellung; Restore auf anderem Host |
+| 5 Native Apps | implementiert (A1–A8), Geräteprüfung offen | A1 Kern + macOS, A2 AASA, A3 iOS/iPadOS, A4/A5 watchOS + Komplikation, A6/A6b–d Design, Symbole, Darstellung, A7 Widgets/Live Activity/Control Center, A8 Konto-Akzent | Echtgeräte (Passkey, WatchConnectivity, Widgets, Intents), TestFlight-Upload (wartet auf Produktions-AASA), macOS-Sichtprüfung; Kalenderbrücke, KI-Worker, Standortautomatik fehlen |
 | 6 Später | nicht begonnen | – | alles |
+| Veröffentlichung/CI (W1) | Repos öffentlich (17.10.), Workflows laufen | W1 | Backend-CI und Apple-CI rot (siehe `STATUS.md`), Release-Pfad nie ausgeführt |
 
-Zusätzlich offen (Etappen-übergreifend, `ARBEITSPLAN.md` Backlog): Kontenverwaltung, Backup/Restore, Produktions-/Swarm-Stack,
-Aufräumjobs, Vertragstests.
+Kontenverwaltung, Backup/Restore, Produktions-/Swarm-Stack, Aufräumjobs und Vertragstests sind inzwischen umgesetzt (B1–B5, D2); was daran offen ist, steht in `STATUS.md` und im Backlog von `ARBEITSPLAN.md`.
 
 ## 0. Technische Durchstiche
 
@@ -125,9 +127,8 @@ Push-Zustellung auf echten Geräten (nur Fake-Dienst); strukturierter PDF-Altber
 
 ## 4d. Modulschalter (ergänzt 15.10.2026)
 
-Betreiber und Konto können Module abschalten (ADR-0012, Vertrag v0.9.0): `reports`, `planning`, `transfer`, `automation`, `mcp`.
-Stand: entschieden und im Vertrag beschrieben; Backend (C20) und PWA (L17) offen. Abnahme: je Modul Tests für Server aus,
-Konto aus, beide an, Operator-Override (`MODULES_DISABLED`) und Tokens; Daten bleiben beim Abschalten erhalten.
+Betreiber und Konto können Module abschalten (ADR-0012, Vertrag ab v0.9.0): `reports`, `planning`, `transfer`, `automation`, `mcp`.
+Stand: erledigt (C20 Backend, L17 PWA, Echt-E2E in L18). Abnahme: je Modul Tests für Server aus, Konto aus, beide an, Operator-Override (`MODULES_DISABLED`) und Tokens; Daten bleiben beim Abschalten erhalten. Belegt automatisiert; Betrieb mit abgeschalteten Modulen auf Echtgeräten ungeprüft.
 
 ## 5. Native Apps
 
@@ -136,7 +137,15 @@ Danach iOS/iPadOS, native Standorterfassung und watchOS. Apple HIG/Liquid Glass.
 Bei Mac offline/Modellfehler kein Datenverlust oder stiller Cloud-Fallback.
 Kalenderkonflikte nach vereinbarter Regel; keine unbeabsichtigte Freigabe privater Titel.
 
-Stand: nicht begonnen. Vorhanden ist nur das XcodeGen-Grundgerüst im Repository timetrack-apple.
+Stand (17.10.2026): **implementiert und integriert, Geräteprüfung offen.** Repository timetrack-apple, Pakete A1–A8:
+gemeinsamer Swift-Kern `TimetrackCore` (API-Client, Auth, Stores, Sync) mit macOS-App (Heute, Zeit, Einstellungen, Menüleiste),
+iOS/iPadOS-App (inkl. Urlaub lesend, App Intents), watchOS-App (Sitzungsübergabe per WatchConnectivity, Art-Auswahl, Komplikation),
+Designschicht `TimetrackDesign`, App-Symbol mit wählbaren Akzent-Varianten, Darstellungsseite, Widgets/Live Activity/Control Center,
+Akzent und Erscheinungsbild aus dem Konto (ADR-0020). Backend-Seite: AASA-Endpunkt und WebAuthn-Origin für native Apps (A2).
+Belegt: 93 Kerntests, 14 Design-Tests, Builds für alle drei Plattformen (unsigniert), Simulator-Smoke gegen Wegwerf-Backend,
+signierte Builds mit App Group und Associated Domains mit dem bezahlten Team, lokales Archiv/Export für TestFlight.
+**Nicht belegt**: Passkey-Anmeldung in den Apps (braucht AASA auf der Produktionsdomain), WatchConnectivity auf gekoppeltem Gerätepaar, Komplikation/Widgets/Live Activity/Control Center auf Geräten, App Intents, VoiceOver, vollständige macOS-Sichtprüfung, TestFlight-Upload.
+**Nicht begonnen**: Kalenderbrücke, lokale KI/KI-Worker, native Standortautomatik (Region Monitoring), Offline-Schreiben.
 
 ## 6. Später
 
@@ -151,4 +160,4 @@ selbst treffen und dokumentieren; bereits bestätigte Richtungen nicht erneut ab
 
 ### Simulator-Sichtprüfung iOS (16.10.2026, Lead)
 
-iPhone 18 Pro Simulator gegen Wegwerf-Backend (synthetische Daten, danach gelöscht): „Heute" hell sowie dunkel mit größter Schrift (accessibility-extra-extra-large) gesichtet; Layout bricht nicht, Inhalt scrollt, Karten und Tab-Leiste lesbar. Auffälligkeit: der Umschalter Arbeit/Fahrt/Schule skaliert bei großer Schrift nicht mit. Zeit, Urlaub, Einstellungen, iPad, macOS-App und Uhr wurden vom Lead nicht gesichtet (macOS: kein Screenshot in dieser Umgebung möglich).
+iPhone-Simulator gegen Wegwerf-Backend (synthetische Daten, danach gelöscht): „Heute" hell sowie dunkel mit größter Schrift (accessibility-extra-extra-large) gesichtet; Layout bricht nicht, Inhalt scrollt, Karten und Tab-Leiste lesbar. Spätere Designpässe (A6–A8) wurden mit Simulator-Screenshots begleitet (`timetrack-apple/docs/screenshots/`); Zeit, Urlaub, iPad, macOS-App und Uhr wurden nur teilweise gesichtet.
