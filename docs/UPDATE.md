@@ -56,7 +56,7 @@ docker service update --force --with-registry-auth \
 docker service inspect timetrack_backend --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}'   # zeigt Tag@sha256:… des neuen Standes
 ```
 
-`--image` löst den Tag beim Aufruf neu in einen Digest auf und `--force` startet die Tasks auch dann neu, wenn der Digest gleich bleibt. Bei `docker stack deploy` hilft `--resolve-image always`. Der Stack merkt sich den beim letzten Deploy aufgelösten Digest, deshalb zieht ein erneutes `stack deploy` mit demselben Tag ohne diese Option kein neueres Image. Für Produktion sind feste Tags (`0.1.0`, `sha-<kurz>`) besser, dann ist der Stand immer eindeutig.
+`--image` löst den Tag beim Aufruf neu in einen Digest auf und `--force` startet die Tasks auch dann neu, wenn der Digest gleich bleibt. Die Option `--resolve-image always` gibt es nur bei `docker stack deploy` (nicht bei `docker service update`; dort heißt das Gegenstück `--no-resolve-image`). Der Stack merkt sich den beim letzten Deploy aufgelösten Digest, deshalb zieht ein erneutes `stack deploy` mit demselben Tag nicht zwingend ein neueres Image. Der sichere Weg ist `docker service update --force --image …` wie oben. Für Produktion sind feste Tags (`0.1.0`, `sha-<kurz>`) besser, dann ist der Stand immer eindeutig.
 
 ## Prüfen
 
