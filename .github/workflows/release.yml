@@ -1,0 +1,56 @@
+# Release: on a tag v* run the full CI, then create a GitHub Release with generated notes, the OpenAPI contract
+# and a source bundle. The container image for the same tag is built by docker.yml. Documentation: docs/CI.md.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  release:
+    name: GitHub Release
+    needs: ci
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Source bundle and contract
+        run: |
+          mkdir -p dist
+          git archive --format=tar.gz --prefix="timetrack-backend-${TAG}/" -o "dist/timetrack-backend-${TAG}-source.tar.gz" "$TAG"
+          cp contracts/openapi.yaml "dist/openapi-${TAG}.yaml"
+          (cd dist && sha256sum ./* > SHA256SUMS)
+      - name: Release notes header
+        run: |
+          cat > dist/notes.md <<NOTES
+          Timetrack Backend ${TAG}, lizenziert unter AGPL-3.0-only.
+
+          **Quellcode-Angebot (AGPL):** Der vollständige Quellcode dieser Version liegt als
+          \`timetrack-backend-${TAG}-source.tar.gz\` bei und ist im Git-Tag \`${TAG}\` enthalten.
+          Das Container-Image \`ghcr.io/${GITHUB_REPOSITORY_OWNER}/timetrack-backend:${TAG#v}\` entsteht aus genau diesem Stand
+          (Workflow Docker). API-Vertrag: \`openapi-${TAG}.yaml\`.
+
+          NOTES
+      - name: Create the release
+        run: |
+          flags=()
+          case "$TAG" in *-*) flags+=(--prerelease) ;; esac
+          gh release create "$TAG" --verify-tag --title "$TAG" --generate-notes --notes-file dist/notes.md "${flags[@]}" \
+            "dist/timetrack-backend-${TAG}-source.tar.gz" "dist/openapi-${TAG}.yaml" dist/SHA256SUMS

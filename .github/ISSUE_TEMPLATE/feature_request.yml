@@ -1,0 +1,23 @@
+name: Funktion vorschlagen
+description: Idee oder Verbesserung.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Bitte keine echten personenbezogenen Daten. Beachte `docs/KONZEPT.md` (bestätigte Anforderungen und offene Details):
+        Vorschläge gelten erst nach Entscheidung des Nutzers als Anforderung.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Welches Problem soll gelöst werden?
+    validations: { required: true }
+  - type: textarea
+    id: idea
+    attributes:
+      label: Lösungsidee
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativen und Datenschutz-Auswirkungen
+      description: Betrifft es Kontentrennung, Freigaben, MCP, Exporte oder Anhänge?

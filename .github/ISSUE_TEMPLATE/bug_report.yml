@@ -1,0 +1,36 @@
+name: Fehler melden
+description: Etwas funktioniert nicht wie dokumentiert.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Keine echten personenbezogenen Daten** (Zeiten, Namen, E-Mail-Adressen, Tokens, Passwörter) in Issues, Logs oder
+        Screenshots. Nur synthetische Beispiele. Sicherheitslücken bitte privat melden (siehe SECURITY.md).
+  - type: textarea
+    id: what
+    attributes:
+      label: Was ist passiert?
+      description: Erwartetes und tatsächliches Verhalten.
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes:
+      label: Schritte zum Nachstellen
+      placeholder: "1. ...\n2. ..."
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes:
+      label: Version oder Commit
+      description: Image-Tag, Release oder Commit-Hash.
+  - type: dropdown
+    id: database
+    attributes:
+      label: Datenbank
+      options: [MariaDB, SQLite, weiß ich nicht]
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logauszug (bereinigt)
+      render: text

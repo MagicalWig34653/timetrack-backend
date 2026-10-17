@@ -1,0 +1,20 @@
+{
+  "name": "timetrack-site",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "description": "GitHub Pages site (landing page and documentation) for Timetrack",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "sync": "node scripts/sync-docs.mjs",
+    "dev": "npm run sync && vitepress dev",
+    "build": "npm run sync && vitepress build && node scripts/build-api.mjs",
+    "preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "@redocly/cli": "1.34.5",
+    "vitepress": "1.6.4",
+    "vue": "3.5.44"
+  }
+}

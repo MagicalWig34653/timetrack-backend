@@ -1,0 +1,37 @@
+# CodeQL code scanning for GitHub Actions workflows and the JavaScript of the documentation site (site/).
+# Swift is deliberately not scanned here: CodeQL's Swift analysis needs a macOS runner with a matching Xcode, and this
+# backend uses Swift 6.3 (swift-tools-version 6.3), which hosted macOS images may not provide. See docs/CI.md.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, javascript-typescript]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}

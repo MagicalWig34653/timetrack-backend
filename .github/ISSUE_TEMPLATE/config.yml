@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Sicherheitslücke melden (privat)
+    url: https://github.com/MagicalWig34653/timetrack-backend/security/advisories/new
+    about: Schwachstellen bitte nicht öffentlich melden, sondern über GitHub Security Advisories.
