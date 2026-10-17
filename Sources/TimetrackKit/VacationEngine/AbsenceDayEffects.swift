@@ -11,6 +11,12 @@ public enum AbsenceDayEffects {
         try HolidayCalendar.validate(calendarDays)
         if hasExplicitMark || explicit.mark != .none { return explicit }
         let model = try TimeEngine.selectModel(for: date, models: models)
+        return apply(for: date, model: model, absences: absences, calendarDays: calendarDays, explicit: explicit)
+    }
+
+    /// The effect computation without validation; callers validate the inputs (once per range instead of per day).
+    static func apply(for date: LocalDate, model: EngineWorkModel?, absences: [EngineAbsence],
+                      calendarDays: [CustomCalendarDay], explicit: DayPreferences) -> DayPreferences {
         var result = explicit
         let holiday = model.map { $0.workdays.contains(HolidayCalendar.weekday(date)) } == true
             && HolidayCalendar.isHoliday(date, days: calendarDays)

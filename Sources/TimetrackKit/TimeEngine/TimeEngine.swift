@@ -177,10 +177,14 @@ public enum TimeEngine {
     }
 
     static func target(for date: LocalDate, model: EngineWorkModel) -> Int {
-        let weekday = (model.calendar.component(.weekday, from: instant(date, minutes: 720, calendar: model.calendar)) + 5) % 7 + 1
+        // The civil weekday of the date; local noon of an existing date always falls on it.
+        let weekday = LocalDate.fastYears.contains(date.year)
+            ? date.isoWeekday
+            : (model.calendar.component(.weekday, from: instant(date, minutes: 720, calendar: model.calendar)) + 5) % 7 + 1
         guard model.workdays.contains(weekday) else { return 0 }
         return model.dailyTargetSeconds[weekday] ?? (model.weeklyTargetSeconds / model.workdays.count)
     }
+    static func isValidInstant(_ date: Date) -> Bool { validInstant(date) }
     private static func validInstant(_ date: Date) -> Bool {
         (-62_135_769_600...253_402_387_200).contains(date.timeIntervalSince1970)
     }
@@ -203,6 +207,18 @@ public enum TimeEngine {
     /// Missing wall times advance to the next valid time; repeated times use the requested occurrence.
     private static func instant(_ date: LocalDate, minutes: Int, calendar: Calendar,
                                 repeated: Calendar.RepeatedTimePolicy = .first) -> Date {
+        guard calendar.identifier == .gregorian, LocalDate.fastYears.contains(date.year) else {
+            return computeInstant(date, minutes: minutes, calendar: calendar, repeated: repeated)
+        }
+        let key = InstantCache.Key(zone: calendar.timeZone.identifier, epochDays: date.epochDays, minutes: minutes,
+                                   last: repeated == .last)
+        if let hit = InstantCache.shared.value(for: key) { return hit }
+        let value = computeInstant(date, minutes: minutes, calendar: calendar, repeated: repeated)
+        InstantCache.shared.store(value, for: key)
+        return value
+    }
+    private static func computeInstant(_ date: LocalDate, minutes: Int, calendar: Calendar,
+                                       repeated: Calendar.RepeatedTimePolicy) -> Date {
         let noon = calendar.date(from: DateComponents(year: date.year, month: date.month, day: date.day, hour: 12))!
         let midnight = calendar.startOfDay(for: noon)
         return calendar.nextDate(after: midnight.addingTimeInterval(-1),
@@ -232,11 +248,42 @@ public enum TimeEngine {
         let calendar = model.calendar
         let date = LocalDate.local(value, calendar: calendar)
         // Enumerating both occurrences preserves the rounding direction in the repeated DST hour.
+        // For a fixed occurrence policy the candidates grow monotonically with (day, minute), so the best
+        // candidate is found by bisection instead of evaluating all of them (reference: roundedExhaustive).
+        let days = [date.addingDays(-1), date, date.addingDays(1)]
+        let slots = Array(stride(from: 0, to: 1440, by: model.roundingMinutes))
+        var best: Date?
+        for occurrence in [Calendar.RepeatedTimePolicy.first, .last] {
+            func candidate(_ index: Int) -> Date {
+                instant(days[index / slots.count], minutes: slots[index % slots.count], calendar: calendar, repeated: occurrence)
+            }
+            var low = 0, high = days.count * slots.count   // first index that does NOT satisfy `keep`
+            let keep: (Date) -> Bool = down ? { $0 <= value } : { $0 < value }
+            while low < high {
+                let mid = (low + high) / 2
+                if keep(candidate(mid)) { low = mid + 1 } else { high = mid }
+            }
+            if down {
+                guard low > 0 else { continue }
+                let found = candidate(low - 1)
+                best = max(best ?? found, found)
+            } else {
+                guard low < days.count * slots.count else { continue }
+                let found = candidate(low)
+                best = min(best ?? found, found)
+            }
+        }
+        return best ?? value
+    }
+    /// Brute-force reference for `rounded` (kept for the equivalence test).
+    static func roundedExhaustive(_ value: Date, down: Bool, model: EngineWorkModel) -> Date {
+        let calendar = model.calendar
+        let date = LocalDate.local(value, calendar: calendar)
         var best: Date?
         for day in [date.addingDays(-1), date, date.addingDays(1)] {
             for minute in stride(from: 0, to: 1440, by: model.roundingMinutes) {
                 for occurrence in [Calendar.RepeatedTimePolicy.first, .last] {
-                    let candidate = instant(day, minutes: minute, calendar: calendar, repeated: occurrence)
+                    let candidate = computeInstant(day, minutes: minute, calendar: calendar, repeated: occurrence)
                     if down && candidate <= value { best = max(best ?? candidate, candidate) }
                     if !down && candidate >= value { best = min(best ?? candidate, candidate) }
                 }
@@ -244,6 +291,7 @@ public enum TimeEngine {
         }
         return best ?? value
     }
+    static func roundedFast(_ value: Date, down: Bool, model: EngineWorkModel) -> Date { rounded(value, down: down, model: model) }
     private static func hints(_ intervals: [Span]) -> [BreakHint] {
         guard let first = intervals.first else { return [] }
         var qualifiedBreak = 0
@@ -263,5 +311,20 @@ public enum TimeEngine {
         if shortPart { codes.append(.breakPartTooShort) }
         if longestWork > 21_600 { codes.append(.workOver6hWithoutBreak) }
         return codes.map { BreakHint(code: $0) }
+    }
+}
+
+/// Process-wide memo of wall-clock-to-instant conversions. The conversion is a pure function of the time zone
+/// rules, so caching it never changes a result; the cache is simply emptied when it grows large.
+final class InstantCache: @unchecked Sendable {
+    struct Key: Hashable { let zone: String; let epochDays: Int; let minutes: Int; let last: Bool }
+    static let shared = InstantCache()
+    private let lock = NSLock()
+    private var storage: [Key: Date] = [:]
+    func value(for key: Key) -> Date? { lock.lock(); defer { lock.unlock() }; return storage[key] }
+    func store(_ value: Date, for key: Key) {
+        lock.lock(); defer { lock.unlock() }
+        if storage.count >= 400_000 { storage.removeAll(keepingCapacity: true) }
+        storage[key] = value
     }
 }

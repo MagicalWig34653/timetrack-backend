@@ -228,6 +228,14 @@ https://developer.apple.com/foundation-models-framework/
 - **CI und Website:** GitHub Actions je Repo (W1, `CI.md`): Build/Test, Multi-Arch-Image (amd64 nativ, arm64 nativ), Pages-Website aus `site/`, CodeQL, Dependabot, Release-Workflow (nie ausgeführt). Stand und bekannte Fehler: `STATUS.md`.
 - **Lizenz und Veröffentlichung:** Alle drei Repos öffentlich unter AGPL-3.0-only; Release-Prüfung der Abhängigkeiten offen (`LIZENZEN.md`).
 
+### Leistungsrichtlinie (X1)
+
+- **Abfragebudget:** Ein lesender Endpunkt soll eine konstante Zahl von Statements brauchen (Zeitkonto über 800 Tage: 9, im Test `PerformanceTests` auf höchstens 12 begrenzt), nie eine je Tag oder je Segment. Berechnungen über viele Tage laufen über `TimeEvaluationSnapshot.prepared()` (`PreparedEvaluation`): Segmente einmal zugeordnet, Feiertage je Jahr einmal, Validierungen einmal. Das frühere Einzeltagsverfahren steht als Orakel im Test.
+- **Fenster:** Bereichsendpunkte laden nur die Zeilen des Fensters (Segmente mit Rand von −3/+4 Tagen); nur das Zeitkonto lädt die gesamte Historie.
+- **Indizes:** `work_models(account_id)`, `work_segments(account_id)` und `work_segments(account_id, started_at)`, `absences(account_id, start_date)`, `day_preferences(account_id, date)` (eindeutig). Neue Abfragen mit `EXPLAIN` auf MariaDB prüfen.
+- **Kein blockierendes Rechnen im Request-Pfad** über Sekunden: es blockiert Event-Loop, Pool und `/ready` (Swarm-Healthcheck: 3 s). Lesende Routen laufen ohne `auth_lock`; schreibende Routen weiter damit (ADR-0017).
+- **Verbindungen:** MariaDB-Pool mit Keep-Alive-Ping (45 s), `/ready` wiederholt einmal.
+
 ## 8. Referenzen und Validierung
 
 - Fluent: https://docs.vapor.codes/fluent/overview/

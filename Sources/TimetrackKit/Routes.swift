@@ -27,15 +27,19 @@ func registerRoutes(_ app: Application, service: AuthService) {
         return Response(status: .ok, headers: headers, body: .init(data: body))
     }
     app.get("ready") { request async -> Response in
-        do {
-            try await requireSQL(request.db).raw("SELECT 1").run()
-            guard try await app.migrator.previewPrepareBatch().get().isEmpty else {
-                return try await NotReadyResponse().encodeResponse(status: .serviceUnavailable, for: request)
-            }
-            return try await StatusResponse(status: "ok").encodeResponse(for: request)
-        } catch {
-            return (try? await NotReadyResponse().encodeResponse(status: .serviceUnavailable, for: request)) ?? Response(status: .serviceUnavailable)
+        // One transient failure (a pooled connection the server or a firewall dropped, a pool wait while the
+        // server is busy) must not flip readiness: the probe is retried once on a fresh attempt. Migrations
+        // pending is a definite answer and is not retried.
+        func probe() async -> Bool? {
+            do {
+                try await requireSQL(request.db).raw("SELECT 1").run()
+                return try await app.migrator.previewPrepareBatch().get().isEmpty
+            } catch { return nil }
         }
+        var outcome = await probe()
+        if outcome == nil { try? await Task.sleep(nanoseconds: 200_000_000); outcome = await probe() }
+        if outcome == true { return (try? await StatusResponse(status: "ok").encodeResponse(for: request)) ?? Response(status: .ok) }
+        return (try? await NotReadyResponse().encodeResponse(status: .serviceUnavailable, for: request)) ?? Response(status: .serviceUnavailable)
     }
     let api = app.grouped("api", "v1").grouped(SessionMiddleware(service: service)).grouped(AuthRateLimitMiddleware(service: service))
     @Sendable func id(_ req: Request) throws -> UUID { guard let id = req.parameters.get("id", as: UUID.self) else { throw APIError.missing }; return id }

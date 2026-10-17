@@ -64,8 +64,10 @@ struct VacationService: Sendable {
     func customDays() async throws -> [CustomCalendarDay] {
         try await CustomCalendarDayRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).sort(\.$startDate).all().map { try $0.engine() }
     }
-    func engineAbsences() async throws -> [EngineAbsence] {
-        try await AbsenceRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).sort(\.$startDate).all().map { try $0.engine() }
+    func engineAbsences(window: ClosedRange<LocalDate>? = nil) async throws -> [EngineAbsence] {
+        let query = AbsenceRecord.query(on: scope.db).filter(\.$accountId == scope.accountId)
+        if let window { query.filter(\.$startDate <= window.upperBound.description).filter(\.$endDate >= window.lowerBound.description) }
+        return try await query.sort(\.$startDate).all().map { try $0.engine() }
     }
 
     // MARK: Snapshots, adjustments, entries

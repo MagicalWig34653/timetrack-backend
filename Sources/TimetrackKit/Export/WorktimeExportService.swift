@@ -32,10 +32,11 @@ struct WorktimeExportService: Sendable {
 
     func document(from: LocalDate, to: LocalDate, options: WorktimeExportOptions, now: Date = Date()) async throws -> FormulaXLSXWriter.Document {
         try LocalDate.checkedRange(from: from, to: to, maxDays: ExportLimits.maxDays)
-        let snapshot = try await scope.days.snapshot()
+        let snapshot = try await scope.days.snapshot(window: from...to)
+        let prepared = snapshot.prepared()
         var days: [DayEvaluationResult] = []
         var date = from
-        while date <= to { days.append(try snapshot.evaluate(date, now: now)); date = date.addingDays(1) }
+        while date <= to { days.append(try prepared.evaluate(date, now: now)); date = date.addingDays(1) }
         // Absence notes are not carried by the engine. Read only the owner's notes and only with planning enabled.
         let absences = snapshot.planningEnabled ? try await scope.absences.list(from: from, to: to) : []
         var notes: [LocalDate: String] = [:]

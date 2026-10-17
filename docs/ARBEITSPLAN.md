@@ -146,6 +146,14 @@ Claude-Agent im eigenen Worktree, Branch `d2-deployment-guide`; integriert. Schr
 | --- | --- | --- | --- | --- | --- |
 | D2 | `docs/DEPLOYMENT.md` (Schritt-für-Schritt für `timetrack.example.org`), Stack ohne DB-Container mit allen Variablen, `deploy/swarm/create-secrets.sh` (`--dry-run`), Abgleich BETRIEB/deploy-README | Claude-Agent | 3 | integriert; Lead: `check-all.sh --fast` im Merge, Stack-Validierung und Skript-Trockenlauf laut Agent; nie auf echtem Swarm/Proxy/MariaDB 12.3.3 getestet; Lücke: `DB_TLS=required` ohne eigene CA | B3, B4 |
 
+## X1 – Performance und Stabilität (17.10.2026)
+
+Claude-Agent im eigenen Worktree (Backend und PWA), Branch `x1-perf`.
+
+| ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
+| --- | --- | --- | --- | --- | --- |
+| X1 | Vorbereitete Tagesbewertung (Zeitkonto 5,9 s → 53 ms bei 800 Tagen), Fensterabfragen, Index, Lesen ohne `auth_lock`, `/ready` robust, Pool-Keep-Alive; Ursache des Fehlers beim ersten Anlegen des Arbeitsmodells; PWA-Wiederholung, Zeitkonto-Zwischenspeicher | Claude-Agent | 8 | umgesetzt, Lead-Prüfung offen (Details `docs/handoffs/X1.md`) | A, B3 |
+
 ## Backlog Backend (Stand 17.10.2026)
 
 1. **Kontenverwaltung**: umgesetzt (B1, PWA L23). Offen: S3-Löschung nicht gegen S3Mock geprüft.

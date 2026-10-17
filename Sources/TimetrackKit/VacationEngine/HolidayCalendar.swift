@@ -73,6 +73,7 @@ public enum HolidayCalendar {
     }
 
     static func weekday(_ date: LocalDate) -> Int {
+        if LocalDate.fastYears.contains(date.year) { return date.isoWeekday }
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let instant = calendar.date(from: DateComponents(year: date.year, month: date.month, day: date.day))!
