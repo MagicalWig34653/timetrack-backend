@@ -8,6 +8,7 @@ Stand: 17.10.2026. Jede Information hat genau eine maßgebliche Datei; andere Da
 | Frage | Maßgebliche Datei |
 | --- | --- |
 | **Selbst installieren: Einstieg in 10 Minuten (Compose, Proxy, erster Admin)** | [INSTALLATION.md](INSTALLATION.md) |
+| Aktualisieren, Datenbank-Migrationen, Rollback | [UPDATE.md](UPDATE.md) |
 | Was ist tatsächlich gebaut, geprüft, offen? | [STATUS.md](STATUS.md) |
 | Welche Pakete gab es/gibt es, wer, mit welchem Ergebnis? | [ARBEITSPLAN.md](ARBEITSPLAN.md), Belege je Paket in [handoffs/](handoffs/) |
 | Was ist gefordert (bestätigt vs. Vorschlag)? | [KONZEPT.md](KONZEPT.md) |

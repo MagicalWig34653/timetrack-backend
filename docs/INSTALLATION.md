@@ -119,7 +119,7 @@ Dateien liegen in `deploy/swarm/`; die vollständige Anleitung ist die [Ausführ
 
 ## Aktualisieren
 
-Compose: `docker compose pull && docker compose --profile db up -d` (die Migration läuft vor dem Backend; ohne eigene DB das Profil weglassen). Swarm: Migration mit `docker service update --force --image "$TIMETRACK_IMAGE" timetrack_migrate`, danach `docker service update --image "$TIMETRACK_IMAGE" timetrack_backend`. Sichere vorher die Datenbank. Für Produktion ist ein fester Tag (`sha-<kurz>`) besser als `:main`.
+Kurz: **erst sichern, dann die Migration mit dem neuen Image ausführen, dann das Backend wechseln.** Compose erledigt die Migration bei `docker compose pull && docker compose --profile db up -d` selbst (ohne eigene DB das Profil weglassen). Im Swarm läuft sie nur, wenn du den Job erneut startest: `docker service update --force --image "$TIMETRACK_IMAGE" timetrack_migrate`, danach `docker service update --image "$TIMETRACK_IMAGE" timetrack_backend`. Für Produktion einen festen Tag verwenden. Alle Schritte, Prüfung und Rollback: [Aktualisieren und Migrationen](UPDATE.md).
 
 ## Sichern
 

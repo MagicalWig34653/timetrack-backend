@@ -47,7 +47,7 @@ export default defineConfig({
     ],
     sidebar: {
       '/docs/': [
-        { text: 'Installieren', items: [...item('In 10 Minuten zum Laufen', 'docs/installation'), ...item('Ausführliche Deployment-Anleitung', 'docs/deployment')] },
+        { text: 'Installieren', items: [...item('In 10 Minuten zum Laufen', 'docs/installation'), ...item('Aktualisieren und Migrationen', 'docs/update'), ...item('Ausführliche Deployment-Anleitung', 'docs/deployment')] },
         { text: 'Überblick', items: [{ text: 'Startseite der Dokumentation', link: '/docs/' }, ...item('Konzept', 'docs/konzept'), ...item('Architektur', 'docs/architektur'), ...item('Umsetzung in Etappen', 'docs/umsetzung')] },
         { text: 'Betrieb', items: [...item('Einrichtung', 'docs/einrichtung'), ...item('Betrieb und Backup', 'docs/betrieb'), ...item('CI und Pages', 'docs/ci')] },
         { text: 'Nutzung und Anbindung', items: [...item('MCP (ChatGPT, Claude)', 'docs/mcp'), ...item('Kurzbefehle', 'docs/shortcuts'), { text: 'API-Referenz', link: '/api/', target: '_self' }] },

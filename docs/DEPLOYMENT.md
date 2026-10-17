@@ -437,7 +437,7 @@ Danach: weitere Personen lädt der Admin in der PWA ein (Registrierung nur per E
 
 ## 13. Updates und Rollback
 
-Vorher ein Backup (Abschnitt 14).
+Kurzfassung mit Compose und Swarm: [Aktualisieren und Migrationen](UPDATE.md). Vorher ein Backup (Abschnitt 14).
 
 ```sh
 cd ~/timetrack-deploy

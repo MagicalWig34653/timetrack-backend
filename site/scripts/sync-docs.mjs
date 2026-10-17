@@ -20,6 +20,7 @@ const gh = `https://github.com/${repo}`;
 /** Pages: repo path -> site route. Optional pages are skipped when the source file does not exist. */
 const pages = [
   ['docs/INSTALLATION.md', '/docs/installation'],
+  ['docs/UPDATE.md', '/docs/update'],
   ['docs/KONZEPT.md', '/docs/konzept'],
   ['docs/ARCHITEKTUR.md', '/docs/architektur'],
   ['docs/UMSETZUNG.md', '/docs/umsetzung'],
