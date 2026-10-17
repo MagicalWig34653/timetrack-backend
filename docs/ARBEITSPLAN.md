@@ -284,19 +284,21 @@ Zusammenarbeit durch Dritte (Pull Requests, Issues) ist über die GitHub-Vorlage
 
 | ID | Paket | Status |
 | --- | --- | --- |
-| K1 | Wochenplanung (Plan mit Beginn/Ende) und Wochenübersicht, Backend + PWA | in Arbeit |
+| K1 | Wochenplanung (Plan mit Beginn/Ende) und Wochenübersicht, Backend + PWA | **pausiert bis 19.10. 8 Uhr** (Claude-Kontingent schonen); Zwischenstand in den Worktrees `timetrack-backend-wt/k1`, `timetrack-pwa-wt/k1` |
 | REL | Release v0.1.0 (Changelog, Tag in allen drei Repos, Docker-Image 0.1.0) | wartet auf stabile Produktion und K1 |
-| A12 | Apple Watch: schneller Start (Snapshot zuerst), eigenständig (Sitzung, Offline-Warteschlange, Hintergrundaktualisierung) | in Arbeit |
+| A12 | Apple Watch: schneller Start (Snapshot zuerst), eigenständig (Sitzung, Offline-Warteschlange, Hintergrundaktualisierung) | **pausiert bis 19.10. 8 Uhr**; Zwischenstand im Worktree `timetrack-apple-wt/a12` |
 | S1 | Sicherheit und Vertragsqualität: `summary` je Operation, Authentifizierung nur einmal pro Anfrage, Pool-Zeitlimit als 503 mit `Retry-After`, Lizenzprüfung vor Release (BoringSSL) | geplant (nach K1, wegen Vertragskonflikten) |
 | N1 | Native Apps auf PWA-Stand: Wochenplanung/-übersicht (K1), Arbeitsmodell bearbeiten und Urlaubskarte (M1), acht neue Akzente und Leuchteffekt (G1), Haptik-Schalter für Uhr/Mac | geplant (nach K1) |
 | F2 | Fokus-Filter (iOS `SetFocusFilterIntent`, Modi aus/Vorschlag/direkt wie bei der Standortautomatik) zusammen mit Wochenplan und -übersicht im nächsten Release | geplant |
 | LA1 | Live Activity (iPhone, Uhr/Smart Stack) überarbeiten: geplante Feierabendzeit, Fortschritt „wie viel schon rum", Knopf **Pause/Weiter** (Pause = Timer anhalten, Lücke bleibt echte Pause, nichts erfundenes) und Stopp | geplant (nach K1, nutzt Plan-Endpunkte) |
 | L1' | Standortautomatik: in-App energiesparend (Signifikante Standortänderung und Regionenüberwachung, nie minütliches Abfragen) **und** über Kurzbefehle (Ankunft/Verlassen als Automation, App Intents), in der App „Kurzbefehl erstellen" wo die Plattform es erlaubt; Modi pro Ort direkt/Vorschlag/aus, Vorbeifahrt wird nicht gebucht | geplant (größeres Paket, Abstimmung nötig) |
 | E1 | Kalenderbrücke nur nativ (EventKit, ohne App-Passwort), Standard lesen | geplant |
-| AI1 | KI-Entwürfe fürs Berichtsheft (bearbeitbar, nichts erfunden; KI-Zugang getrennt vom App-Login) | geplant (Abstimmung nötig) |
+| AI1 | KI-Entwürfe fürs Berichtsheft (bearbeitbar, nichts erfunden): **in der App nur über Apple Foundation Models und nur auf unterstützten Geräten**; zusätzlich nutzen ChatGPT/Claude den vorhandenen MCP-Zugang (getrennt vom App-Login) | geplant |
 | R2 | Rechtsprofile für Jugendliche (Pausen/Zeitgrenzen) | geplant |
 | Q1 | Codex-Reviews (Kontingent nur noch ~6 %: gezielt, `gpt-6-sol`, Aufwand mittel) für sicherheitsrelevante Pakete (B1 Konten, A2/OAuth, B4 Proxys) | geplant |
 | M2 | Mac-App: Vorbereitung dort, wo es sich anbietet; sonst hinten angestellt (nichts vor 19.10. 8 Uhr) | zurückgestellt |
-| CI | Apple-CI nur manuell, bis ein Runner mit Xcode 27 existiert | umgesetzt (17.10.) |
+| CI | Apple-CI auf dem gehosteten Image `xcode-27` (GitHub, seit 15.10.2026 allgemein verfügbar) | umgesetzt (17.10.); Lauf offen |
 
 Zurückgestellt (auf Nutzerwunsch): IHK-Berichtsheft-Format, Selbstständigenfunktionen.
+
+Entscheidungen (17.10.2026, Nachtrag): **Pause** = normale Pause (Timer anhalten, Lücke bleibt Pause, kein eigener Typ). **Fokus-Filter** wie vorgeschlagen (Modus aus/Vorschlag/direkt plus Art), muss am Ende selbsterklärend sein. **Claude-Kontingent** bis 19.10.2026, 8 Uhr schonen (Stand 93 %): keine neuen Agent-Pakete bis dahin; K1 und A12 sind pausiert.
