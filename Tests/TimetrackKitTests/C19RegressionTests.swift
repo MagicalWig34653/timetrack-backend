@@ -81,8 +81,12 @@ extension AuthTests {
         var s3: [String: Any] = ["endpoint": "https://s3.example.test", "region": "eu-1", "bucket": "bucket-a", "accessKeyId": "test", "secretAccessKey": "test-secret"]
         try await api(app, owner, .PUT, "admin/storage", ["rules": [rule(nil, "s3")], "s3": s3])
         let s3ID = try fileID(await fileUpload(app, owner, "s3.txt", Self.txt))
-        try await BindStorageLocations().revert(on: app.db)
-        try await BindStorageLocations().prepare(on: app.db)
+        // Re-run the migration on ONE connection: the in-memory SQLite pool has one connection per event loop, and
+        // with fewer cores (CI) consecutive `app.db` calls land on different connections that do not see each other's DDL.
+        try await app.db.withConnection { db in
+            try await BindStorageLocations().revert(on: db)
+            try await BindStorageLocations().prepare(on: db)
+        }
         s3["bucket"] = "bucket-b"
         try await api(app, owner, .PUT, "admin/storage", ["rules": [rule(nil, "s3")], "s3": s3])
         _ = try await download(app, owner, s3ID, .serviceUnavailable)

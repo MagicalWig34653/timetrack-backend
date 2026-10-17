@@ -24,7 +24,7 @@ extension AuthTests {
         guard documented || errorSchema != nil else { problems.append("\(label): status not documented in contract"); return response }
         guard let schema = schema ?? errorSchema else { return response }
         let bytes = Data(response.body.readableBytesView)
-        guard let json = try? JSONSerialization.jsonObject(with: bytes, options: [.fragmentsAllowed]) else {
+        guard let json = try? JSONSchemaValidator.parse(bytes) else {
             problems.append("\(label): body is not JSON"); return response
         }
         for issue in JSONSchemaValidator(document: document, reportUndeclaredProperties: true).validate(json, against: schema) { problems.append("\(label): \(issue)") }

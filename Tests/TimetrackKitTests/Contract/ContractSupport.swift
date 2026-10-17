@@ -9,7 +9,7 @@ enum Contract {
 
     static func load() throws -> [String: Any] {
         let data = try Data(contentsOf: directory.appendingPathComponent("openapi.contract.json"))
-        let document = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let document = try XCTUnwrap(JSONSchemaValidator.parse(data) as? [String: Any])
         let yaml = try Data(contentsOf: repositoryRoot.appendingPathComponent("contracts/openapi.yaml"))
         let digest = SHA256.hash(data: yaml).map { String(format: "%02x", $0) }.joined()
         guard document["x-source-sha256"] as? String == digest else {
