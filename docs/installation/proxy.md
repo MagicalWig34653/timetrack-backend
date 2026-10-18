@@ -159,7 +159,7 @@ Setzt du am Proxy eine Begrenzung (nginx `limit_req`/`limit_conn`, Traefik `rate
 1. **Swarm:** Subnetz des `ingress`-Netzes (das Backend sieht hinter dem Routing Mesh diese Adresse als Verbindungspartner): `docker network inspect ingress --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'` (z. B. `10.0.0.0/24`).
 2. **Compose:** Subnetz des Compose-Netzes (`docker network inspect timetrack_default --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'`; der Name folgt dem Projektnamen `timetrack`). Prüfe nach dem Start mit dem Rate-Limit-Test aus dem Betrieb-Dokument, ob die Client-Adresse ankommt.
 3. Zugriffsrechte beachten: Vertrauen Sie nur dem Netz, in dem **ausschließlich der Proxy** Verbindungen zum Backend aufbauen kann. Hängen weitere Dienste im selben Netz, legen Sie ein eigenes Netz nur für Proxy und Backend an, oder tragen Sie die feste Proxy-Adresse als `/32` ein.
-4. In `stack.env` bzw. `.env`: `TRUSTED_PROXY_CIDRS=10.0.0.0/24`, `TRUSTED_PROXY_HEADER=X-Forwarded-For`, neu ausrollen (siehe [Aktualisieren](../UPDATE.md)).
+4. In `.env` bzw. `.env`: `TRUSTED_PROXY_CIDRS=10.0.0.0/24`, `TRUSTED_PROXY_HEADER=X-Forwarded-For`, neu ausrollen (siehe [Aktualisieren](../UPDATE.md)).
 5. Prüfen: Rate-Limit-Verhalten, siehe [Betrieb](../BETRIEB.md), Abschnitt 6, Schritt 3. Ohne die Einstellung teilen sich **alle** Clients einen Zähler (60 Ereignisse je 5 Minuten): ein Angreifer sperrt die Anmeldung für alle. Pro Konto gilt zusätzlich eine eigene Grenze (15 je 5 Minuten).
 
 ## Apple App Site Association

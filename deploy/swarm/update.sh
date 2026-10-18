@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Update a running Swarm stack to the newest published image: find the newest `sha-<commit>` tag on GHCR,
-# write it into stack.env (TIMETRACK_IMAGE), run the migration job with the new image, then roll the backend.
+# write it into .env (TIMETRACK_IMAGE), run the migration job with the new image, then roll the backend.
 #
 # Usage: deploy/swarm/update.sh [options]
-#   --env-file FILE   stack variables (default: ./stack.env, else the file next to this script)
+#   --env-file FILE   stack variables (default: ./.env, else the file next to this script)
 #   --tag TAG         use this tag (e.g. sha-6c074f7 or 0.1.0) instead of looking up the newest sha- tag
 #   --stack NAME      stack name (default: timetrack)
 #   --dry-run         only show what would happen (no file change, no docker calls)
@@ -45,9 +45,9 @@ need curl
 [ "$DRY" = 1 ] || need docker
 
 if [ -z "$ENV_FILE" ]; then
-  if [ -f ./stack.env ]; then ENV_FILE=./stack.env
-  elif [ -f "$(dirname "$0")/stack.env" ]; then ENV_FILE="$(dirname "$0")/stack.env"
-  else die "no stack.env found; pass --env-file"; fi
+  if [ -f ./.env ]; then ENV_FILE=./.env
+  elif [ -f "$(dirname "$0")/.env" ]; then ENV_FILE="$(dirname "$0")/.env"
+  else die "no .env found; pass --env-file"; fi
 fi
 [ -f "$ENV_FILE" ] || die "env file not found: $ENV_FILE"
 

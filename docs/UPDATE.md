@@ -29,10 +29,10 @@ Compose startet den Migrationsdienst bei jedem `up -d` vor dem Backend (`service
 ## Swarm (Cluster)
 
 ```sh
-cd <dein-Ordner-mit-stack.env>
+cd <dein-Ordner-mit-.env>
 # 1. Backup der Datenbank (siehe unten)
-# 2. in stack.env den neuen Tag eintragen (TIMETRACK_IMAGE=…), dann laden:
-set -a; . ./stack.env; set +a
+# 2. in .env den neuen Tag eintragen (TIMETRACK_IMAGE=…), dann laden:
+set -a; . ./.env; set +a
 
 # 3. Migration mit dem NEUEN Image; abwarten bis „Complete"
 docker service update --force --with-registry-auth --image "$TIMETRACK_IMAGE" timetrack_migrate
@@ -50,11 +50,11 @@ Während eines Rolling Updates laufen kurz alte und neue Replikas nebeneinander.
 
 ### Update-Skript (Swarm)
 
-`deploy/swarm/update.sh` erledigt die Schritte 2 bis 4 in einem Lauf: Es sucht auf GHCR den neuesten `sha-<Commit>`-Tag (den Tag, der auf denselben Stand wie `latest` zeigt), schreibt ihn als `TIMETRACK_IMAGE` in deine `stack.env` (Sicherung als `stack.env.bak`), führt den Migrations-Job mit dem neuen Image aus, wartet auf „Complete“ und stellt erst danach das Backend per Rolling Update um. Schlägt die Migration fehl, bleibt das Backend unverändert.
+`deploy/swarm/update.sh` erledigt die Schritte 2 bis 4 in einem Lauf: Es sucht auf GHCR den neuesten `sha-<Commit>`-Tag (den Tag, der auf denselben Stand wie `latest` zeigt), schreibt ihn als `TIMETRACK_IMAGE` in deine `.env` (Sicherung als `.env.bak`), führt den Migrations-Job mit dem neuen Image aus, wartet auf „Complete“ und stellt erst danach das Backend per Rolling Update um. Schlägt die Migration fehl, bleibt das Backend unverändert.
 
 ```sh
-deploy/swarm/update.sh --env-file ./stack.env --dry-run   # nur anzeigen, was passieren würde
-deploy/swarm/update.sh --env-file ./stack.env             # fragt vorher nach der Datenbanksicherung
+deploy/swarm/update.sh --env-file ./.env --dry-run   # nur anzeigen, was passieren würde
+deploy/swarm/update.sh --env-file ./.env             # fragt vorher nach der Datenbanksicherung
 deploy/swarm/update.sh --tag sha-6c074f7 --yes            # bestimmten Stand erzwingen, ohne Rückfrage
 ```
 

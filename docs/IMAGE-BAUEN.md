@@ -57,7 +57,7 @@ Der Workflow `.github/workflows/docker.yml` baut amd64 und arm64 auf nativen Run
 Trage das Image in die Konfiguration ein:
 
 - Compose: `TIMETRACK_IMAGE=registry.example.org/timetrack/timetrack-backend:0.1.0` in `.env`.
-- Swarm: dieselbe Variable in `stack.env`; bei privater Registry `docker login` auf jedem Knoten bzw. `docker stack deploy --with-registry-auth`.
+- Swarm: dieselbe Variable in `.env`; bei privater Registry `docker login` auf jedem Knoten bzw. `docker stack deploy --with-registry-auth`.
 - Ein lokal gebautes Image (`timetrack-backend:local`) funktioniert nur auf dem Rechner, auf dem es gebaut wurde. Für mehrere Knoten in eine Registry pushen.
 
 Danach läuft alles wie in der [Installation](INSTALLATION.md). Die Entwicklungsumgebung (Dev-Compose, Tests) steht in [Einrichtung für Entwicklung](../EINRICHTUNG.md).

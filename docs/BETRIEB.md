@@ -15,7 +15,7 @@ Architektur der Speicherung: [ARCHITEKTUR.md](ARCHITEKTUR.md), Abschnitt 6.
 | `STORAGE_SECRET_KEY` | Docker-Secret `tt_storage_secret_key` | getrennt, z. B. Passwortmanager | **nein, nie** |
 | `VAPID_PRIVATE_KEY` | Docker-Secret `tt_vapid_private_key` | getrennt | **nein, nie** |
 | DB-Passwort, `SMTP_PASSWORD`, `OIDC_CLIENT_SECRET` | Docker-Secrets | getrennt (wiederherstellbar durch neues Passwort, kein Datenverlust) | **nein, nie** |
-| Stack-Variablen (`stack.env`), Proxy-Konfiguration | Betreiber | im Konfigurations-Repository des Betreibers | nein |
+| Stack-Variablen (`.env`), Proxy-Konfiguration | Betreiber | im Konfigurations-Repository des Betreibers | nein |
 | Gebaute PWA, Image | Registry, PWA-Repo | reproduzierbar aus den Quellen | nein |
 
 Folgen fehlender Secrets:
@@ -149,13 +149,13 @@ docker secret create tt_db_password /pfad/zur/datei-mit-dem-db-passwort
 ```
 
 Außerdem: leere Datenbank samt Benutzer auf dem MariaDB-Server, die gebaute PWA ist im Image enthalten (kein Kopieren auf den Knoten), und
-`deploy/swarm/stack.env.example` nach `stack.env` kopieren und ausfüllen. Docker-Secrets sind unveränderlich: zum Rotieren neues Secret
+`deploy/swarm/.env.example` nach `.env` kopieren und ausfüllen. Docker-Secrets sind unveränderlich: zum Rotieren neues Secret
 mit neuem Namen anlegen, Stack-Datei anpassen, neu ausrollen. `STORAGE_SECRET_KEY` nie rotieren, ohne S3-Zugangsdaten neu einzutragen.
 
 ### 5.2 Erstes Deployment und Updates
 
 ```sh
-set -a; . deploy/swarm/stack.env; set +a
+set -a; . deploy/swarm/.env; set +a
 docker stack config -c deploy/swarm/stack.yaml >/dev/null        # Darstellung prüfen
 docker stack deploy --with-registry-auth -c deploy/swarm/stack.yaml timetrack
 docker service logs timetrack_migrate                            # je Migration eine Zeile "Finished prepare"; Job-Status "Complete"
@@ -228,7 +228,7 @@ Einrichtung:
 1. Netz des Proxys bestimmen, so eng wie möglich. Hinter dem Routing Mesh ist das das Subnetz des `ingress`-Netzes:
    `docker network inspect ingress --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'`. Ein ganzes Netz zu vertrauen ist nur dann sicher, wenn dort ausschließlich der Proxy (und keine
    anderen, von Angreifern erreichbaren Dienste) Verbindungen zum Backend aufbauen kann. Besser ist ein eigenes Netz nur für Proxy und Backend oder die feste Proxy-Adresse als `/32`.
-2. `TRUSTED_PROXY_CIDRS=<Netz>[,<Netz>...]` in `stack.env` (bzw. `.env`) setzen; optional `TRUSTED_PROXY_HEADER`. Ein ungültiger Eintrag verhindert den Start (Fehler nennt den Schlüssel).
+2. `TRUSTED_PROXY_CIDRS=<Netz>[,<Netz>...]` in `.env` (bzw. `.env`) setzen; optional `TRUSTED_PROXY_HEADER`. Ein ungültiger Eintrag verhindert den Start (Fehler nennt den Schlüssel).
 3. Prüfen: Zwei Clients nacheinander gegen den Proxy (`POST /api/v1/auth/login/options`, mehr als 60-mal von Client A) dürfen Client B nicht sperren.
 
 Regeln der Auflösung:

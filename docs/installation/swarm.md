@@ -13,8 +13,8 @@ Auf dem Manager-Knoten:
 ```sh
 mkdir -p ~/timetrack-deploy && cd ~/timetrack-deploy
 B=https://github.com/MagicalWig34653/timetrack-backend/raw/main/deploy/swarm
-curl -fsSLO $B/stack.yaml && curl -fsSLO $B/create-secrets.sh && curl -fsSL -o stack.env $B/stack.env.example
-chmod 600 stack.env && chmod +x create-secrets.sh
+curl -fsSLO $B/stack.yaml && curl -fsSLO $B/create-secrets.sh && curl -fsSL -o .env $B/.env.example
+chmod 600 .env && chmod +x create-secrets.sh
 ```
 
 ## 2. Datenbank vorbereiten
@@ -33,7 +33,7 @@ Das Skript legt `tt_db_password`, `tt_storage_secret_key` und `tt_vapid_private_
 
 Prüfen: `docker secret ls` zeigt `tt_db_password`, `tt_storage_secret_key`, `tt_vapid_private_key`.
 
-## 4. `stack.env` ausfüllen
+## 4. `.env` ausfüllen
 
 Pflicht sind die ersten Zeilen: `TIMETRACK_IMAGE`, `DB_HOST`, `PUBLIC_BASE_URL`, `WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGIN`, `VAPID_SUBJECT`. Setze für Produktion eine feste Version:
 
@@ -59,7 +59,7 @@ Alle Variablen: [Konfigurationsreferenz](konfiguration.md). `docker stack deploy
 Swarm kennt keine Reihenfolge zwischen Diensten. Deshalb startet das Backend zuerst mit 0 Replikaten:
 
 ```sh
-set -a; . ./stack.env; set +a
+set -a; . ./.env; set +a
 docker stack config -c stack.yaml > /dev/null && echo "Konfiguration ok"
 
 BACKEND_REPLICAS=0 docker stack deploy --with-registry-auth -c stack.yaml timetrack
@@ -70,7 +70,7 @@ docker service scale timetrack_backend=1
 docker service ps timetrack_backend          # Running, nach ca. 30 s healthy
 ```
 
-Wichtig: `docker stack deploy` setzt die Replikazahl aus der Datei zurück; für spätere Läufe gilt `BACKEND_REPLICAS` aus `stack.env`. Schlägt die Migration fehl, hilft [Probleme und Lösungen](probleme.md); nach der Korrektur `docker service update --force timetrack_migrate`.
+Wichtig: `docker stack deploy` setzt die Replikazahl aus der Datei zurück; für spätere Läufe gilt `BACKEND_REPLICAS` aus `.env`. Schlägt die Migration fehl, hilft [Probleme und Lösungen](probleme.md); nach der Korrektur `docker service update --force timetrack_migrate`.
 
 Prüfen (auf dem Knoten, auf dem das Backend läuft):
 

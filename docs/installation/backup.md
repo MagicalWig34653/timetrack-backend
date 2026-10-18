@@ -12,7 +12,7 @@ Das Projekt liefert **keinen Zeitplan** und verschlüsselt nichts selbst. Lege S
 | --- | --- | --- |
 | Datenbank | MariaDB | Enthält alle Fachdaten, Passkey-Public-Keys und, bei der Standardeinstellung, auch hochgeladene Dateien. |
 | Geheimnisse | `secrets/tt_storage_secret_key`, `secrets/tt_vapid_private_key` (Compose) bzw. Docker-Secrets (Swarm: einmal im Passwortmanager ablegen, Docker zeigt Werte nie wieder) | **Nicht** im Datenbank-Archiv. Ohne den Speicherschlüssel sind gespeicherte S3-Zugangsdaten verloren; ohne VAPID-Schlüssel müssen Geräte Push neu abonnieren. |
-| Konfiguration | `.env` / `stack.env`, Proxy-Konfiguration | Dieselbe `WEBAUTHN_RP_ID` wie vorher, sonst sind Passkeys wertlos. |
+| Konfiguration | `.env` / `.env`, Proxy-Konfiguration | Dieselbe `WEBAUTHN_RP_ID` wie vorher, sonst sind Passkeys wertlos. |
 | S3-Objekte | Bucket | Nur wenn du S3 nutzt; getrennt sichern. |
 | Lokale Dateien | Volume | Nur wenn du „Lokal“ aktiviert hast. |
 

@@ -130,6 +130,6 @@ jobs:
         run: |
           DB_ROOT_PASSWORD=x DB_PASSWORD=x docker compose --project-name timetrack-ci -f compose.yaml \
             --profile app --profile sqlite --profile mail --profile s3 --profile oidc config -q
-          (set -a; . deploy/swarm/stack.env.example; set +a; docker stack config -c deploy/swarm/stack.yaml > /dev/null)
+          (set -a; . deploy/swarm/.env.example; set +a; docker stack config -c deploy/swarm/stack.yaml > /dev/null)
       - name: scripts/check-all.sh --fast (the same static checks as a local run)
         run: scripts/check-all.sh --fast

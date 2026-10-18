@@ -86,7 +86,7 @@ compose_config() {
 }
 
 stack_config() {
-  (set -a; . deploy/swarm/stack.env.example; set +a; docker stack config -c deploy/swarm/stack.yaml >/dev/null)
+  (set -a; . deploy/swarm/.env.example; set +a; docker stack config -c deploy/swarm/stack.yaml >/dev/null)
 }
 
 # --- run ------------------------------------------------------------------------------------------------------------

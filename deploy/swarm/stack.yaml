@@ -2,13 +2,13 @@
 # existing server outside this stack (DB_HOST). Step-by-step guide (German): docs/DEPLOYMENT.md.
 #
 # Render/validate without deploying:
-#   set -a; . deploy/swarm/stack.env; set +a
+#   set -a; . deploy/swarm/.env; set +a
 #   docker stack config -c deploy/swarm/stack.yaml
 # Deploy (see docs/DEPLOYMENT.md for the order: secrets -> database -> migrate -> backend):
 #   docker stack deploy --with-registry-auth -c deploy/swarm/stack.yaml timetrack
 #
-# Values come from the shell environment (deploy/swarm/stack.env.example documents every variable with an example).
-# `docker stack deploy` does NOT read .env files by itself: source stack.env as shown above.
+# Values come from the shell environment (deploy/swarm/.env.example documents every variable with an example).
+# `docker stack deploy` does NOT read .env files by itself: source .env as shown above.
 # Passwords and keys are NEVER variables here: they are Docker secrets (deploy/swarm/create-secrets.sh) that the
 # image entrypoint reads through the <NAME>_FILE convention (scripts/docker-entrypoint.sh).
 #
@@ -90,7 +90,7 @@ services:
       STORAGE_ORPHAN_GRACE_HOURS: ${STORAGE_ORPHAN_GRACE_HOURS:-168}       # OPTIONAL (1..8760)
       PWA_STATIC_DIR: /srv/pwa                                  # fixed: the PWA is part of the image
       # ---- OPTIONAL: e-mail recovery codes (SMTP). To enable, uncomment ALL lines of this block, the secret below and in
-      # the `secrets:` lists, and set the values in stack.env. SMTP_USER and SMTP_PASSWORD must be set together or both
+      # the `secrets:` lists, and set the values in .env. SMTP_USER and SMTP_PASSWORD must be set together or both
       # omitted (an empty SMTP_USER is rejected), so this block cannot be empty-valued.
       # SMTP_HOST: ${SMTP_HOST:?set SMTP_HOST}
       # SMTP_PORT: ${SMTP_PORT:-587}

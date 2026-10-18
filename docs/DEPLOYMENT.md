@@ -20,7 +20,7 @@ Internet ──TLS──> Reverse Proxy (nginx/Traefik, eigene Verwaltung)
 ```
 
 Dateien: [../deploy/swarm/stack.yaml](../deploy/swarm/stack.yaml) (Stack ohne Datenbank-Container),
-[../deploy/swarm/stack.env.example](../deploy/swarm/stack.env.example) (alle Variablen mit Beispielwerten),
+[../deploy/swarm/.env.example](../deploy/swarm/.env.example) (alle Variablen mit Beispielwerten),
 [../deploy/swarm/create-secrets.sh](../deploy/swarm/create-secrets.sh) (Docker-Secrets anlegen).
 
 ## 1. Voraussetzungen
@@ -46,13 +46,13 @@ Sie brauchen nur drei Dateien aus `deploy/swarm/`. Am einfachsten das Repository
 
 ```sh
 mkdir -p ~/timetrack-deploy && cd ~/timetrack-deploy
-# z. B. per scp/rsync: stack.yaml, stack.env.example, create-secrets.sh
-cp stack.env.example stack.env
-chmod 600 stack.env
+# z. B. per scp/rsync: stack.yaml, .env.example, create-secrets.sh
+cp .env.example .env
+chmod 600 .env
 chmod +x create-secrets.sh
 ```
 
-`stack.env` enthält keine Passwörter, kann aber interne Adressen verraten: nicht ins öffentliche Repository, in ein privates Konfigurations-Repository ist in Ordnung.
+`.env` enthält keine Passwörter, kann aber interne Adressen verraten: nicht ins öffentliche Repository, in ein privates Konfigurations-Repository ist in Ordnung.
 
 ## 3. Datenbank vorbereiten (vorhandene MariaDB)
 
@@ -112,9 +112,9 @@ docker network inspect ingress --format '{{range .IPAM.Config}}{{.Subnet}} {{end
 
 Sie können den Stack alternativ an ein gemeinsames Overlay-Netz mit einem Proxy im Swarm hängen. Dafür ergänzen Sie im Stack ein externes Netz und `networks:` am Dienst; das ist nicht die Voreinstellung und nicht erprobt.
 
-## 6. Variablen eintragen (`stack.env`)
+## 6. Variablen eintragen (`.env`)
 
-Alle Variablen mit Pflicht/optional, Standardwert und Bedeutung stehen in der **[Konfigurationsreferenz](installation/konfiguration.md)**. Für den Swarm gilt zusätzlich: Öffne `stack.env` (Vorlage `stack.env.example`) und ersetze die Beispielwerte; **Pflicht** sind die ersten Zeilen (`TIMETRACK_IMAGE`, `DB_HOST`, `PUBLIC_BASE_URL`, `WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGIN`, `VAPID_SUBJECT`). Die Datei wird von der Shell eingelesen (`set -a; . ./stack.env; set +a`): keine Leerzeichen um `=`, Werte mit Leerzeichen in Anführungszeichen. Das Backend loggt bei ungültiger Konfiguration einen Fehler mit dem Namen der Variable (z. B. `Invalid configuration for WEBAUTHN_RP_ID: must be a lowercase hostname`) und startet nicht.
+Alle Variablen mit Pflicht/optional, Standardwert und Bedeutung stehen in der **[Konfigurationsreferenz](installation/konfiguration.md)**. Für den Swarm gilt zusätzlich: Öffne `.env` (Vorlage `.env.example`) und ersetze die Beispielwerte; **Pflicht** sind die ersten Zeilen (`TIMETRACK_IMAGE`, `DB_HOST`, `PUBLIC_BASE_URL`, `WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGIN`, `VAPID_SUBJECT`). Die Datei wird von der Shell eingelesen (`set -a; . ./.env; set +a`): keine Leerzeichen um `=`, Werte mit Leerzeichen in Anführungszeichen. Das Backend loggt bei ungültiger Konfiguration einen Fehler mit dem Namen der Variable (z. B. `Invalid configuration for WEBAUTHN_RP_ID: must be a lowercase hostname`) und startet nicht.
 
 Dateispeicher in der Datenbank: Der Stack hat **keine Volumes**. Hochgeladene Dateien liegen in der Datenbank (und damit im DB-Backup). Stelle nach dem ersten Login im Admin-Bereich bei den Speicherregeln „alles → Datenbank“ ein und setze ein globales Upload-Limit (Beispiel: 50 MiB). Die Speicherart „Lokal“ steht im Stack nicht zur Verfügung (kein beschreibbarer Pfad, Root-Dateisystem schreibgeschützt); S3 ist über den Admin-Bereich weiterhin möglich.
 
@@ -124,7 +124,7 @@ Reihenfolge: **Migration → Dienst → Gesundheitsprüfung.** Swarm kennt keine
 
 ```sh
 cd ~/timetrack-deploy
-set -a; . ./stack.env; set +a
+set -a; . ./.env; set +a
 
 # 1. Darstellung prüfen (bereitet nichts vor; fehlende Pflichtvariablen werden benannt)
 docker stack config -c stack.yaml > /dev/null && echo "Konfiguration ok"
@@ -144,7 +144,7 @@ docker service logs --tail 50 timetrack_backend
 
 Schlägt der Migrationsjob fehl (`Failed`, `Rejected`): `docker service logs timetrack_migrate`. Häufig: DB nicht erreichbar, TLS-Fehler, fehlende Rechte ([Probleme und Lösungen](installation/probleme.md)). Nach der Korrektur den Job erneut starten: `docker service update --force timetrack_migrate`.
 
-Wichtig: `docker stack deploy` setzt `replicas` aus der Datei zurück. Wenn Sie später erneut deployen, ohne `BACKEND_REPLICAS` zu setzen, gilt der Wert aus `stack.env` (hier `1`).
+Wichtig: `docker stack deploy` setzt `replicas` aus der Datei zurück. Wenn Sie später erneut deployen, ohne `BACKEND_REPLICAS` zu setzen, gilt der Wert aus `.env` (hier `1`).
 
 Gesundheit des Dienstes (der Container-Healthcheck ruft `/ready` auf: Datenbank erreichbar und alle Migrationen angewendet):
 
@@ -238,8 +238,8 @@ Kurzfassung mit Compose und Swarm: [Aktualisieren und Migrationen](UPDATE.md). V
 
 ```sh
 cd ~/timetrack-deploy
-set -a; . ./stack.env; set +a
-export NEUES_IMAGE=ghcr.io/OWNER/timetrack-backend:1.1.0    # neue Version; in stack.env nachführen
+set -a; . ./.env; set +a
+export NEUES_IMAGE=ghcr.io/OWNER/timetrack-backend:1.1.0    # neue Version; in .env nachführen
 
 # 1. Migration zuerst (idempotent; ohne offene Migrationen passiert nichts)
 docker service update --force --image "$NEUES_IMAGE" timetrack_migrate
@@ -250,7 +250,7 @@ docker service update --with-registry-auth --image "$NEUES_IMAGE" timetrack_back
 docker service ps timetrack_backend
 ```
 
-Oder: `TIMETRACK_IMAGE` in `stack.env` ändern, `docker stack deploy ...` erneut ausführen (Migrationsjob **vor** dem Backend abwarten; mit `BACKEND_REPLICAS=0` beginnen, wenn das Schema geändert wird).
+Oder: `TIMETRACK_IMAGE` in `.env` ändern, `docker stack deploy ...` erneut ausführen (Migrationsjob **vor** dem Backend abwarten; mit `BACKEND_REPLICAS=0` beginnen, wenn das Schema geändert wird).
 
 Verhalten: Das neue Backend wird erst „healthy“, wenn `/ready` 200 liefert (Datenbank erreichbar, alle Migrationen angewendet). Ohne vorherige Migration bleibt es ungesund; `update_config` rollt automatisch zurück (`failure_action: rollback`, 60 s Beobachtung). Tritt das ein, ist der Dienst auf der alten Version geblieben.
 
@@ -267,7 +267,7 @@ Verbindliche Beschreibung, Archivformat, Nachweise: [BETRIEB.md](BETRIEB.md) Abs
    `DB_HOST=db.internal.example.test DB_USER=ttbackup DB_PASSWORD_FILE=/root/tt-backup-pw scripts/backup.sh --driver mariadb --db-name timetrack --out /backups`
 3. **Dateien**: Liegen sie in der Datenbank (Empfehlung, Stack ohne Volumes), sind sie im Datenbank-Backup enthalten; `--local-files` entfällt. Nur wenn Sie den Stack selbst um einen Bind-Mount für die Speicherart „Lokal“ erweitern, gilt: das Backend speichert den **echten Pfad im Container** in der Datenbank, das Skript prüft gegen den Host-Pfad; nur mit identischem Pfad auf Host und Container sinnvoll, nicht erprobt.
 4. **S3-Objekte** separat sichern (BETRIEB.md Abschnitt 2).
-5. **Nicht im Archiv, getrennt aufbewahren**: `STORAGE_SECRET_KEY`, VAPID-Schlüssel, DB-Passwort, `stack.env`, Proxy-Konfiguration.
+5. **Nicht im Archiv, getrennt aufbewahren**: `STORAGE_SECRET_KEY`, VAPID-Schlüssel, DB-Passwort, `.env`, Proxy-Konfiguration.
 6. Archive verschlüsseln (`age`/`gpg`), außerhalb des Servers ablegen, zeitgesteuert (cron/systemd-Timer) laufen lassen. **Das Projekt liefert keinen Zeitplan.**
 7. Restore: Backend auf 0 skalieren, `scripts/restore.sh` (Ziel-DB leer), mit den **ursprünglichen** Secrets und derselben `WEBAUTHN_RP_ID` wieder starten, bei neuerem Image zuerst die Migration. Mindestens einmal vorher auf einer Kopie üben.
 
@@ -281,7 +281,7 @@ Verbindliche Beschreibung, Archivformat, Nachweise: [BETRIEB.md](BETRIEB.md) Abs
 
 ## 16. Modulschalter
 
-`MODULES_DISABLED` (kommagetrennt) sperrt Funktionen für alle Konten: `reports` (Berichte/Berichtsheft), `planning`, `transfer` (Import/Export), `automation`, `mcp`. Gesperrte Module verschwinden in der PWA und antworten auf der API mit einem Fehler; Benutzer können Module zusätzlich für sich selbst abschalten (ADR-0012). Beispiel: Nur ohne KI-Anbindung `MODULES_DISABLED=mcp`. Ungültige Namen verhindern den Start. Änderung: `stack.env`, neu ausrollen.
+`MODULES_DISABLED` (kommagetrennt) sperrt Funktionen für alle Konten: `reports` (Berichte/Berichtsheft), `planning`, `transfer` (Import/Export), `automation`, `mcp`. Gesperrte Module verschwinden in der PWA und antworten auf der API mit einem Fehler; Benutzer können Module zusätzlich für sich selbst abschalten (ADR-0012). Beispiel: Nur ohne KI-Anbindung `MODULES_DISABLED=mcp`. Ungültige Namen verhindern den Start. Änderung: `.env`, neu ausrollen.
 
 ## 17. Bekannte Lücken
 
@@ -304,7 +304,7 @@ Ausgelagert auf die Seite **[Probleme und Lösungen](installation/probleme.md)**
 
 ## 19. Sicherheits-Checkliste
 
-- [ ] Alle Secrets als Docker-Secrets (kein Passwort in `stack.env`, Image, Repository oder Shell-Verlauf); Wert-Dateien nach dem Anlegen gelöscht.
+- [ ] Alle Secrets als Docker-Secrets (kein Passwort in `.env`, Image, Repository oder Shell-Verlauf); Wert-Dateien nach dem Anlegen gelöscht.
 - [ ] `STORAGE_SECRET_KEY` und VAPID-Schlüssel im Passwortmanager gesichert (**Verlust des Speicherschlüssels macht verschlüsselte S3-Einstellungen unwiederbringlich**).
 - [ ] DB-Benutzer nur für `timetrack.*`, Host eingeschränkt, `REQUIRE SSL`, starkes Passwort; MariaDB-Port nur aus dem Swarm erreichbar.
 - [ ] Backup-Verfahren eingerichtet, Archive verschlüsselt und extern gelagert, Restore einmal geübt.
@@ -323,7 +323,7 @@ Ausgelagert auf die Seite **[Probleme und Lösungen](installation/probleme.md)**
 2. [ ] MariaDB: Datenbank und Benutzer angelegt, TLS-Verbindung getestet ([Eigene MariaDB](installation/mariadb.md)).
 3. [ ] Secrets angelegt (`docker secret ls` zeigt drei bis fünf `tt_*`), Schlüssel gesichert (Abschnitt 4).
 4. [ ] Overlay-Netz vorhanden, Proxy daran angeschlossen; Subnetz in `TRUSTED_PROXY_CIDRS` (Abschnitte 5, 9).
-5. [ ] `stack.env` ausgefüllt; `docker stack config -c stack.yaml` ohne Fehler (Abschnitte 6, 7).
+5. [ ] `.env` ausgefüllt; `docker stack config -c stack.yaml` ohne Fehler (Abschnitte 6, 7).
 6. [ ] Image enthält die PWA (`docker run --rm --entrypoint ls IMAGE /srv/pwa` zeigt `index.html`); keine Volumes, keine Knotenbindung nötig.
 7. [ ] Migrationsjob `Complete`, Backend `healthy`, `/ready` = 200 (Abschnitt 7).
 8. [ ] Proxy-Konfiguration geladen: `https://timetrack.example.org/` zeigt die PWA, `/health` von außen nicht erreichbar.

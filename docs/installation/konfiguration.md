@@ -1,10 +1,10 @@
 # Konfigurationsreferenz
 
 - **Wofür:** Alle Umgebungsvariablen von Timetrack an einer Stelle: Pflicht oder optional, Standardwert, Bedeutung.
-- **Voraussetzungen:** keine; die Werte setzt du in `.env` (Compose) bzw. `stack.env` (Swarm).
+- **Voraussetzungen:** keine; die Werte setzt du in `.env` (Compose) bzw. `.env` (Swarm).
 - **Dauer:** zum Nachschlagen.
 
-Ungültige Werte verhindern den Start; der Fehler nennt die Variable (z. B. `Invalid configuration for WEBAUTHN_RP_ID: must be a lowercase hostname`). Die Vorlagen [`deploy/compose/.env.example`](https://github.com/MagicalWig34653/timetrack-backend/blob/main/deploy/compose/.env.example) und [`deploy/swarm/stack.env.example`](https://github.com/MagicalWig34653/timetrack-backend/blob/main/deploy/swarm/stack.env.example) enthalten die wichtigsten davon mit Beispielwerten. „Standard“ ist der Wert im Code; die mitgelieferten Dateien setzen teils eigene Werte (angegeben).
+Ungültige Werte verhindern den Start; der Fehler nennt die Variable (z. B. `Invalid configuration for WEBAUTHN_RP_ID: must be a lowercase hostname`). Die Vorlagen [`deploy/compose/.env.example`](https://github.com/MagicalWig34653/timetrack-backend/blob/main/deploy/compose/.env.example) und [`deploy/swarm/.env.example`](https://github.com/MagicalWig34653/timetrack-backend/blob/main/deploy/swarm/.env.example) enthalten die wichtigsten davon mit Beispielwerten. „Standard“ ist der Wert im Code; die mitgelieferten Dateien setzen teils eigene Werte (angegeben).
 
 ## Pflicht
 
