@@ -37,6 +37,18 @@ func registerPlanningRoutes(_ app: Application, auth: AuthService) {
     api.get("vacation", "balance") { req async throws -> Response in
         let value = try year(req); return try await runRead(req) { try timeResponse(await $0.vacation.balance(year: value)) }
     }
+    api.get("vacation", "suggestions") { req async throws -> Response in
+        @Sendable func optionalDate(_ name: String) throws -> LocalDate? {
+            guard let raw: String = req.query[name] else { return nil }; return try LocalDate(raw)
+        }
+        @Sendable func optionalInt(_ name: String) throws -> Int? {
+            guard let raw: String = req.query[name] else { return nil }
+            guard let value = Int(raw) else { throw APIError.invalid }; return value
+        }
+        let input = VacationSuggestionQuery(from: try optionalDate("from"), to: try optionalDate("to"),
+            maxVacationDays: try optionalInt("maxVacationDays"), minDaysOff: try optionalInt("minDaysOff"), limit: try optionalInt("limit"))
+        return try await runRead(req) { try timeResponse(await $0.vacation.suggestions(input)) }
+    }
     api.get("vacation", "entries") { req async throws -> Response in
         let value = try year(req); return try await runRead(req) { try timeResponse(await $0.vacation.entries(year: value)) }
     }

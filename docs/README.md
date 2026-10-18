@@ -71,6 +71,7 @@ und keine Nutzerentscheidungen (siehe jeweilige Statuszeile). Nummer 0004 existi
 | 0019 | Profil, E-Mail-Änderung per Code, geführte Einrichtung | akzeptiert; umgesetzt (P1) | [ADR-0019](decisions/ADR-0019-profil-onboarding.md) |
 | 0020 | Darstellung (Akzentfarbe, Farbschema) je Konto | akzeptiert (Nutzerentscheidung 16.10.); umgesetzt (P2, A8) | [ADR-0020](decisions/ADR-0020-darstellung-konto.md) |
 | 0021 | Wochenplanung (geplante Zeiten) und Wochenübersicht | Umsetzungsentscheidung (K1); Lead-Prüfung offen | [ADR-0021](decisions/ADR-0021-wochenplanung.md) |
+| 0025 | Urlaubsplanung (Urlaubsvorschläge) | Umsetzungsentscheidung (V2); Lead-Prüfung offen | [ADR-0025](decisions/ADR-0025-urlaubsplanung.md) |
 
 ## Namensgebung und Kennungen (Entscheidung 17.10.2026)
 

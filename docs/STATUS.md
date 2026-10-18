@@ -14,6 +14,10 @@ Zahlen unten sind die zuletzt vom Lead selbst gemessenen (Stand der Pakete P2/A8
 | GitHub (öffentlich) | Repos mit Workflows (W1), GitHub-Pages-Website aus `site/` (Pages-Lauf grün), Dependabot-Pull-Requests offen (Stand 17.10.: Backend 2, PWA 3, Apple 1) |
 | TestFlight | Archiv und Export lokal mit `scripts/testflight.sh` im Apple-Repo bestätigt; **Upload steht aus**, weil er auf die AASA-Auslieferung der Produktionsdomain wartet |
 
+## Paket V2 (Urlaubsplanung, Backend, 19.10.2026, Lead-Prüfung offen)
+
+Branch `v2-vacation-suggestions`: `GET /vacation/suggestions` (Brückentage, Feiertagsblöcke, Schulferien-Erweiterungen, Auszeiten nach Effizienz; Vertrag v0.22.0, ADR-0025), reiner Algorithmus mit Unit-Tests, Handoff `docs/handoffs/V2-backend.md`. PWA-Gegenstück offen. 346 Tests, SQLite 0 Fehler (40 übersprungen), MariaDB 0 Fehler (2 übersprungen).
+
 ## Paket AC2 (Akzentfarben, 18.10.2026, Lead-Prüfung offen)
 
 Branch `AC2`: sechs weitere Akzent-IDs `wine`, `slate`, `cocoa`, `olive`, `ocean`, `ink` (Vertrag v0.21.0, ADR-0020 Nachtrag), PWA-Gegenstück gleicher Branchname. Details und Farbwerte für die Apple-Apps `docs/handoffs/AC2.md`.

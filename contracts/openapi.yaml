@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.21.0
+  version: 0.22.0
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -54,6 +54,8 @@ info:
     v0.19.0 (V1, ADR-0023): GET /api/v1/system/info (Versions- und Build-Angaben von Server und PWA, jedes angemeldete Konto, nicht modulgesteuert); GET /health liefert zusätzlich `version` und `revision`. Kein Schemawechsel.
     --- AC2 (v0.21.0, additiv) ---
     v0.21.0 (AC2, ADR-0020 Nachtrag): AccentId um wine, slate, cocoa, olive, ocean, ink erweitert (dunkle Töne mit weißer Schrift). Server vor v0.21.0 lehnen die IDs mit 400 ab; Clients ohne Kenntnis der IDs zeigen sie als Blau, bestehende Konten bleiben unverändert. Kein Schemawechsel.
+    --- V2 (v0.22.0, additiv) ---
+    v0.22.0 (V2, ADR-0025): GET /api/v1/vacation/suggestions (Urlaubsplanung: Brückentage, Feiertagsblöcke, Schulferien-Erweiterungen, Auszeiten; Modul planning). Rein lesend, kein Schemawechsel. Feiertage der Region der Urlaubseinstellungen, Arbeitstage des Arbeitsmodells, selbst eingetragene Schulferien (keine eingebauten Termine), bestehende Abwesenheiten, Berufsschul- und Plantage; Budget aus dem Urlaubskonto (halbe Tage möglich). Fehler: 400 invalid, 400 range_too_large (mehr als 18 Monate).
     --- S1a (v0.20.0, additiv) ---
     v0.20.0 (S1a, ADR-0024): Jede /api/v1-Operation kann bei nicht erreichbarer Datenbank (Verbindungsfehler, Pool-Zeitlimit) mit 503 `database_unavailable` und Header `Retry-After` (Sekunden) antworten, statt mit 500. Gemeinsame Antwort `ServiceUnavailable`; Clients wiederholen nach Ablauf. Kein Schemawechsel.
 servers:
@@ -782,6 +784,27 @@ paths:
       security: [ { session: [] } ]
       parameters: [ { name: year, in: query, required: true, schema: { type: integer } } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/VacationBalance' } } } } }
+  /api/v1/vacation/suggestions:
+    get:
+      operationId: getVacationSuggestions
+      description: |
+        Urlaubsvorschläge (ADR-0025, Modul planning). Deterministisch, ohne Netzwerk. Fenster ohne Urlaubstage kommen nicht vor;
+        bereits gebuchter Urlaub wird nie erneut vorgeschlagen; Fenster mit Berufsschul- oder Plantagen, Abwesenheiten oder
+        bereits gebuchtem Urlaub werden mit `conflicts` markiert, nicht ausgeblendet. Vorschläge überlappen sich nicht,
+        Rangfolge: `efficiency` absteigend, dann `totalDaysOff`, dann Beginn. Jeder Vorschlag wird einzeln gegen das Budget
+        geprüft (nicht kumulativ). `budget` gilt für das Jahr von `from`; `fitsBudget` prüft je Kalenderjahr gegen
+        `availableAfterPlanned` des Jahres; `remainingAfter` bezieht sich auf das Jahr von `start`.
+      security: [ { session: [] } ]
+      parameters:
+        - { name: from, in: query, required: false, schema: { type: string, format: date }, description: Standard heute (Zeitzone des Arbeitsmodells) }
+        - { name: to, in: query, required: false, schema: { type: string, format: date }, description: Standard Ende des nächsten Kalenderjahres; höchstens 18 Monate nach from }
+        - { name: maxVacationDays, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 60, default: 10 } }
+        - { name: minDaysOff, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 60, default: 4 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/VacationSuggestions' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
   /api/v1/vacation/entries:
     get:
       operationId: listVacationEntries
@@ -1770,6 +1793,53 @@ components:
         plannedHalfDays: { type: integer, description: Status planned oder requested }
         availableHalfDays: { type: integer }
         availableAfterPlannedHalfDays: { type: integer }
+    VacationSuggestions:
+      type: object
+      required: [from, to, budget, suggestions]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        budget:
+          type: object
+          required: [entitlementDays, takenDays, plannedDays, remainingDays]
+          description: Tage (halbe möglich) für das Jahr von `from`. entitlementDays = Anspruch + Übertrag + Korrekturen (oder Stichtagsbestand + Buchungen danach); remainingDays = verfügbar nach geplantem Urlaub.
+          properties:
+            entitlementDays: { type: number }
+            takenDays: { type: number, description: Status approved oder taken }
+            plannedDays: { type: number, description: Status planned oder requested }
+            remainingDays: { type: number }
+        suggestions:
+          type: array
+          items: { $ref: '#/components/schemas/VacationSuggestion' }
+    VacationSuggestion:
+      type: object
+      required: [id, kind, start, end, vacationDates, vacationDaysNeeded, totalDaysOff, efficiency, holidays, schoolHolidays, conflicts, fitsBudget, remainingAfter]
+      properties:
+        id: { type: string, description: stabil (Hash aus Beginn, Ende und Urlaubstagen), 16 Hexzeichen }
+        kind: { type: string, enum: [bridge, holiday_cluster, school_holiday_extension, long_break], description: school_holiday_extension bei Überlappung mit eigenen Schulferien; sonst bridge (Feiertag, höchstens 2 Urlaubstage), holiday_cluster (Feiertag, mehr Urlaubstage), long_break (ohne Feiertag) }
+        start: { type: string, format: date, description: erster freier Tag (inklusive Wochenende/Feiertage davor) }
+        end: { type: string, format: date, description: letzter freier Tag }
+        vacationDates: { type: array, items: { type: string, format: date }, description: Arbeitstage, die Urlaub kosten (ganze Tage) }
+        vacationDaysNeeded: { type: integer }
+        totalDaysOff: { type: integer, description: Kalendertage von start bis end }
+        efficiency: { type: number, description: totalDaysOff / vacationDaysNeeded, auf 2 Stellen gerundet }
+        holidays:
+          type: array
+          items: { type: object, required: [date, name], properties: { date: { type: string, format: date }, name: { type: string } } }
+        schoolHolidays:
+          type: array
+          description: Überlappende, selbst eingetragene Schulferien
+          items: { type: object, required: [startDate, endDate, name], properties: { startDate: { type: string, format: date }, endDate: { type: string, format: date }, name: { type: string } } }
+        conflicts:
+          type: array
+          items:
+            type: object
+            required: [date, type]
+            properties:
+              date: { type: string, format: date }
+              type: { type: string, enum: [absence, school_day, plan, already_vacation], description: absence = Krankheit/Sonstiges; school_day = Plantag Modus school; plan = geplante Arbeit; already_vacation = bereits eingetragener Urlaub (kostet nichts, liegt im Fenster) }
+        fitsBudget: { type: boolean }
+        remainingAfter: { type: number, description: Resttage des Jahres von start nach diesem Vorschlag (negativ möglich) }
     AbsenceInput:
       type: object
       required: [kind, startDate, endDate, status]
