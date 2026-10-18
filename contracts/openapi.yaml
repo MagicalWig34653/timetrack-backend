@@ -20,6 +20,7 @@ info:
     (4) DELETE /auth/session is allowed in recovery sessions. (5) Invitation links have the form
     `<PUBLIC_BASE_URL>/invite/<token>`; `App bootstrap-admin` prints exactly this form.
     (6) No session listing endpoint in stage 1; only revoking other sessions.
+    v0.18.0: E-Mail-Diagnose (MAIL1, ADR-0022, additiv, nur Admin): GET /admin/mail (Konfiguration ohne Geheimnisse, Hinweise), POST /admin/mail/check (Live-Prüfung des SMTP-Servers in Schritten dns/tcp/tls/ehlo/auth/mailFrom, sendet keine Nachricht; 6 je 10 Minuten und Admin, 429 too_many_requests) und POST /admin/mail/test (Testmail mit festem Text, frische Sitzung nötig, 3 je 10 Minuten und 3 je Stunde und Empfänger; 400 no_recipient, 501 not_implemented, 422 mail_recipient_rejected, 502 mail_auth_failed|mail_tls_failed|mail_sender_rejected|mail_connect_failed|mail_failed, 504 mail_timeout). Einstellungen bleiben reine Umgebungsvariablen.
     v0.17.0: Wochenplanung und Wochenübersicht (K1, ADR-0021, additiv): PlanDayInput/PlanDay erhalten optional plannedStart/plannedEnd (lokale Uhrzeit "HH:mm" in der Zeitzone des Arbeitsmodells; beide oder keine; Beginn < Ende am selben Tag, keine Nachtschicht), plannedBreakMinutes (0..600, nur mit Zeiten) und schreibgeschützt plannedSeconds (Ende − Beginn − Pause, nie negativ; feste Pausen des Arbeitsmodells werden nicht abgezogen); Modus off ignoriert Zeiten. Alte Clients ohne die Felder funktionieren unverändert. Neue Pfade: GET/PUT /plan/weeks/{isoWeek} (Modul planning; PUT höchstens 7 Tage in einer Transaktion, replace=true löscht nicht genannte Tage der Woche; Antwort Soll je Tag aus dem Arbeitsmodell, plannedSeconds, blockedBy bei Feiertag/Abwesenheit, Summen) und GET /time/weeks/{isoWeek} (Kern; Wochenübersicht in einem Aufruf). Die Freigabe plan enthält nun auch die geplanten Zeiten (nie Notiz oder Ort). Neue Fehlercodes (400): plan_time_invalid, plan_break_invalid, invalid_week, week_day_invalid.
     v0.16.0: Arbeitsmodell-Korrektur (M1, ADR-0004-Nachtrag, additiv): PUT /work-models/{id} ersetzt alle bearbeitbaren Felder einer Version (optional If-Match mit `version`, sonst 412 stale_version; 409 model_overlap bei Überschneidung; die Vorversion wird am Vortag von validFrom neu begrenzt), POST /work-models/{id}/preview liefert dieselbe Prüfung als Vorschau ohne Speichern (Zeitkonto vorher/nachher, betroffene Tage, geänderte Felder). WorkModel.version (additiv). Auswertungen werden beim Lesen berechnet; die Korrektur ändert sie bewusst nur auf ausdrücklichen Nutzerwunsch.
     v0.15.0: Leuchteffekt und weitere Akzentfarben (G1, ADR-0020 Nachtrag, additiv): Preferences.glow (off|subtle|medium|strong, Standard subtle, auch bei zuvor gespeicherten Konten) ist per PATCH /me/preferences schreibbar; AccentId um indigo, navy, purple, magenta, crimson, forest, petrol, bronze erweitert (dunkle Töne mit weißer Schrift). Ältere Clients ignorieren das neue Feld; unbekannte Akzent-IDs zeigen sie als Blau.
@@ -1019,6 +1020,25 @@ paths:
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/StorageSettingsInput' } } } }
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/StorageSettings' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '403': { $ref: '#/components/responses/Forbidden' }, '501': { $ref: '#/components/responses/NotImplemented' } }
+  /api/v1/admin/mail:
+    get:
+      operationId: getMailStatus
+      description: Nur Admin. Zeigt die SMTP-Einstellungen aus der Umgebung ohne Benutzername und Passwort (`authConfigured`) samt Hinweisen. Ohne SMTP_HOST ist `configured` false.
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/MailStatus' } } } }, '403': { $ref: '#/components/responses/Forbidden' } }
+  /api/v1/admin/mail/check:
+    post:
+      operationId: checkMail
+      description: Nur Admin, normale Sitzung. Prüft live DNS, TCP, TLS, EHLO, Anmeldung und Absender (MAIL FROM, danach RSET) mit höchstens 20 s; es wird keine Nachricht gesendet. Ein fehlgeschlagener Schritt ist ein normales Ergebnis (200, ok=false). 6 je 10 Minuten und Admin. Ohne SMTP 501 not_implemented.
+      security: [ { session: [], csrf: [] } ]
+      responses: { '200': { description: Ergebnis, content: { application/json: { schema: { $ref: '#/components/schemas/MailCheckResult' } } } }, '403': { $ref: '#/components/responses/Forbidden' }, '429': { $ref: '#/components/responses/TooMany' }, '501': { $ref: '#/components/responses/NotImplemented' } }
+  /api/v1/admin/mail/test:
+    post:
+      operationId: sendMailTest
+      description: Nur Admin, frische Sitzung (sonst 403 reauth_required), weil an beliebige Adressen gesendet wird. Fester Betreff und Text ohne Nutzereingabe, Absender nur SMTP_FROM. Ohne `to` geht die Mail an die bestätigte eigene Adresse (sonst 400 no_recipient). 3 je 10 Minuten und Admin, 3 je Stunde und Empfänger.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: false, content: { application/json: { schema: { $ref: '#/components/schemas/MailTestInput' } } } }
+      responses: { '200': { description: gesendet, content: { application/json: { schema: { $ref: '#/components/schemas/MailTestResult' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '403': { $ref: '#/components/responses/Forbidden' }, '422': { description: Empfänger abgelehnt, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }, '429': { $ref: '#/components/responses/TooMany' }, '501': { $ref: '#/components/responses/NotImplemented' }, '502': { description: Mailserver-Fehler, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }, '504': { description: Zeitüberschreitung, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } } }
   /api/v1/files:
     post:
       operationId: uploadFile
@@ -2004,6 +2024,65 @@ components:
             pathStyle: { type: boolean, default: true }
             accessKeyId: { type: string }
             secretAccessKey: { type: string, writeOnly: true }
+    MailHint:
+      type: object
+      required: [severity, code, message]
+      properties: { severity: { type: string, enum: [info, warning] }, code: { type: string }, message: { type: string } }
+    MailStatus:
+      type: object
+      required: [configured, authConfigured, source, hints]
+      properties:
+        configured: { type: boolean }
+        host: { type: string }
+        port: { type: integer }
+        tls: { type: string, enum: [starttls, implicit, 'off'] }
+        fromAddress: { type: string }
+        fromName: { type: string }
+        authConfigured: { type: boolean }
+        source: { type: string, enum: [environment] }
+        hints: { type: array, items: { $ref: '#/components/schemas/MailHint' } }
+    MailCheckCertificate:
+      type: object
+      required: [validFrom, validUntil, daysLeft, hostnameMatches]
+      properties:
+        subject: { type: string }
+        issuer: { type: string }
+        validFrom: { type: string, format: date-time }
+        validUntil: { type: string, format: date-time }
+        daysLeft: { type: integer }
+        hostnameMatches: { type: boolean }
+    MailCheckProblem:
+      type: object
+      required: [code, message, advice]
+      properties: { code: { type: string }, message: { type: string }, advice: { type: string } }
+    MailCheckStep:
+      type: object
+      required: [id, title, status, durationMs, details, warnings]
+      properties:
+        id: { type: string, enum: [dns, tcp, tls, ehlo, auth, mailFrom] }
+        title: { type: string }
+        status: { type: string, enum: [ok, failed, skipped] }
+        durationMs: { type: integer }
+        details: { type: array, items: { type: string } }
+        warnings: { type: array, items: { type: string } }
+        certificate: { $ref: '#/components/schemas/MailCheckCertificate' }
+        problem: { $ref: '#/components/schemas/MailCheckProblem' }
+    MailCheckResult:
+      type: object
+      required: [ok, summary, checkedAt, totalMs, steps]
+      properties:
+        ok: { type: boolean }
+        summary: { type: string }
+        checkedAt: { type: string, format: date-time }
+        totalMs: { type: integer }
+        steps: { type: array, items: { $ref: '#/components/schemas/MailCheckStep' } }
+    MailTestInput:
+      type: object
+      properties: { to: { type: string, format: email } }
+    MailTestResult:
+      type: object
+      required: [sent, to, durationMs]
+      properties: { sent: { type: boolean }, to: { type: string }, durationMs: { type: integer } }
     StorageSettings:
       type: object
       required: [rules, maxUploadBytes, hasSecret]

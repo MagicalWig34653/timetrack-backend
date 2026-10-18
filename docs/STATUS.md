@@ -101,3 +101,5 @@ Swift 6.4 (Xcode 27), Node 26.5/npm 11.17, Docker 29.5.2 (Colima arm64), Compose
 ## Roadmap
 
 Reihenfolge, Umfang und Entscheidungen vom 17.10.2026: `docs/ARBEITSPLAN.md`, Abschnitt „Roadmap nach Release v0.1.0“.
+
+**MAIL1 (17.10.2026, Lead-Prüfung offen):** E-Mail-Diagnose für Admins (`/admin/mail`, `/admin/mail/check`, `/admin/mail/test`), Vertrag v0.18.0, ADR-0022; Details `docs/handoffs/MAIL1.md`.
