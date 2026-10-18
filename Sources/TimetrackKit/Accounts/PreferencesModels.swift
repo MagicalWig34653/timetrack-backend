@@ -12,6 +12,8 @@ struct AccountPreferences: Content, Equatable {
         "blue", "teal", "violet", "green", "orange", "pink", "graphite",
         // v0.15.0: darker fills that carry white text
         "indigo", "navy", "purple", "magenta", "crimson", "forest", "petrol", "bronze",
+        // v0.21.0: six more dark fills that carry white text
+        "wine", "slate", "cocoa", "olive", "ocean", "ink",
         "custom"
     ]
     static let glows = ["off", "subtle", "medium", "strong"]

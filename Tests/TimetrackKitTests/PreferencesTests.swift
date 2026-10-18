@@ -37,7 +37,7 @@ extension AuthTests {
         try await eq((try await prefs(app, member))["glow"] as? String, "strong")
         let both = try object(await api(app, member, .PATCH, "me/preferences", ["accent": "navy", "glow": "off"]))
         XCTAssertEqual(both["accent"] as? String, "navy"); XCTAssertEqual(both["glow"] as? String, "off")
-        for accent in ["indigo", "navy", "purple", "magenta", "crimson", "forest", "petrol", "bronze"] {
+        for accent in ["indigo", "navy", "purple", "magenta", "crimson", "forest", "petrol", "bronze", "wine", "slate", "cocoa", "olive", "ocean", "ink"] {
             try await eq((try object(await api(app, member, .PATCH, "me/preferences", ["accent": accent])))["accent"] as? String, accent)
         }
         try await api(app, member, .PATCH, "me/preferences", ["accent": "teal", "glow": "medium"])
@@ -90,13 +90,13 @@ extension AuthTests {
         var noCSRF = headers(member, csrf: false); noCSRF.contentType = .json
         let rejected = try await app.testable().sendRequest(.PATCH, "/api/v1/me/preferences", headers: noCSRF, body: ByteBuffer(string: #"{"accent":"pink"}"#))
         XCTAssertEqual(rejected.status, .forbidden)
-        try await eq((try await prefs(app, member))["accent"] as? String, "bronze")
+        try await eq((try await prefs(app, member))["accent"] as? String, "ink")
 
         // Export carries the preferences; the other account's export does not mix them up.
         let export = try await api(app, member, .GET, "me/export")
         let files = try entries(Data(export.body.readableBytesView))
         let exported = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(files["preferences.json"])) as? [String: Any])
-        XCTAssertEqual(exported["accent"] as? String, "bronze"); XCTAssertEqual(exported["colorScheme"] as? String, "dark")
+        XCTAssertEqual(exported["accent"] as? String, "ink"); XCTAssertEqual(exported["colorScheme"] as? String, "dark")
 
         // Deleting the account removes the preferences with it (they live on the account row).
         try await del(app, member, "me", confirm: "member")

@@ -37,3 +37,7 @@ Die PWA speicherte Akzentfarbe, Farbschema und Transparenz nur im Browser (ADR-0
 - **Acht weitere Voreinstellungs-IDs** mit dunkler Fläche und weißer Schrift: `indigo`, `navy`, `purple`, `magenta`, `crimson`, `forest`, `petrol`, `bronze` (Farbwerte im Handoff G1). Wie bisher sind die IDs Namen; jeder Client wählt seine Farbtöne.
 - **Verträglichkeit**: Ein Server vor v0.15.0 lehnt `glow` und die neuen IDs mit 400 ab. Die PWA erkennt das (Antwort ohne `glow`, bzw. 400) und speichert die neuen Farben dort als `custom` plus Hex; den Leuchteffekt behält sie dann nur lokal. Native Apps zeigen unbekannte IDs als Blau.
 
+## Nachtrag AC2 (18.10.2026, Vertrag v0.21.0): sechs weitere Akzentfarben
+
+- **Sechs weitere Voreinstellungs-IDs** mit dunkler Fläche und weißer Schrift (Kontrast mit Weiß je mindestens 5,3:1): `wine`, `slate`, `cocoa`, `olive`, `ocean`, `ink`. Werte und deutsche Namen im Handoff AC2. Insgesamt 21 IDs (20 Voreinstellungen plus `custom`).
+- **Verträglichkeit**: Der Server speichert und liefert die ID unverändert, er ersetzt nichts. Ein Server vor v0.21.0 lehnt die neuen IDs mit 400 ab; die PWA speichert die Farbe dort als `custom` plus Hex (wie 0.15.0), ohne den Leuchteffekt zu verlieren. Ein Client, der die ID nicht kennt (ältere PWA, ältere App), zeigt sie als Blau; sein nächstes PATCH überschreibt die Wahl nur, wenn der Nutzer dort selbst eine Farbe wählt. Bestehende Konten ändern sich nicht, es gibt keine Migration.
