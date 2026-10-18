@@ -1,6 +1,7 @@
 # Aktueller Projektstand
 
 Stand: 17.10.2026 (Paket D3, Dokumentationsabgleich). Alle drei Repositories (Backend, PWA, Apple) sind seit 17.10.2026 öffentlich auf GitHub (AGPL-3.0-only), Historie von persönlichen Angaben bereinigt (siehe `ARBEITSPLAN.md`, Abschnitt „Veröffentlichung“). Das Projekt ist **Alpha**: Backend und PWA decken Etappe 1–4 ab, die nativen Apps (Etappe 5) sind implementiert, aber noch nicht auf Echtgeräten erprobt; KI, Kalenderbrücke und Selbstständigenfunktionen (Etappe 6) fehlen.
+**W2 (Assets, 18.10.2026, Branch `w2-asset-recovery` in Backend und PWA, nicht gemergt):** fehlende `/_app/`-Dateien und Asset-Pfade antworten mit echtem 404 statt SPA-Hülle; die PWA heilt sich bei Asset-Ladefehlern einmal pro 5 Minuten selbst oder zeigt eine Meldung statt weißer Seite (`handoffs/W2-asset-recovery.md`).
 Zahlen unten sind die zuletzt vom Lead selbst gemessenen (Stand der Pakete P2/A8 vom 16./17.10.); seitdem änderten sich in Backend und PWA nur CI, Website und Dokumentation, keine Quellen.
 
 ## Was läuft wo

@@ -320,6 +320,23 @@ final class AuthTests: XCTestCase, @unchecked Sendable {
             try await app.test(.GET, "/favicon.svg") { response async throws in
                 XCTAssertEqual(response.status, .ok); XCTAssertEqual(response.headers.first(name: .contentType), "image/svg+xml")
             }
+            // A missing asset is a real 404 (no-store, never the SPA shell); only extension-less routes fall back to index.html.
+            for path in ["/_app/immutable/entry/app.deadbeef.js", "/_app/immutable/chunks/x.css", "/_app/missing", "/_app/", "/old.js.map", "/icons/gone.png",
+                         "/fonts/a.WOFF2", "/gone.json", "/.well-known/unknown", "/.well-known/x.json"] {
+                try await app.test(.GET, path) { response async throws in
+                    XCTAssertEqual(response.status, .notFound, path)
+                    XCTAssertFalse(response.body.string.contains("SPA"), path)
+                    XCTAssertFalse(response.headers.first(name: .contentType)?.contains("text/html") == true, path)
+                    XCTAssertEqual(response.headers.first(name: .cacheControl), "no-store", path)
+                }
+            }
+            for path in ["/invite/example.org", "/reports/2026-10", "/v1.2/overview"] {
+                try await app.test(.GET, path) { response async throws in
+                    XCTAssertEqual(response.status, .ok, path); XCTAssertEqual(response.body.string, "<html>SPA</html>", path)
+                }
+            }
+            XCTAssertTrue(PWAStaticMiddleware.isAssetRequest("/service-worker.js"))
+            XCTAssertFalse(PWAStaticMiddleware.isAssetRequest("/.hidden"))
             for path in ["/%2e%2e/etc/passwd", "/escape", "/api/missing", "/health/missing", "/ready/missing"] {
                 try await app.test(.GET, path) { response async throws in checkEqual(response.status, .notFound) }
             }

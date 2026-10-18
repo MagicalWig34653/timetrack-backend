@@ -44,6 +44,8 @@ docker service update --with-registry-auth --image "$TIMETRACK_IMAGE" timetrack_
 docker service ps timetrack_backend
 ```
 
+Während eines Rolling Updates laufen kurz alte und neue Replikas nebeneinander. Nutzer sehen dabei unter Umständen kurz den Update-Hinweis oder (selten) die Meldung „Die Anwendung konnte nicht geladen werden. Es läuft gerade ein Update.“; ein erneutes Laden nach wenigen Sekunden genügt. Dafür sollten alle Replikas dasselbe, eindeutige Image-Tag (kein `latest`) verwenden, siehe [Weiße Seite / MIME-Type](installation/probleme.md).
+
 `--force` ist beim Migrations-Job nötig, wenn das Image unverändert bleibt (zum Beispiel bei `:latest`). Bei einem neuen Tag startet er auch ohne. Wer lieber `docker stack deploy` benutzt, setzt vorher `BACKEND_REPLICAS=0`, wartet die Migration ab und skaliert danach wieder hoch.
 
 ## Neues Image erzwingen (Swarm)

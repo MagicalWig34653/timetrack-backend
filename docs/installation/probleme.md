@@ -58,6 +58,15 @@ Weitere Hintergründe und Checklisten: [Deployment-Anleitung](../DEPLOYMENT.md),
 | Prüfung grün, Mail landet im Spam | – | SPF, DKIM und DMARC der Absenderdomain beim Anbieter einrichten; Absenderdomain sollte zu `PUBLIC_BASE_URL` passen. |
 | Testmail: „Relay verweigert“ / „nimmt die Empfängeradresse nicht an“ | (Testmail) | Der Mailserver leitet nur für angemeldete Konten oder eigene Domains weiter: Anmeldung einrichten. |
 
+## Weiße Seite / MIME-Type
+
+Die Seite bleibt weiß; die Browserkonsole meldet `'text/html' is not a valid JavaScript MIME type for module script '…/_app/immutable/entry/app.<hash>.js'`. Das Dokument (`index.html`) und die Dateien unter `/_app/` stammen aus verschiedenen Versionen: Die antwortende Replika hat die verlangte Datei nicht. Das Backend antwortet dafür seit W2 mit einem echten 404, und die PWA stellt sich einmal pro 5 Minuten selbst wieder her (Service Worker und Caches verwerfen, neu laden) oder zeigt eine Meldung mit Knopf „Neu laden“. Dauerhaft vermeiden:
+
+- **Alle Replikas müssen dasselbe Image-Tag laufen lassen.** Mit `docker service ps timetrack_backend` prüfen, dass keine Task mit altem Image mehr läuft.
+- Für deterministische Rolling Updates **SHA-Tags** (`…@sha256:…` oder ein Commit-Tag) statt `latest` verwenden.
+- **Sticky Sessions** (Bindung eines Clients an eine Replika) im Reverse Proxy helfen, weil Dokument und Assets dann von derselben Replika kommen.
+- Bleibt der Fehler nach Abschluss des Updates, einmal Website-Daten bzw. den Service Worker des Browsers löschen und den Proxy-Cache für `/_app/` und `index.html` prüfen.
+
 ## „Zu viele Versuche. Bitte warte einen Moment."
 
 Das ist ein HTTP 429. Es kommt entweder vom **Backend** (nur bei Anmelde-, Registrierungs- und Wiederherstellungsaufrufen; im Log steht eine Warnung `rate limit …`, und ohne `TRUSTED_PROXY_CIDRS` teilen sich alle Clients hinter dem Proxy einen Zähler) oder vom **Reverse Proxy** (zu niedrige Ratenbegrenzung, siehe [Reverse Proxy](proxy.md)). Prüfe zuerst das Backend-Log: Ohne `rate limit`-Zeile ist es der Proxy.
