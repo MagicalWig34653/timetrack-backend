@@ -13,6 +13,10 @@ Zahlen unten sind die zuletzt vom Lead selbst gemessenen (Stand der Pakete P2/A8
 | GitHub (öffentlich) | Repos mit Workflows (W1), GitHub-Pages-Website aus `site/` (Pages-Lauf grün), Dependabot-Pull-Requests offen (Stand 17.10.: Backend 2, PWA 3, Apple 1) |
 | TestFlight | Archiv und Export lokal mit `scripts/testflight.sh` im Apple-Repo bestätigt; **Upload steht aus**, weil er auf die AASA-Auslieferung der Produktionsdomain wartet |
 
+## Paket AC2 (Akzentfarben, 18.10.2026, Lead-Prüfung offen)
+
+Branch `AC2`: sechs weitere Akzent-IDs `wine`, `slate`, `cocoa`, `olive`, `ocean`, `ink` (Vertrag v0.21.0, ADR-0020 Nachtrag), PWA-Gegenstück gleicher Branchname. Details und Farbwerte für die Apple-Apps `docs/handoffs/AC2.md`.
+
 ## Paket S1a (Datenbankausfall als 503, 18.10.2026, Lead-Prüfung offen)
 
 Branch `S1a`: Verbindungs- und Pool-Fehler liefern 503 `database_unavailable` mit `Retry-After` statt 500 (ADR-0024, Vertrag v0.20.0); `/ready` und Healthcheck unverändert und geprüft. 331 Tests, 0 Fehler (SQLite und MariaDB). Details `docs/handoffs/S1a.md`.

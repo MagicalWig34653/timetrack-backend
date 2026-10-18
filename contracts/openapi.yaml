@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.20.0
+  version: 0.21.0
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -52,6 +52,8 @@ info:
     v0.10.5 (B2, ADR-0017): POST /api/v1/me/push-subscriptions/replace für `pushsubscriptionchange` (ersetzt ein Abo atomar, behält Id und wartende Pushes). Gleichzeitiges Anlegen desselben Lernfelds liefert 409 `learning_field_exists` statt 500. Kein Schemawechsel; Aufräumjob (`MAINTENANCE_INTERVAL_MINUTES`, CLI `maintenance`) ohne API-Änderung.
     --- V1 (v0.19.0, additiv) ---
     v0.19.0 (V1, ADR-0023): GET /api/v1/system/info (Versions- und Build-Angaben von Server und PWA, jedes angemeldete Konto, nicht modulgesteuert); GET /health liefert zusätzlich `version` und `revision`. Kein Schemawechsel.
+    --- AC2 (v0.21.0, additiv) ---
+    v0.21.0 (AC2, ADR-0020 Nachtrag): AccentId um wine, slate, cocoa, olive, ocean, ink erweitert (dunkle Töne mit weißer Schrift). Server vor v0.21.0 lehnen die IDs mit 400 ab; Clients ohne Kenntnis der IDs zeigen sie als Blau, bestehende Konten bleiben unverändert. Kein Schemawechsel.
     --- S1a (v0.20.0, additiv) ---
     v0.20.0 (S1a, ADR-0024): Jede /api/v1-Operation kann bei nicht erreichbarer Datenbank (Verbindungsfehler, Pool-Zeitlimit) mit 503 `database_unavailable` und Header `Retry-After` (Sekunden) antworten, statt mit 500. Gemeinsame Antwort `ServiceUnavailable`; Clients wiederholen nach Ablauf. Kein Schemawechsel.
 servers:
@@ -1534,7 +1536,7 @@ components:
           properties:
             state: { type: string, enum: [pending, completed, skipped] }
             updatedAt: { type: [string, 'null'], format: date-time }
-    AccentId: { type: string, enum: [blue, teal, violet, green, orange, pink, graphite, indigo, navy, purple, magenta, crimson, forest, petrol, bronze, custom] }
+    AccentId: { type: string, enum: [blue, teal, violet, green, orange, pink, graphite, indigo, navy, purple, magenta, crimson, forest, petrol, bronze, wine, slate, cocoa, olive, ocean, ink, custom] }
     GlowId: { type: string, enum: [off, subtle, medium, strong] }
     ColorSchemeId: { type: string, enum: [system, light, dark] }
     Preferences:
