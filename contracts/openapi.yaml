@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.19.0
+  version: 0.20.0
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -52,6 +52,8 @@ info:
     v0.10.5 (B2, ADR-0017): POST /api/v1/me/push-subscriptions/replace für `pushsubscriptionchange` (ersetzt ein Abo atomar, behält Id und wartende Pushes). Gleichzeitiges Anlegen desselben Lernfelds liefert 409 `learning_field_exists` statt 500. Kein Schemawechsel; Aufräumjob (`MAINTENANCE_INTERVAL_MINUTES`, CLI `maintenance`) ohne API-Änderung.
     --- V1 (v0.19.0, additiv) ---
     v0.19.0 (V1, ADR-0023): GET /api/v1/system/info (Versions- und Build-Angaben von Server und PWA, jedes angemeldete Konto, nicht modulgesteuert); GET /health liefert zusätzlich `version` und `revision`. Kein Schemawechsel.
+    --- S1a (v0.20.0, additiv) ---
+    v0.20.0 (S1a, ADR-0024): Jede /api/v1-Operation kann bei nicht erreichbarer Datenbank (Verbindungsfehler, Pool-Zeitlimit) mit 503 `database_unavailable` und Header `Retry-After` (Sekunden) antworten, statt mit 500. Gemeinsame Antwort `ServiceUnavailable`; Clients wiederholen nach Ablauf. Kein Schemawechsel.
 servers:
   - url: /
 paths:
@@ -1392,7 +1394,7 @@ paths:
         (`docker service inspect`). `pwa` stammt aus `version.json` im PWA-Verzeichnis, `null` ohne eingebaute PWA.
         Ohne Build-Argumente (lokaler Build) lauten `version` "dev" und `revision` "unknown".
       security: [ { session: [] } ]
-      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/SystemInfo' } } } }, '401': { $ref: '#/components/responses/Unauthorized' } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/SystemInfo' } } } }, '401': { $ref: '#/components/responses/Unauthorized' }, '503': { $ref: '#/components/responses/ServiceUnavailable' } }
   /api/v1/modules:
     get:
       operationId: listModules
@@ -1439,6 +1441,11 @@ components:
     NotFound: { description: nicht gefunden (auch bei fremden Objekten), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     Conflict: { description: Konflikt, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     TooMany: { description: zu viele Versuche, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    ServiceUnavailable:
+      description: Datenbank gerade nicht erreichbar (Code `database_unavailable`); nach `Retry-After` Sekunden erneut versuchen
+      headers:
+        Retry-After: { description: Sekunden bis zum nächsten Versuch (2, bei Pool-Zeitlimit 5), schema: { type: integer } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     NotImplemented: { description: auf diesem Server nicht konfiguriert, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   schemas:
     Health:

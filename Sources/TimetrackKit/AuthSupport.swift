@@ -22,15 +22,22 @@ struct APIErrorMiddleware: AsyncMiddleware {
             return response
         } catch {
             let failure: APIError
+            var retryAfter: Int?
             if let known = error as? APIError { failure = known }
             else if error is DecodingError { failure = .invalid }
             else if let abort = error as? any AbortError {
                 failure = APIError(abort.status, abort.status == .notFound ? "not_found" : "bad_request")
+            } else if let kind = InfrastructureError.classify(error) {
+                // Logged once per failed request with the classified reason only (no host, credentials or SQL).
+                request.logger.warning("infrastructure error: \(kind.rawValue)")
+                failure = APIError(.serviceUnavailable, "database_unavailable")
+                retryAfter = kind.retryAfterSeconds
             } else { failure = APIError(.internalServerError, "not_ready") }
             struct Envelope: Content { struct Detail: Content { let code: String; let message: String }; let error: Detail }
             let response = try await Envelope(error: .init(code: failure.code, message: ModuleMessages.message(failure.code) ?? (failure.code.replacingOccurrences(of: "_", with: " ") + ".")))
                 .encodeResponse(status: failure.status, for: request)
             response.headers.replaceOrAdd(name: .cacheControl, value: "no-store")
+            if let retryAfter { response.headers.replaceOrAdd(name: .retryAfter, value: String(retryAfter)) }
             return response
         }
     }

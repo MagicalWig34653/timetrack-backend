@@ -13,6 +13,10 @@ Zahlen unten sind die zuletzt vom Lead selbst gemessenen (Stand der Pakete P2/A8
 | GitHub (öffentlich) | Repos mit Workflows (W1), GitHub-Pages-Website aus `site/` (Pages-Lauf grün), Dependabot-Pull-Requests offen (Stand 17.10.: Backend 2, PWA 3, Apple 1) |
 | TestFlight | Archiv und Export lokal mit `scripts/testflight.sh` im Apple-Repo bestätigt; **Upload steht aus**, weil er auf die AASA-Auslieferung der Produktionsdomain wartet |
 
+## Paket S1a (Datenbankausfall als 503, 18.10.2026, Lead-Prüfung offen)
+
+Branch `S1a`: Verbindungs- und Pool-Fehler liefern 503 `database_unavailable` mit `Retry-After` statt 500 (ADR-0024, Vertrag v0.20.0); `/ready` und Healthcheck unverändert und geprüft. 331 Tests, 0 Fehler (SQLite und MariaDB). Details `docs/handoffs/S1a.md`.
+
 ## Paket X1 (Performance, Stand 17.10.2026, Lead-Prüfung offen)
 
 Ursache für „App lädt ewig“ nach Import war CPU (Zuordnung und Kalenderaufbau je Tag), nicht Abfragezahl; `GET /time/account` bei 800+ Tagen 5,9 s auf 53 ms (SQLite) bzw. 82 ms (MariaDB), `time/days` 93 Tage 755 → 64 ms. Das Arbeitsmodell scheiterte beim ersten Mal, weil die blockierenden Berechnungen den Pool/`auth_lock` 10 s belegten (500 `not_ready`); ebenso war `/ready` unter Last in der Healthcheck-Zeitgrenze (dort Quelle von „Server nicht bereit“). Behoben und mit Zahlen in `docs/handoffs/X1.md`; neuer Index (Migration `x1.add_segment_time_index`); Vertrag unverändert. Tests: SQLite 310 (35 übersprungen), MariaDB 310 (1 übersprungen), PWA 591 Unit, 180 Echt-E2E; auf dem echten Swarm/Proxy ungeprüft.

@@ -325,3 +325,9 @@ Claude-Agent in getrennten Worktrees (Branches `mail1-smtp-check`), nicht gemerg
 | --- | --- | --- | --- | --- | --- |
 | V1 | Versions- und Build-Angaben: `GET /api/v1/system/info`, `/health` mit Version/Revision, Build-Argumente in Dockerfile und Workflow, Vertrag v0.19.0, ADR-0023; PWA: Abschnitt „Version und Build“ im Hilfedialog, `version.json`, Abweichungshinweis; Details `docs/handoffs/V1.md` | Claude-Agent | 6 | integriert; Backend 327 Tests (SQLite und MariaDB), PWA 716 Unit, 189 Echt-E2E (Agent); Workflow auf GitHub noch zu beobachten | MAIL1 |
 | L2 | Standortautomatik iOS (Apple-Repo): `CLMonitor`-Regionen, Verweilzeit-/Geschwindigkeitsfilter, Warteschlange, Geräte-Token, App Intents, Einstellungsseite, Kurzbefehl-Anleitung; Details `handoffs/L2.md` im Apple-Repo | Claude-Agent | 10 | integriert; Core 209 Tests, UI-Test gegen Wegwerf-Backend; echte Regionsereignisse und Hintergrund nur auf dem Gerät prüfbar (Testplan im Handoff) | A12, F2 |
+
+## S1a (18.10.2026)
+
+| ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
+| --- | --- | --- | --- | --- | --- |
+| S1a | Teil von S1: Datenbankausfall als 503 `database_unavailable` mit `Retry-After` (Klassifizierung in `APIErrorMiddleware`), Vertrag v0.20.0, ADR-0024; Details `docs/handoffs/S1a.md` | Claude-Agent | 2 | Branch `S1a`, Lead-Prüfung offen; 331 Tests SQLite und MariaDB ohne Fehler | V1 |
