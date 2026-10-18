@@ -135,29 +135,39 @@ echo "Wrote TIMETRACK_IMAGE to ${ENV_FILE} (backup: ${ENV_FILE}.bak)."
 
 if [ "$MIGRATE" = 1 ]; then
   MIGRATE_SERVICE="${STACK}_migrate"
-  previous="$(docker service ps "$MIGRATE_SERVICE" --no-trunc --format '{{.ID}}' 2>/dev/null | head -n 1 || true)"
+  # Tasks that exist before the update; everything else is a task of this run (docker service ps is not sorted by age).
+  before=" $(docker service ps "$MIGRATE_SERVICE" -q --no-trunc 2>/dev/null | tr '\n' ' ')"
   step "Run the database migration (job ${MIGRATE_SERVICE})"
   say "Starting the job with ${NEW_IMAGE} (the image is pulled on the node; this can take a minute) ..."
   docker service update --detach --force --with-registry-auth --image "$NEW_IMAGE" "$MIGRATE_SERVICE" >/dev/null
   waited=0; last_state=""
   while :; do
-    line="$(docker service ps "$MIGRATE_SERVICE" --no-trunc --format '{{.ID}} {{.Node}} {{.CurrentState}}' | head -n 1)"
-    id="${line%% *}"; rest="${line#* }"; node="${rest%% *}"; state="${rest#* }"
-    # strip the changing "... 3 seconds ago" part so only real state changes are printed
-    shown="${state%% [0-9]*}"; shown="${shown%% about*}"
-    if [ "$id" != "$previous" ] && [ "$shown" != "$last_state" ]; then say "migration task on ${node}: ${shown}"; last_state="$shown"; fi
-    if [ "$id" != "$previous" ]; then
-      case "$state" in
-        Complete*) say "Migration finished."; break ;;
-        Failed*|Rejected*|Shutdown*|Orphaned*)
-          echo "Migration did NOT succeed (${state}). Logs:" >&2
-          docker service logs --tail 40 "$MIGRATE_SERVICE" >&2 || true
-          die "backend not updated; fix the migration first (docs/UPDATE.md)" ;;
+    outcome=""; shown=""; reason=""
+    while IFS='|' read -r id node state err; do
+      [ -n "$id" ] || continue
+      case "$before" in *" $id "*) continue ;; esac
+      # strip the changing "... 3 seconds ago" part so only real state changes are printed
+      word="${state%% *}"
+      case "$word" in
+        Complete) outcome=complete; shown="Complete on ${node}"; break ;;
+        Failed|Rejected|Orphaned) outcome=failed; shown="${state} on ${node}"; reason="$err" ;;
+        *) [ -n "$shown" ] || { shown="${word} on ${node:-<not scheduled yet>}"; reason="$err"; } ;;
       esac
-    fi
-    [ "$waited" -lt "$WAIT_SECONDS" ] || { docker service logs --tail 40 "$MIGRATE_SERVICE" >&2 || true; die "migration did not finish within ${WAIT_SECONDS}s"; }
+    done <<EOF
+$(docker service ps "$MIGRATE_SERVICE" --no-trunc --format '{{.ID}}|{{.Node}}|{{.CurrentState}}|{{.Error}}')
+EOF
+    [ -n "$shown" ] || shown="waiting for the scheduler"
+    if [ "$shown" != "$last_state" ]; then say "migration task: ${shown}${reason:+ (${reason})}"; last_state="$shown"; fi
+    case "$outcome" in
+      complete) say "Migration finished."; break ;;
+      failed)
+        echo "Migration did NOT succeed (${shown}). Logs:" >&2
+        docker service logs --tail 40 "$MIGRATE_SERVICE" >&2 || true
+        die "backend not updated; fix the migration first (docs/UPDATE.md)" ;;
+    esac
+    [ "$waited" -lt "$WAIT_SECONDS" ] || { docker service logs --tail 40 "$MIGRATE_SERVICE" >&2 || true; die "migration did not finish within ${WAIT_SECONDS}s (see: docker service ps ${MIGRATE_SERVICE} --no-trunc)"; }
     sleep 2; waited=$((waited + 2))
-    if [ $((waited % 20)) -eq 0 ]; then say "  ... still waiting for the migration (${waited}s)"; fi
+    if [ $((waited % 20)) -eq 0 ]; then say "  ... still waiting for the migration (${waited}s): ${shown}"; fi
   done
   say "Migration log (last lines):"
   docker service logs --tail 15 "$MIGRATE_SERVICE" 2>&1 | sed 's/^/    /' || true
