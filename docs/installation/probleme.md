@@ -60,3 +60,11 @@ Weitere Hintergründe und Checklisten: [Deployment-Anleitung](../DEPLOYMENT.md),
 ## „Zu viele Versuche. Bitte warte einen Moment."
 
 Das ist ein HTTP 429. Es kommt entweder vom **Backend** (nur bei Anmelde-, Registrierungs- und Wiederherstellungsaufrufen; im Log steht eine Warnung `rate limit …`, und ohne `TRUSTED_PROXY_CIDRS` teilen sich alle Clients hinter dem Proxy einen Zähler) oder vom **Reverse Proxy** (zu niedrige Ratenbegrenzung, siehe [Reverse Proxy](proxy.md)). Prüfe zuerst das Backend-Log: Ohne `rate limit`-Zeile ist es der Proxy.
+
+## Was ich bei einem Fehlerbericht mitschicke
+
+In der PWA unter **Hilfe** steht der Abschnitt „Version und Build“. Der Knopf **Angaben kopieren** erzeugt eine Zeile wie `Timetrack PWA 0.1.0 (abc1234, 2026-10-18), Backend 0.1.0 (def5678, 2026-10-18), API 0.19.0, mariadb`; sie gehört in jede Fehlermeldung. Ohne Anmeldung zeigt `curl https://<deine-domain>/health` Version und Git-Revision des Backends.
+
+- „Image-ID“ ist der Git-Commit, aus dem das Image gebaut wurde. Den genauen Image-Digest (`sha256:…`) kennt nur der Betreiber: `docker service inspect timetrack_backend --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}'` (bei einem Tag ohne Digest zusätzlich `docker image inspect <image> --format '{{index .RepoDigests 0}}'`).
+- Zwei Replikate: das Feld „Replikat“ (Hostname) zeigt, welches geantwortet hat.
+- Meldet die Hilfe „Die geladene Oberfläche ist älter als die auf dem Server“, genügt **Neu laden / Aktualisieren**; danach stimmen beide Revisionen überein.
