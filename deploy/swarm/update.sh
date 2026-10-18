@@ -39,7 +39,12 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-die() { echo "error: $*" >&2; exit 1; }
+START_TIME=$(date +%s)
+elapsed() { local t=$(( $(date +%s) - START_TIME )); printf '%02d:%02d' $((t / 60)) $((t % 60)); }
+say() { printf '[%s] %s\n' "$(elapsed)" "$*"; }
+STEP=0; STEPS=6
+step() { STEP=$((STEP + 1)); printf '\n[%s] == Step %d/%d: %s\n' "$(elapsed)" "$STEP" "$STEPS" "$*"; }
+die() { echo "[$(elapsed)] error: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "$1 is required"; }
 need curl
 [ "$DRY" = 1 ] || need docker
@@ -74,16 +79,26 @@ digest_of() {
     | tr -d '\r' | awk 'tolower($1)=="docker-content-digest:" {print $2}'
 }
 
+step "Find the newest image tag"
 if [ -z "$TAG" ]; then
-  echo "Looking up the newest sha- tag of ${IMAGE_BASE} ..."
+  say "Registry: ghcr.io, repository ${REPO}"
   TOKEN="$(registry_token)"; [ -n "$TOKEN" ] || die "could not get a registry token (is the package public?)"
+  say "Registry token received."
   LATEST_DIGEST="$(digest_of latest)"; [ -n "$LATEST_DIGEST" ] || die "tag 'latest' not found on ghcr.io"
+  say "latest = ${LATEST_DIGEST}"
   TAGS="$(curl -fsS -H "Authorization: Bearer $TOKEN" "https://ghcr.io/v2/${REPO}/tags/list?n=1000" | grep -o '"sha-[0-9a-f]*"' | tr -d '"' || true)"
   [ -n "$TAGS" ] || die "no sha- tags found"
+  TOTAL="$(printf '%s\n' "$TAGS" | wc -l | tr -d ' ')"
+  say "${TOTAL} sha- tags found, comparing their digests with latest ..."
+  n=0
   for candidate in $TAGS; do
-    if [ "$(digest_of "$candidate")" = "$LATEST_DIGEST" ]; then TAG="$candidate"; break; fi
+    n=$((n + 1))
+    if [ "$(digest_of "$candidate")" = "$LATEST_DIGEST" ]; then TAG="$candidate"; say "  [${n}/${TOTAL}] ${candidate}  <- matches latest"; break; fi
+    say "  [${n}/${TOTAL}] ${candidate}  (not latest)"
   done
   [ -n "$TAG" ] || die "no sha- tag matches latest (${LATEST_DIGEST}); pass --tag explicitly"
+else
+  say "Using the tag from --tag: ${TAG}"
 fi
 
 NEW_IMAGE="${IMAGE_BASE}:${TAG}"
@@ -100,11 +115,16 @@ if [ "$DRY" = 1 ]; then
   echo "Dry run: would set TIMETRACK_IMAGE, run ${STACK}_migrate, then update ${STACK}_backend."
   exit 0
 fi
+step "Confirm"
 if [ "$YES" = 0 ]; then
   printf 'Database backed up? Continue with the update? [y/N] '
   read -r answer
   case "$answer" in y|Y|yes|j|J|ja) ;; *) echo "Aborted."; exit 1 ;; esac
+else
+  say "Confirmation skipped (--yes)."
 fi
+
+step "Write the new image into ${ENV_FILE}"
 
 # Write the new image into the env file (keep a backup copy next to it).
 cp "$ENV_FILE" "${ENV_FILE}.bak"
@@ -116,15 +136,19 @@ echo "Wrote TIMETRACK_IMAGE to ${ENV_FILE} (backup: ${ENV_FILE}.bak)."
 if [ "$MIGRATE" = 1 ]; then
   MIGRATE_SERVICE="${STACK}_migrate"
   previous="$(docker service ps "$MIGRATE_SERVICE" --no-trunc --format '{{.ID}}' 2>/dev/null | head -n 1 || true)"
-  echo "Running the migration job with the new image ..."
-  docker service update --force --with-registry-auth --image "$NEW_IMAGE" "$MIGRATE_SERVICE" >/dev/null
-  waited=0
+  step "Run the database migration (job ${MIGRATE_SERVICE})"
+  say "Starting the job with ${NEW_IMAGE} (the image is pulled on the node; this can take a minute) ..."
+  docker service update --detach --force --with-registry-auth --image "$NEW_IMAGE" "$MIGRATE_SERVICE" >/dev/null
+  waited=0; last_state=""
   while :; do
-    line="$(docker service ps "$MIGRATE_SERVICE" --no-trunc --format '{{.ID}} {{.CurrentState}}' | head -n 1)"
-    id="${line%% *}"; state="${line#* }"
+    line="$(docker service ps "$MIGRATE_SERVICE" --no-trunc --format '{{.ID}} {{.Node}} {{.CurrentState}}' | head -n 1)"
+    id="${line%% *}"; rest="${line#* }"; node="${rest%% *}"; state="${rest#* }"
+    # strip the changing "... 3 seconds ago" part so only real state changes are printed
+    shown="${state%% [0-9]*}"; shown="${shown%% about*}"
+    if [ "$id" != "$previous" ] && [ "$shown" != "$last_state" ]; then say "migration task on ${node}: ${shown}"; last_state="$shown"; fi
     if [ "$id" != "$previous" ]; then
       case "$state" in
-        Complete*) echo "Migration finished: ${state}"; break ;;
+        Complete*) say "Migration finished."; break ;;
         Failed*|Rejected*|Shutdown*|Orphaned*)
           echo "Migration did NOT succeed (${state}). Logs:" >&2
           docker service logs --tail 40 "$MIGRATE_SERVICE" >&2 || true
@@ -132,19 +156,47 @@ if [ "$MIGRATE" = 1 ]; then
       esac
     fi
     [ "$waited" -lt "$WAIT_SECONDS" ] || { docker service logs --tail 40 "$MIGRATE_SERVICE" >&2 || true; die "migration did not finish within ${WAIT_SECONDS}s"; }
-    sleep 3; waited=$((waited + 3))
+    sleep 2; waited=$((waited + 2))
+    if [ $((waited % 20)) -eq 0 ]; then say "  ... still waiting for the migration (${waited}s)"; fi
   done
-  docker service logs --tail 15 "$MIGRATE_SERVICE" 2>&1 || true
+  say "Migration log (last lines):"
+  docker service logs --tail 15 "$MIGRATE_SERVICE" 2>&1 | sed 's/^/    /' || true
+else
+  step "Database migration"
+  say "Skipped (--skip-migrate)."
 fi
 
-echo "Updating the backend (rolling update) ..."
+step "Update the backend (rolling update, one replica after the other)"
+BACKEND="${STACK}_backend"
 FORCE_FLAG=""; [ "$FORCE" = 1 ] && FORCE_FLAG="--force"
 # shellcheck disable=SC2086
-docker service update --with-registry-auth --image "$NEW_IMAGE" $FORCE_FLAG "${STACK}_backend"
-docker service ps "${STACK}_backend" --filter desired-state=running --format 'table {{.Name}}\t{{.Node}}\t{{.Image}}\t{{.CurrentState}}'
+docker service update --detach --with-registry-auth --image "$NEW_IMAGE" $FORCE_FLAG "$BACKEND" >/dev/null
+say "Update started; watching the rollout ..."
+waited=0; last=""
+while :; do
+  ustate="$(docker service inspect "$BACKEND" --format '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{end}}' 2>/dev/null || true)"
+  replicas="$(docker service ls --filter "name=${BACKEND}" --format '{{.Replicas}}' | head -n 1)"
+  running="$(docker service ps "$BACKEND" --filter desired-state=running --format '{{.CurrentState}}' | sed 's/ .*//' | sort | uniq -c | awk '{printf "%s %s, ", $1, $2}' | sed 's/, $//')"
+  now="update=${ustate:-none} replicas=${replicas} tasks: ${running}"
+  if [ "$now" != "$last" ]; then say "$now"; last="$now"; fi
+  case "$ustate" in
+    completed) say "Rollout completed."; break ;;
+    paused|rollback_started|rollback_completed|rollback_paused)
+      docker service inspect "$BACKEND" --format '{{.UpdateStatus.Message}}' >&2 || true
+      docker service ps "$BACKEND" --no-trunc --format '{{.Name}} {{.CurrentState}} {{.Error}}' | head -n 6 >&2 || true
+      die "rollout did not succeed (${ustate}); Swarm rolls back automatically, see docs/UPDATE.md" ;;
+  esac
+  [ "$waited" -lt 600 ] || die "rollout did not finish within 600s (see: docker service ps ${BACKEND})"
+  sleep 3; waited=$((waited + 3))
+done
+docker service ps "$BACKEND" --filter desired-state=running --format 'table {{.Name}}\t{{.Node}}\t{{.Image}}\t{{.CurrentState}}'
 
+step "Check the result"
 BASE_URL="$(sed -n 's/^PUBLIC_BASE_URL=//p' "$ENV_FILE" | tail -n 1 | tr -d "\"'")"
 if [ -n "$BASE_URL" ]; then
-  echo "Readiness: $(curl -fsS "${BASE_URL%/}/ready" 2>&1 || echo 'not ready yet')"
+  say "GET ${BASE_URL%/}/ready -> $(curl -fsS "${BASE_URL%/}/ready" 2>&1 || echo 'not ready yet')"
+  say "GET ${BASE_URL%/}/health -> $(curl -fsS "${BASE_URL%/}/health" 2>&1 | head -c 300 || echo 'no answer')"
+else
+  say "PUBLIC_BASE_URL is not set in the env file; skipping the readiness check."
 fi
-echo "Done. If the app shows a white page once, remove the site data of the domain in your browser."
+say "Done in $(elapsed). If the app shows a white page once, remove the site data of the domain in your browser."
