@@ -331,3 +331,12 @@ Claude-Agent in getrennten Worktrees (Branches `mail1-smtp-check`), nicht gemerg
 | ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
 | --- | --- | --- | --- | --- | --- |
 | S1a | Teil von S1: Datenbankausfall als 503 `database_unavailable` mit `Retry-After` (Klassifizierung in `APIErrorMiddleware`), Vertrag v0.20.0, ADR-0024; Details `docs/handoffs/S1a.md` | Claude-Agent | 2 | Branch `S1a`, Lead-Prüfung offen; 331 Tests SQLite und MariaDB ohne Fehler | V1 |
+
+## Q1 – Codex-Sicherheitsreview Backend (18.10.2026)
+
+Codex (Modell `gpt-6-sol`, Aufwand medium, nur lesend, Codex-Auftrag Q1) hat Anmeldewege, Kontentrennung, Mail-Diagnose, `system/info`, Fehlerklassifizierung und Proxy-Header geprüft. Kein kontenübergreifender Zugriff gefunden. Befunde, die in S1 einfließen:
+
+1. (mittel, plausibel) `X-Real-IP` wird bei vertrauenswürdigem Peer ungeprüft übernommen: Der Proxy muss den Header überschreiben; in `docs/installation/proxy.md` und bei `TRUSTED_PROXY_HEADER` dokumentieren.
+2. (niedrig, bestätigt) `/system/info` zeigt normalen Konten Hostname, Datenbanktreiber, Migrationsstand und Laufzeit: Betriebsfelder nur für Administratoren, Versionsfelder für alle (ADR-0023 anpassen).
+3. (niedrig, plausibel) SMTP-Diagnose gibt nach der Anmeldung rohen Serverantworttext von `MAIL FROM` zurück: Text weglassen oder Zugangsdaten schwärzen.
+4. (niedrig, plausibel) `InfrastructureError` klassifiziert allgemeine NIO-Fehler als Datenbankausfall: an der Datenbankgrenze klassifizieren.
