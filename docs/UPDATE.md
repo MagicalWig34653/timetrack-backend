@@ -48,6 +48,18 @@ Während eines Rolling Updates laufen kurz alte und neue Replikas nebeneinander.
 
 `--force` ist beim Migrations-Job nötig, wenn das Image unverändert bleibt (zum Beispiel bei `:latest`). Bei einem neuen Tag startet er auch ohne. Wer lieber `docker stack deploy` benutzt, setzt vorher `BACKEND_REPLICAS=0`, wartet die Migration ab und skaliert danach wieder hoch.
 
+### Update-Skript (Swarm)
+
+`deploy/swarm/update.sh` erledigt die Schritte 2 bis 4 in einem Lauf: Es sucht auf GHCR den neuesten `sha-<Commit>`-Tag (den Tag, der auf denselben Stand wie `latest` zeigt), schreibt ihn als `TIMETRACK_IMAGE` in deine `stack.env` (Sicherung als `stack.env.bak`), führt den Migrations-Job mit dem neuen Image aus, wartet auf „Complete“ und stellt erst danach das Backend per Rolling Update um. Schlägt die Migration fehl, bleibt das Backend unverändert.
+
+```sh
+deploy/swarm/update.sh --env-file ./stack.env --dry-run   # nur anzeigen, was passieren würde
+deploy/swarm/update.sh --env-file ./stack.env             # fragt vorher nach der Datenbanksicherung
+deploy/swarm/update.sh --tag sha-6c074f7 --yes            # bestimmten Stand erzwingen, ohne Rückfrage
+```
+
+Optionen: `--stack NAME` (Standard `timetrack`), `--force` (auch ohne Tag-Wechsel neu starten), `--skip-migrate`. Braucht `curl` und `docker` auf einem Swarm-Manager.
+
 ## Neues Image erzwingen (Swarm)
 
 Swarm zieht ein Image nur, wenn sich die Zuordnung ändert. Bei einem beweglichen Tag wie `:latest` oder `:main` erzwingst du es so:
