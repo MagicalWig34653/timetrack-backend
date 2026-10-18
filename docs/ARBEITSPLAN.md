@@ -317,4 +317,11 @@ Claude-Agent in getrennten Worktrees (Branches `mail1-smtp-check`), nicht gemerg
 
 | ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
 | --- | --- | --- | --- | --- | --- |
-| MAIL1 | `GET /admin/mail`, `POST /admin/mail/check` (Live-Diagnose DNS/TCP/TLS/EHLO/Anmeldung/Absender ohne Nachricht), `POST /admin/mail/test` (feste Testmail, frische Sitzung), Vertrag v0.18.0, ADR-0022; PWA: Seite `/admin/mail` mit Statuskarte, Schrittanzeige, Testmail; Details `docs/handoffs/MAIL1.md` | Claude-Agent | 6 | umgesetzt, Lead-Prüfung offen | B1, P1, K1 |
+| MAIL1 | `GET /admin/mail`, `POST /admin/mail/check` (Live-Diagnose DNS/TCP/TLS/EHLO/Anmeldung/Absender ohne Nachricht), `POST /admin/mail/test` (feste Testmail, frische Sitzung), Vertrag v0.18.0, ADR-0022; PWA: Seite `/admin/mail` mit Statuskarte, Schrittanzeige, Testmail; Details `docs/handoffs/MAIL1.md` | Claude-Agent | 6 | integriert (Backend 323 Tests SQLite, PWA 708 Unit, 188 Echt-E2E vom Lead) | B1, P1, K1 |
+
+## V1 und L2 (18.10.2026)
+
+| ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
+| --- | --- | --- | --- | --- | --- |
+| V1 | Versions- und Build-Angaben: `GET /api/v1/system/info`, `/health` mit Version/Revision, Build-Argumente in Dockerfile und Workflow, Vertrag v0.19.0, ADR-0023; PWA: Abschnitt „Version und Build“ im Hilfedialog, `version.json`, Abweichungshinweis; Details `docs/handoffs/V1.md` | Claude-Agent | 6 | integriert; Backend 327 Tests (SQLite und MariaDB), PWA 716 Unit, 189 Echt-E2E (Agent); Workflow auf GitHub noch zu beobachten | MAIL1 |
+| L2 | Standortautomatik iOS (Apple-Repo): `CLMonitor`-Regionen, Verweilzeit-/Geschwindigkeitsfilter, Warteschlange, Geräte-Token, App Intents, Einstellungsseite, Kurzbefehl-Anleitung; Details `handoffs/L2.md` im Apple-Repo | Claude-Agent | 10 | integriert; Core 209 Tests, UI-Test gegen Wegwerf-Backend; echte Regionsereignisse und Hintergrund nur auf dem Gerät prüfbar (Testplan im Handoff) | A12, F2 |
