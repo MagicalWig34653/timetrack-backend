@@ -64,6 +64,20 @@ jobs:
       - name: Resolve the PWA revision
         id: pwa
         run: echo "sha=$(git -C pwa-src rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Resolve version and build date (shown in the app under Hilfe, ADR-0023)
+        id: build_info
+        env:
+          PWA_REF: ${{ vars.PWA_REF || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || 'main' }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then version="${GITHUB_REF_NAME#v}"
+          elif [ -n "$PR_NUMBER" ]; then version="pr-${PR_NUMBER}"
+          else version="$(printf '%s' "$GITHUB_REF_NAME" | tr -c 'A-Za-z0-9._-' '-')"; fi
+          {
+            echo "version=${version}"
+            echo "pwa_version=$(printf '%s' "${PWA_REF#v}" | tr -c 'A-Za-z0-9._-' '-')"
+            echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'
@@ -85,7 +99,12 @@ jobs:
         with:
           context: .
           build-contexts: pwa-src=./pwa-src
-          build-args: PWA_REVISION=${{ steps.pwa.outputs.sha }}
+          build-args: |
+            PWA_REVISION=${{ steps.pwa.outputs.sha }}
+            PWA_VERSION=${{ steps.build_info.outputs.pwa_version }}
+            APP_VERSION=${{ steps.build_info.outputs.version }}
+            GIT_SHA=${{ github.sha }}
+            BUILD_DATE=${{ steps.build_info.outputs.date }}
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
           provenance: ${{ github.event_name != 'pull_request' && 'mode=max' || 'false' }}
@@ -128,13 +147,32 @@ jobs:
       - name: Resolve the PWA revision
         id: pwa
         run: echo "sha=$(git -C pwa-src rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Resolve version and build date (shown in the app under Hilfe, ADR-0023)
+        id: build_info
+        env:
+          PWA_REF: ${{ vars.PWA_REF || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || 'main' }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then version="${GITHUB_REF_NAME#v}"
+          elif [ -n "$PR_NUMBER" ]; then version="pr-${PR_NUMBER}"
+          else version="$(printf '%s' "$GITHUB_REF_NAME" | tr -c 'A-Za-z0-9._-' '-')"; fi
+          {
+            echo "version=${version}"
+            echo "pwa_version=$(printf '%s' "${PWA_REF#v}" | tr -c 'A-Za-z0-9._-' '-')"
+            echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
       - name: Build amd64 image into the local daemon
         uses: docker/build-push-action@v6
         with:
           context: .
           build-contexts: pwa-src=./pwa-src
-          build-args: PWA_REVISION=${{ steps.pwa.outputs.sha }}
+          build-args: |
+            PWA_REVISION=${{ steps.pwa.outputs.sha }}
+            PWA_VERSION=${{ steps.build_info.outputs.pwa_version }}
+            APP_VERSION=${{ steps.build_info.outputs.version }}
+            GIT_SHA=${{ github.sha }}
+            BUILD_DATE=${{ steps.build_info.outputs.date }}
           platforms: linux/amd64
           load: true
           tags: timetrack-ci:smoke
@@ -142,6 +180,7 @@ jobs:
       - name: Start with SQLite and call /health
         env:
           EXPECT_PWA: "1"
+          EXPECT_REVISION: ${{ github.sha }}
         run: scripts/ci-smoke.sh timetrack-ci:smoke
 
   merge:
@@ -191,4 +230,5 @@ jobs:
       - name: Smoke test the published amd64 image
         env:
           EXPECT_PWA: "1"
+          EXPECT_REVISION: ${{ github.sha }}
         run: scripts/ci-smoke.sh "${IMAGE}:${{ steps.meta.outputs.version }}"

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # CI smoke test of a built image: starts it with a throwaway SQLite database and waits for GET /health.
 # EXPECT_PWA=1 additionally requires the built PWA: GET / and a deep link must return the HTML shell.
+# EXPECT_REVISION=<sha> additionally requires that /health reports this git revision (build args, ADR-0023).
 # Used by .github/workflows/docker.yml; also works locally:  scripts/ci-smoke.sh IMAGE [HOST_PORT]
 set -euo pipefail
 
@@ -18,6 +19,9 @@ docker run -d --name "$NAME" -p "127.0.0.1:${PORT}:8080" \
 for _ in $(seq 1 60); do
   if body="$(curl -fsS "http://127.0.0.1:${PORT}/health" 2>/dev/null)"; then
     echo "/health: $body"
+    if [ -n "${EXPECT_REVISION:-}" ] && ! grep -q "\"revision\":\"${EXPECT_REVISION}\"" <<< "$body"; then
+      echo "/health does not report revision ${EXPECT_REVISION}" >&2; exit 1
+    fi
     if [ "${EXPECT_PWA:-0}" = "1" ]; then
       for path in / /settings/profile; do
         page="$(curl -fsS "http://127.0.0.1:${PORT}${path}")" || { echo "GET $path failed" >&2; exit 1; }

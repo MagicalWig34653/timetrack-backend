@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.17.0
+  version: 0.19.0
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -49,19 +49,21 @@ info:
     A second accept of a suggestion returns 409 `suggestion_resolved`. Further codes: timer_already_running, no_running_timer, segment_overlap, stale_version, model_overlap.
     --- B2 (v0.10.5, additiv; zusammen mit B1 als v0.12.0 ausgeliefert) ---
     v0.10.5 (B2, ADR-0017): POST /api/v1/me/push-subscriptions/replace für `pushsubscriptionchange` (ersetzt ein Abo atomar, behält Id und wartende Pushes). Gleichzeitiges Anlegen desselben Lernfelds liefert 409 `learning_field_exists` statt 500. Kein Schemawechsel; Aufräumjob (`MAINTENANCE_INTERVAL_MINUTES`, CLI `maintenance`) ohne API-Änderung.
+    --- V1 (v0.19.0, additiv) ---
+    v0.19.0 (V1, ADR-0023): GET /api/v1/system/info (Versions- und Build-Angaben von Server und PWA, jedes angemeldete Konto, nicht modulgesteuert); GET /health liefert zusätzlich `version` und `revision`. Kein Schemawechsel.
 servers:
   - url: /
 paths:
   /health:
     get:
       operationId: health
-      description: Prozess-Liveness, ohne Datenbank.
+      description: Prozess-Liveness, ohne Datenbank. Enthält Version und Git-Revision des Images (keine Geheimnisse).
       responses:
         '200':
           description: Prozess antwortet
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Status' }
+              schema: { $ref: '#/components/schemas/Health' }
   /.well-known/apple-app-site-association:
     get:
       operationId: appleAppSiteAssociation
@@ -1361,6 +1363,16 @@ paths:
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '202': { description: gesendet }, '404': { $ref: '#/components/responses/NotFound' }, '429': { $ref: '#/components/responses/TooMany' }, '501': { $ref: '#/components/responses/NotImplemented' } }
+  /api/v1/system/info:
+    get:
+      operationId: getSystemInfo
+      description: |
+        Versions- und Build-Angaben (ADR-0023) für Hilfe und Fehlermeldungen. Jedes angemeldete Konto, nicht modulgesteuert.
+        `backend.revision` ist der Git-Commit, aus dem das Image gebaut wurde; die Registry-Digest des Images kennt nur der Betreiber
+        (`docker service inspect`). `pwa` stammt aus `version.json` im PWA-Verzeichnis, `null` ohne eingebaute PWA.
+        Ohne Build-Argumente (lokaler Build) lauten `version` "dev" und `revision` "unknown".
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/SystemInfo' } } } }, '401': { $ref: '#/components/responses/Unauthorized' } }
   /api/v1/modules:
     get:
       operationId: listModules
@@ -1409,6 +1421,38 @@ components:
     TooMany: { description: zu viele Versuche, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     NotImplemented: { description: auf diesem Server nicht konfiguriert, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   schemas:
+    Health:
+      type: object
+      required: [status, version, revision]
+      properties:
+        status: { type: string, const: ok }
+        version: { type: string, description: 'Image-Version (Tag ohne v, "main", "sha-…" oder "dev")' }
+        revision: { type: string, description: 'Git-Commit des Backends oder "unknown"' }
+    SystemInfo:
+      type: object
+      required: [backend, pwa]
+      properties:
+        backend:
+          type: object
+          required: [version, revision, revisionShort, buildDate, apiVersion, database, schemaMigrations, migrationsPending, uptimeSeconds, replicaId]
+          properties:
+            version: { type: string }
+            revision: { type: string }
+            revisionShort: { type: string, description: 'Erste sieben Zeichen der Revision' }
+            buildDate: { type: [string, 'null'], description: 'ISO-8601 (UTC) oder null bei lokalem Build' }
+            apiVersion: { type: string, description: 'info.version dieses Vertrags' }
+            database: { type: string, enum: [mariadb, sqlite] }
+            schemaMigrations: { type: integer, minimum: 0, description: 'Anzahl angewendeter Migrationen' }
+            migrationsPending: { type: boolean }
+            uptimeSeconds: { type: integer, minimum: 0 }
+            replicaId: { type: string, description: 'Hostname (Container-Id); zeigt, welches Replikat geantwortet hat' }
+        pwa:
+          type: [object, 'null']
+          required: [version, revision, buildDate]
+          properties:
+            version: { type: [string, 'null'] }
+            revision: { type: [string, 'null'] }
+            buildDate: { type: [string, 'null'] }
     Status:
       type: object
       required: [status]

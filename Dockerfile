@@ -15,6 +15,12 @@ FROM scratch AS pwa-src
 # (no QEMU for multi-arch builds). Without a package.json in the context it produces an empty directory.
 FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine AS pwa-build
 WORKDIR /src
+# Build metadata the PWA embeds (build/version.json and the Hilfe page, ADR-0023). The checkout has no .git, so the
+# revision comes from here; PWA_VERSION falls back to package.json, BUILD_DATE to the build time.
+ARG PWA_VERSION=""
+ARG PWA_REVISION=""
+ARG BUILD_DATE=""
+ENV PWA_VERSION=${PWA_VERSION} PWA_REVISION=${PWA_REVISION} PWA_BUILD_DATE=${BUILD_DATE}
 # The PWA repository has no .dockerignore: copy everything except dependencies and build output, so a local
 # checkout with node_modules / .svelte-kit / build is neither read nor overwritten.
 RUN --mount=type=bind,from=pwa-src,source=.,target=/ctx \
@@ -54,7 +60,16 @@ RUN if [ "$QEMU_LIMIT" = "1" ]; then LIMIT="taskset -c 0-1"; JOBS="-j 2"; else L
 FROM swift:${SWIFT_VERSION}-noble-slim AS runtime
 # Revision of the PWA checkout built into /srv/pwa (empty when built without the pwa-src context).
 ARG PWA_REVISION=""
-LABEL org.opencontainers.image.pwa.revision="${PWA_REVISION}"
+# Build metadata of the backend image (ADR-0023): shown by GET /api/v1/system/info and GET /health, and as OCI labels.
+# Local builds without the arguments report "dev" / "unknown".
+ARG APP_VERSION="dev"
+ARG GIT_SHA="unknown"
+ARG BUILD_DATE=""
+LABEL org.opencontainers.image.pwa.revision="${PWA_REVISION}" \
+      org.opencontainers.image.version="${APP_VERSION}" \
+      org.opencontainers.image.revision="${GIT_SHA}" \
+      org.opencontainers.image.created="${BUILD_DATE}"
+ENV TIMETRACK_VERSION=${APP_VERSION} TIMETRACK_REVISION=${GIT_SHA} TIMETRACK_BUILD_DATE=${BUILD_DATE}
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates libsqlite3-0 tzdata curl \
     && rm -rf /var/lib/apt/lists/* \

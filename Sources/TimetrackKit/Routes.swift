@@ -15,7 +15,8 @@ func registerRoutes(_ app: Application, service: AuthService) {
     app.mcpAuthenticator = OAuthMcpAuthenticator(disabledModules: service.configuration.disabledModules)
     registerMCPRoutes(app, auth: service)
     registerOAuthRoutes(app, auth: service)
-    app.get("health") { _ in StatusResponse(status: "ok") }
+    let buildInfo = service.configuration.buildInfo
+    app.get("health") { _ in HealthResponse(status: "ok", version: buildInfo.version, revision: buildInfo.revision) }
     // Associated Domains for native passkeys: public, no redirect, no auth. Apple's CDN fetches it without cookies.
     let appIDs = service.configuration.appleAppIDs
     app.get(".well-known", "apple-app-site-association") { _ -> Response in
@@ -72,6 +73,12 @@ func registerRoutes(_ app: Application, service: AuthService) {
         let proof = try req.content.decode(LoginProof.self)
         try await limit(req, subject: .credential(Data(proof.credential.rawID)))
         return try await sessionResponse(service.login(proof, on: req.db), request: req)
+    }
+    // Version information (ADR-0023): any signed-in account, not module-gated.
+    let startedAt = Date()
+    api.get("system", "info") { req async throws -> SystemInfoDTO in
+        _ = try req.authContext
+        return try await SystemInfoService.make(request: req, configuration: service.configuration, startedAt: startedAt)
     }
     api.get("auth", "session") { req throws -> SessionDTO in try req.authContext.response }
     api.delete("auth", "session") { req async throws -> Response in

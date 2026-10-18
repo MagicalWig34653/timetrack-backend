@@ -45,6 +45,7 @@ extension AuthTests {
             try await check(.GET, "auth/session")
             try await check(.GET, "me/passkeys")
             try await check(.GET, "modules")
+            try await check(.GET, "system/info")
             try await check(.GET, "me/preferences")
             try await check(.PATCH, "me/preferences", nil, ["accent": "custom", "accentCustomHex": "#12ab9f", "colorScheme": "dark", "glow": "medium"])
             try await check(.GET, "auth/session")
@@ -120,6 +121,11 @@ extension AuthTests {
                 else if type != expected || !documented.contains(type) { problems.append("GET \(path): content type \(type), expected \(expected) of \(documented)") }
                 if response.headers.first(name: .contentDisposition)?.hasPrefix("attachment") != true { problems.append("GET \(path): missing attachment Content-Disposition") }
             }
+            // Public probes: /health follows the Health schema.
+            let health = try await app.testable().sendRequest(.GET, "/health")
+            if let json = try? JSONSchemaValidator.parse(Data(health.body.readableBytesView)) {
+                for issue in JSONSchemaValidator(document: document, reportUndeclaredProperties: true).validate(json, against: ["$ref": "#/components/schemas/Health"]) { problems.append("GET /health: \(issue)") }
+            } else { problems.append("GET /health: body is not JSON") }
             // Error bodies share the documented Error schema.
             try await self.contractCheck(app, nil, document, .GET, template: "work-models", path: "work-models", status: .unauthorized, problems: &problems)
             try await check(.GET, "work-models/{id}", "work-models/" + UUID().uuidString, nil, .notFound)

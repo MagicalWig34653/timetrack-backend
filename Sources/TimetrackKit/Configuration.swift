@@ -37,6 +37,8 @@ public struct Configuration: Sendable {
     public let oidc: OIDCConfiguration?
     /// Reverse proxies whose forwarded client address is honoured (empty: none, ADR-0018).
     public let trustedProxies: TrustedProxies
+    /// Build metadata from the image (TIMETRACK_VERSION / _REVISION / _BUILD_DATE), see SystemInfo.swift.
+    public let buildInfo: BuildInfo
 
     public init(environment: [String: String] = ProcessInfo.processInfo.environment) throws {
         func value(_ key: String, _ fallback: String) throws -> String {
@@ -70,6 +72,7 @@ public struct Configuration: Sendable {
         }
         disabledModules = try ModuleKey.parseDisabled(environment["MODULES_DISABLED"] ?? "")
         pwaStaticDirectory = environment["PWA_STATIC_DIR"] ?? "/srv/pwa"
+        buildInfo = BuildInfo(environment: environment)
         smtpHost = environment["SMTP_HOST"].flatMap { $0.isEmpty ? nil : $0 }
         smtpPort = try integer("SMTP_PORT", "587", 1...65535)
         smtp = try SMTPConfiguration(environment: environment)
