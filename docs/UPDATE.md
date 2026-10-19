@@ -50,7 +50,7 @@ Während eines Rolling Updates laufen kurz alte und neue Replikas nebeneinander.
 
 ### Update-Skript (Swarm)
 
-`deploy/swarm/update.sh` erledigt die Schritte 2 bis 4 in einem Lauf: Es sucht auf GHCR den neuesten `sha-<Commit>`-Tag (den Tag, der auf denselben Stand wie `latest` zeigt), schreibt ihn als `TIMETRACK_IMAGE` in deine `.env` (Sicherung als `.env.bak`), führt den Migrations-Job mit dem neuen Image aus, wartet auf „Complete“ und stellt erst danach das Backend per Rolling Update um. Schlägt die Migration fehl, bleibt das Backend unverändert.
+`deploy/swarm/update.sh` erledigt die Schritte 2 bis 4 in einem Lauf: Es sucht auf GHCR den neuesten `sha-<Commit>`-Tag (den Tag, der auf denselben Stand wie `latest` zeigt; gefunden in konstanter Zeit über das Image-Label `org.opencontainers.image.revision` und gegen den Digest von `latest` geprüft, nur als Rückfall werden alle Tags verglichen, damit es auch mit sehr vielen Images schnell bleibt), schreibt ihn als `TIMETRACK_IMAGE` in deine `.env` (Sicherung als `.env.bak`), führt den Migrations-Job mit dem neuen Image aus, wartet auf „Complete“ und stellt erst danach das Backend per Rolling Update um. Schlägt die Migration fehl, bleibt das Backend unverändert.
 
 ```sh
 deploy/swarm/update.sh --env-file ./.env --dry-run   # nur anzeigen, was passieren würde

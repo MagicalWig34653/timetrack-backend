@@ -12,7 +12,8 @@
 #   --skip-migrate    only update the backend (not recommended)
 #
 # How the newest tag is found: `latest` is pushed together with `sha-<commit>` by the Docker workflow on every
-# main build, so the sha- tag that points to the same digest as `latest` is the newest build. Needs curl and docker.
+# main build, so the sha- tag that points to the same digest as `latest` is the newest build. It is found in constant time via
+# the image label org.opencontainers.image.revision (verified against the digest of latest); comparing all tags is only a fallback. Needs curl and docker.
 # Back up the database first (docs/installation/backup.md). See docs/UPDATE.md.
 set -euo pipefail
 
@@ -79,6 +80,21 @@ digest_of() {
     | tr -d '\r' | awk 'tolower($1)=="docker-content-digest:" {print $2}'
 }
 
+# Commit the image of a tag was built from (label org.opencontainers.image.revision); empty when it cannot be read.
+revision_of() {
+  local index manifest config
+  index="$(curl -fsS -H "Authorization: Bearer $TOKEN" -H "Accept: $ACCEPT" "https://ghcr.io/v2/${REPO}/manifests/$1")" || return 1
+  # An index lists platform manifests (plus attestations); a plain manifest has its own config.
+  manifest="$(printf '%s' "$index" | tr -d '\n ' | grep -o '"digest":"sha256:[0-9a-f]*","size":[0-9]*,"platform":{"architecture":"\(amd64\|arm64\)"' | head -1 | grep -o 'sha256:[0-9a-f]*')"
+  if [ -n "$manifest" ]; then
+    index="$(curl -fsS -H "Authorization: Bearer $TOKEN" -H "Accept: $ACCEPT" "https://ghcr.io/v2/${REPO}/manifests/${manifest}")" || return 1
+  fi
+  config="$(printf '%s' "$index" | tr -d '\n ' | grep -o '"config":{[^}]*}' | grep -o 'sha256:[0-9a-f]*' | head -1)"
+  [ -n "$config" ] || return 1
+  curl -fsSL -H "Authorization: Bearer $TOKEN" "https://ghcr.io/v2/${REPO}/blobs/${config}" \
+    | grep -o '"org.opencontainers.image.revision":"[0-9a-f]*"' | head -1 | sed 's/.*:"\([0-9a-f]*\)"/\1/'
+}
+
 step "Find the newest image tag"
 if [ -z "$TAG" ]; then
   say "Registry: ghcr.io, repository ${REPO}"
@@ -86,16 +102,27 @@ if [ -z "$TAG" ]; then
   say "Registry token received."
   LATEST_DIGEST="$(digest_of latest)"; [ -n "$LATEST_DIGEST" ] || die "tag 'latest' not found on ghcr.io"
   say "latest = ${LATEST_DIGEST}"
-  TAGS="$(curl -fsS -H "Authorization: Bearer $TOKEN" "https://ghcr.io/v2/${REPO}/tags/list?n=1000" | grep -o '"sha-[0-9a-f]*"' | tr -d '"' || true)"
-  [ -n "$TAGS" ] || die "no sha- tags found"
-  TOTAL="$(printf '%s\n' "$TAGS" | wc -l | tr -d ' ')"
-  say "${TOTAL} sha- tags found, comparing their digests with latest ..."
-  n=0
-  for candidate in $TAGS; do
-    n=$((n + 1))
-    if [ "$(digest_of "$candidate")" = "$LATEST_DIGEST" ]; then TAG="$candidate"; say "  [${n}/${TOTAL}] ${candidate}  <- matches latest"; break; fi
-    say "  [${n}/${TOTAL}] ${candidate}  (not latest)"
-  done
+  # Fast path (constant time): the image carries its commit in the label org.opencontainers.image.revision, so the
+  # tag is sha-<first 7 characters>. latest -> index -> first platform manifest -> config blob -> label (4 requests).
+  # The result is verified against the digest of latest; if anything is missing the slow scan below runs instead.
+  REVISION="$(revision_of latest || true)"
+  if [ -n "$REVISION" ]; then
+    candidate="sha-${REVISION:0:7}"
+    if [ "$(digest_of "$candidate")" = "$LATEST_DIGEST" ]; then TAG="$candidate"; say "latest was built from commit ${REVISION:0:7} -> ${candidate} (verified)"; fi
+  fi
+  if [ -z "$TAG" ]; then
+    say "Label lookup did not give a verified tag, falling back to comparing all sha- tags (slow with many images) ..."
+    TAGS="$(curl -fsS -H "Authorization: Bearer $TOKEN" "https://ghcr.io/v2/${REPO}/tags/list?n=1000" | grep -o '"sha-[0-9a-f]*"' | tr -d '"' || true)"
+    [ -n "$TAGS" ] || die "no sha- tags found"
+    TOTAL="$(printf '%s\n' "$TAGS" | wc -l | tr -d ' ')"
+    say "${TOTAL} sha- tags found, comparing their digests with latest ..."
+    n=0
+    for candidate in $TAGS; do
+      n=$((n + 1))
+      if [ "$(digest_of "$candidate")" = "$LATEST_DIGEST" ]; then TAG="$candidate"; say "  [${n}/${TOTAL}] ${candidate}  <- matches latest"; break; fi
+      say "  [${n}/${TOTAL}] ${candidate}  (not latest)"
+    done
+  fi
   [ -n "$TAG" ] || die "no sha- tag matches latest (${LATEST_DIGEST}); pass --tag explicitly"
 else
   say "Using the tag from --tag: ${TAG}"
