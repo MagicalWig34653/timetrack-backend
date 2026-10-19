@@ -19,8 +19,7 @@ Zu Beginn jeder Sitzung zuerst `docs/STATUS.md`, `docs/ARBEITSPLAN.md` und
 
 ## Entwicklung mit Agents
 
-Claude Code koordiniert Agents; ungefähr 50 % der tatsächlichen Implementierung übernimmt
-Codex über das Claude-Codex-Plugin. Reviews allein erfüllen diesen Anteil nicht.
+Claude Code koordiniert Agents. **Nutzerentscheidung 19.10.2026: Es wird kein Codex mehr verwendet, nur noch Claude-Agents** (die frühere Vorgabe von ca. 50 % Codex-Anteil entfällt; die bisherigen Codex-Beiträge bleiben in `docs/ARBEITSPLAN.md` dokumentiert).
 Gewichtete Arbeitspakete und tatsächliche Beiträge in `docs/ARBEITSPLAN.md` fortlaufend führen.
 Worktrees oder getrennte Dateibereiche, ein Schreibverantwortlicher pro Paket und gegenseitige Reviews.
 Plugin-Fähigkeiten anhand der installierten Version prüfen; keine Befehle erfinden oder Modellwahl erzwingen.
