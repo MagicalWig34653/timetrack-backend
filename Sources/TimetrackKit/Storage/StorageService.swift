@@ -61,7 +61,7 @@ struct StorageService: Sendable {
 
     // MARK: Sessions and settings
 
-    private func session<T: Sendable>(_ context: AuthContext, admin: Bool = false,
+    func session<T: Sendable>(_ context: AuthContext, admin: Bool = false,
                                       _ operation: @escaping @Sendable (any Database, UUID) async throws -> T) async throws -> T {
         try await auth.transaction(on: db) { tx in
             let current = try await auth.authenticate(context.token, on: tx)
@@ -72,7 +72,7 @@ struct StorageService: Sendable {
 
     /// Read-only requests (S1b): the session middleware authenticated the cookie in this very request, so there is no second
     /// authentication and no global `auth_lock`. A plain transaction keeps one consistent snapshot. Writers use `session`.
-    private func readSession<T: Sendable>(_ context: AuthContext, admin: Bool = false,
+    func readSession<T: Sendable>(_ context: AuthContext, admin: Bool = false,
                                           _ operation: @escaping @Sendable (any Database, UUID) async throws -> T) async throws -> T {
         if admin { try context.admin() } else { try context.normal() }
         let account = try context.account.requireID()

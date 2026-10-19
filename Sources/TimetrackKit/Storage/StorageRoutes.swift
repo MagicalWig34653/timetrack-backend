@@ -55,6 +55,8 @@ func registerStorageRoutes(_ app: Application, auth: AuthService) {
         try await service(req).delete(req.authContext, id: id(req)); return Response(status: .noContent)
     }
 
+    registerVacationRequestFormRoutes(api, service: service)
+
     api.get("absences", ":id", "attachments") { req async throws -> Response in
         try timeResponse(await service(req).attachments(req.authContext, absence: id(req)))
     }
@@ -76,6 +78,8 @@ struct StorageErrorMiddleware: AsyncMiddleware {
         "storage_unavailable": "Der Dateispeicher ist derzeit nicht erreichbar oder nicht eingerichtet.",
         "not_implemented": "Diese Funktion ist auf diesem Server nicht eingerichtet.",
         "storage_corrupt": "Die gespeicherte Datei ist beschädigt.",
+        "no_template": "Es ist noch keine Vorlage für den Urlaubsantrag gespeichert.",
+        "mapping_too_large": "Die Zuordnung ist zu groß (höchstens 64 KB).",
     ]
     func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         do { return try await next.respond(to: request) }

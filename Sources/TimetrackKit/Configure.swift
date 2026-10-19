@@ -42,6 +42,7 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
     for migration in AccountSchema.migrations { app.migrations.add(migration) }
     app.migrations.add(AddSegmentTimeIndex())
     app.migrations.add(AddPlanDayTimes())
+    app.migrations.add(CreateVacationRequestForms())
     // Fluent installs the migrate command, including --revert and the global --yes flag.
     // Do not auto-apply migrations before explicit migrate/revert commands.
     if config.autoMigrate && !app.environment.arguments.contains("migrate") {

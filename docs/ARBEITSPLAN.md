@@ -338,6 +338,7 @@ Claude-Agent in getrennten Worktrees (Branches `mail1-smtp-check`), nicht gemerg
 | --- | --- | --- | --- | --- | --- |
 | S1b | Rest von S1: Q1-Befunde (`system/info` nur Administratoren, SMTP-Diagnose ohne Serverantwort, OIDC-Transportfehler, `X-Real-IP`-Doku/Warnung), `summary` je Operation mit Vertragstest, Anmeldung einmal pro Anfrage (Request-Speicher, lesende Dienste ohne zweite Prüfung), Lizenzkette BoringSSL; Vertrag v0.23.0; Details `docs/handoffs/S1b.md` | Claude-Agent | 4 | Branch `worktree-agent-aecf20448f928398e`, Lead-Prüfung offen; 353 Tests SQLite und MariaDB ohne Fehler; PWA-Anpassung offen | S1a |
 | B6 | Anhangzahl `Absence.attachmentCount`, Filter `hasAttachment`, `?disposition=inline` für sichere Vorschautypen; Vertrag v0.24.0; Details `docs/handoffs/B6.md` | Claude-Agent | 2 | Branch `worktree-agent-a0c3a2218a5ea8324`, Lead-Prüfung offen; 354 Tests SQLite und MariaDB ohne Fehler; PWA-Anpassung offen | S1b |
+| B7 | Vorlage für den Urlaubsantrag je Konto (PDF und Zuordnung, Speicherregeln, Export, Löschung); Vertrag v0.25.0; Details `docs/handoffs/B7.md` | Claude-Agent | 2 | Branch `worktree-agent-a5d512514485f6486`, Lead-Prüfung offen | B6, P6 |
 
 ## L3 (19.10.2026)
 

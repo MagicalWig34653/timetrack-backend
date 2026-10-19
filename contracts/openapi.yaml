@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.24.0
+  version: 0.25.0
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -57,6 +57,8 @@ info:
     --- V2 (v0.22.0, additiv) ---
     v0.22.0 (V2, ADR-0025): GET /api/v1/vacation/suggestions (Urlaubsplanung: Brückentage, Feiertagsblöcke, Schulferien-Erweiterungen, Auszeiten; Modul planning). Rein lesend, kein Schemawechsel. Feiertage der Region der Urlaubseinstellungen, Arbeitstage des Arbeitsmodells, selbst eingetragene Schulferien (keine eingebauten Termine), bestehende Abwesenheiten, Berufsschul- und Plantage; Budget aus dem Urlaubskonto (halbe Tage möglich). Fehler: 400 invalid, 400 range_too_large (mehr als 18 Monate).
     v0.24.0 (B6, ADR-0017 Nachtrag): `Absence.attachmentCount` (integer, additiv, immer vorhanden; gespeicherte, lesbare Anhänge, dieselbe Menge wie `GET /absences/{id}/attachments`); `GET /absences` mit optionalem Filter `hasAttachment=true|false` (anderer Wert → 400 bad_request); `GET /files/{id}?disposition=inline` liefert nur für image/png, image/jpeg, image/gif, image/webp, application/pdf und text/plain `Content-Disposition: inline` (mit nosniff und `Content-Security-Policy: sandbox; default-src 'none'`), alles andere bleibt attachment.
+    --- B7 (v0.25.0, additiv) ---
+    v0.25.0 (B7, ADR-0026): Vorlage für den Urlaubsantrag je Konto (Modul planning, privat, genau eine): GET /api/v1/vacation/request-form (`exists`, `fileName`, `sizeBytes`, `mapping`, `updatedAt`; ohne Vorlage `exists:false` mit Nullwerten), PUT .../file (Body application/pdf, höchstens 5 MB, Magic Number `%PDF-`, Header `X-File-Name` prozent-kodiert; 400 bad_request, 413 file_too_large, 415 unsupported_type; ersetzt die vorige Datei und behält die Zuordnung), PUT .../mapping (JSON-Objekt, undurchsichtig, höchstens 64 KB; 409 no_template ohne Vorlage, 413 mapping_too_large), GET .../file (PDF als attachment, nosniff; 404 ohne Vorlage), DELETE /api/v1/vacation/request-form (idempotent 204). Die Datei folgt den Speicherregeln (DB/S3/lokal), steckt im Kontoexport (`vacation-request-form.json` und `files/`) und wird mit dem Konto gelöscht. Neuer Fehlercode: no_template (409), mapping_too_large (413).
     --- S1b (v0.23.0) ---
     v0.23.0 (S1b, ADR-0023 Nachtrag): GET /api/v1/system/info liefert Betriebsfelder (`database`, `schemaMigrations`, `migrationsPending`, `uptimeSeconds`, `replicaId`) nur noch Administratoren; normale Konten erhalten die Versionsfelder (`version`, `revision`, `revisionShort`, `buildDate`, `apiVersion`) und `pwa`. Die Betriebsfelder sind jetzt optional (Schlüssel fehlt statt Nullwert); Clients müssen sie tolerieren. Jede Operation trägt eine kurze deutsche `summary`. MAIL FROM-Fehler der SMTP-Prüfung nennen nur noch die klassifizierte Ursache und den numerischen Code, nie den Serverantworttext.
     --- S1a (v0.20.0, additiv) ---
@@ -888,6 +890,44 @@ paths:
         '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/VacationSuggestions' } } } }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/vacation/request-form:
+    get:
+      operationId: getVacationRequestForm
+      summary: Vorlage des Urlaubsantrags abrufen
+      description: Genau eine private Vorlage je Konto (Modul planning). Ohne Vorlage `exists:false` und Nullwerte.
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/VacationRequestForm' } } } }, '401': { $ref: '#/components/responses/Unauthorized' } }
+    delete:
+      operationId: deleteVacationRequestForm
+      summary: Vorlage des Urlaubsantrags löschen
+      description: Entfernt Datei und Zuordnung. Idempotent, auch ohne Vorlage 204.
+      security: [ { session: [], csrf: [] } ]
+      responses: { '204': { description: gelöscht }, '401': { $ref: '#/components/responses/Unauthorized' } }
+  /api/v1/vacation/request-form/file:
+    get:
+      operationId: downloadVacationRequestFormFile
+      summary: Vorlagen-PDF herunterladen
+      description: Liefert das PDF als attachment mit nosniff; ohne Vorlage 404.
+      security: [ { session: [] } ]
+      responses: { '200': { description: PDF, content: { application/pdf: { schema: { type: string, format: binary } } } }, '401': { $ref: '#/components/responses/Unauthorized' }, '404': { $ref: '#/components/responses/NotFound' } }
+    put:
+      operationId: putVacationRequestFormFile
+      summary: Vorlagen-PDF speichern
+      description: |
+        Body application/pdf, höchstens 5 MB, muss mit `%PDF-` beginnen. Header `X-File-Name` prozent-kodiert (UTF-8), Standard `Urlaubsantrag.pdf`.
+        Ersetzt eine vorhandene Datei, die Zuordnung bleibt erhalten. Die Datei folgt den Speicherregeln.
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { name: X-File-Name, in: header, required: false, schema: { type: string } } ]
+      requestBody: { required: true, content: { application/pdf: { schema: { type: string, format: binary } } } }
+      responses: { '200': { description: gespeichert, content: { application/json: { schema: { $ref: '#/components/schemas/VacationRequestForm' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '401': { $ref: '#/components/responses/Unauthorized' }, '413': { description: Datei zu groß (file_too_large), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }, '415': { description: Kein PDF-Inhaltstyp (unsupported_type), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } } }
+  /api/v1/vacation/request-form/mapping:
+    put:
+      operationId: putVacationRequestFormMapping
+      summary: Zuordnung der Vorlage speichern
+      description: JSON-Objekt, für den Server undurchsichtig, höchstens 64 KB. Ohne gespeicherte Vorlage 409 no_template.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses: { '200': { description: gespeichert, content: { application/json: { schema: { $ref: '#/components/schemas/VacationRequestForm' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '401': { $ref: '#/components/responses/Unauthorized' }, '409': { description: Keine Vorlage (no_template), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }, '413': { description: Zuordnung zu groß (mapping_too_large), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } } }
   /api/v1/vacation/entries:
     get:
       operationId: listVacationEntries
@@ -2356,6 +2396,15 @@ components:
         localPath: { type: [string, 'null'] }
         s3: { type: [object, 'null'], properties: { endpoint: { type: string }, region: { type: string }, bucket: { type: string }, pathStyle: { type: boolean }, accessKeyId: { type: string } } }
         hasSecret: { type: boolean }
+    VacationRequestForm:
+      type: object
+      required: [exists, fileName, sizeBytes, mapping, updatedAt]
+      properties:
+        exists: { type: boolean }
+        fileName: { type: [string, 'null'] }
+        sizeBytes: { type: [integer, 'null'] }
+        mapping: { type: [object, 'null'], additionalProperties: true }
+        updatedAt: { type: [string, 'null'], format: date-time }
     FileMeta:
       type: object
       required: [id, name, size, sha256, contentType, backend, createdAt]

@@ -61,7 +61,7 @@ enum AccountEraser {
         // Reports.
         byColumn(ReportSourceRecord.self), byColumn(ReportEntryRecord.self), byColumn(ReportWeekStatusRecord.self), byColumn(LearningFieldRecord.self),
         // Absences, vacation, calendar, shares in both directions.
-        byColumn(AbsenceAttachmentRecord.self), byColumn(AbsenceRecord.self), byColumn(VacationSettingsRecord.self),
+        byColumn(AbsenceAttachmentRecord.self), byColumn(AbsenceRecord.self), byColumn(VacationSettingsRecord.self), byColumn(VacationRequestFormRecord.self),
         byColumn(VacationSnapshotRecord.self), byColumn(VacationAdjustmentRecord.self), byColumn(CustomCalendarDayRecord.self),
         byColumn(ShareRecord.self, "owner_id"), byColumn(ShareRecord.self, "recipient_id"),
         // Identity and security material.
