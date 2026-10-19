@@ -11,7 +11,7 @@ Die Workflows liegen je Repository unter `.github/workflows/`. Backend (Hauptrep
 | Backend | `ci.yml` | Push auf `main`, Pull Request, aufrufbar von `release.yml` | Swift-Build und Tests (SQLite), Tests gegen MariaDB 12.3, Vertrags- und Skriptprüfungen, Compose/Stack-Konfiguration |
 | Backend | `docker.yml` | Push `main`, Tags `v*`, Pull Request (nur bei Docker-relevanten Pfaden) | Image für amd64 und arm64 bauen; ab `main`/Tag nach GHCR veröffentlichen; Smoke-Test `/health` |
 | Backend | `pages.yml` | Push `main` auf `site/`, `docs/`, `contracts/`; Pull Request (nur Build) | Website bauen und auf GitHub Pages veröffentlichen |
-| Backend | `release.yml` | Tag `v*` | CI ausführen, GitHub Release mit generierten Notizen, OpenAPI-Vertrag, Quellarchiv, Prüfsummen |
+| Backend | `release.yml` | Tag `v*` | CI ausführen, GitHub Release mit generierten Notizen, OpenAPI-Vertrag, Quellarchiv, Lizenzhinweise, Prüfsummen |
 | Backend | `codeql.yml` | Push/PR `main`, wöchentlich | CodeQL für GitHub Actions und JavaScript (Website-Skripte) |
 | Backend | `dependency-review.yml` | Pull Request | Neue Abhängigkeiten mit bekannten Schwachstellen (hoch) blockieren |
 | Backend | `dependabot.yml` | wöchentlich | Updates für Actions, npm (`site/`), Docker, SwiftPM |
@@ -94,7 +94,7 @@ VitePress, Versionen fest in `site/package.json`, Lockfile eingecheckt. `npm run
 
 1. Vertragsversion in `contracts/openapi.yaml` und Stand in `docs/STATUS.md` pflegen.
 2. Tag setzen: `git tag v0.15.0 && git push origin v0.15.0` (nicht automatisch; Push ist eine bewusste Handlung).
-3. `release.yml` ruft die CI auf und erstellt bei Erfolg das Release (`gh release create --generate-notes`; Tags mit `-` im Namen werden als Vorabversion markiert) mit Quellarchiv, `openapi-<Tag>.yaml` und `SHA256SUMS`. Der Text enthält das AGPL-Quellcode-Angebot.
+3. `release.yml` ruft die CI auf und erstellt bei Erfolg das Release (`gh release create --generate-notes`; Tags mit `-` im Namen werden als Vorabversion markiert) mit Quellarchiv, `openapi-<Tag>.yaml`, `THIRD-PARTY-NOTICES-<Tag>.txt` (Lizenztexte der SwiftPM-Pins, erzeugt in einem `swift:6.3-noble`-Container mit `scripts/third-party-notices.sh`) und `SHA256SUMS`. Der Text enthält das AGPL-Quellcode-Angebot.
 4. `docker.yml` baut parallel dasselbe Tag als Image (`ghcr.io/<Eigentümer>/timetrack-backend:<Version>`, `latest`). Im Swarm-Stack `TIMETRACK_IMAGE` auf dieses Tag setzen (`docs/BETRIEB.md`).
 5. Pages werden bei Änderungen auf `main` neu gebaut, nicht erst beim Tag.
 

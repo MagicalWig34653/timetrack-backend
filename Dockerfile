@@ -57,6 +57,11 @@ RUN if [ "$QEMU_LIMIT" = "1" ]; then LIMIT="taskset -c 0-1"; JOBS="-j 2"; else L
     && cp "$(swift build -c release --show-bin-path)/App" /staging/App \
     && (find "$(swift build -c release --show-bin-path)" -maxdepth 1 -name '*.resources' -exec cp -R {} /staging/ \;)
 
+# Licence texts and NOTICE files of all SwiftPM pins (package L3); the runtime stage appends the OS packages.
+# Copied after the compile step so that script changes do not invalidate the build cache.
+COPY scripts/third-party-notices.sh ./scripts/third-party-notices.sh
+RUN mkdir -p /notices && ./scripts/third-party-notices.sh --swiftpm -o /notices/THIRD-PARTY-NOTICES.swiftpm
+
 FROM swift:${SWIFT_VERSION}-noble-slim AS runtime
 # Revision of the PWA checkout built into /srv/pwa (empty when built without the pwa-src context).
 ARG PWA_REVISION=""
@@ -77,6 +82,15 @@ RUN apt-get update \
     && useradd --system --uid 10001 --gid timetrack --home-dir /app --shell /usr/sbin/nologin timetrack \
     && mkdir -p /app /data /srv/pwa \
     && chown -R timetrack:timetrack /app /data
+
+# Licence compliance (package L3): project licence, third-party notices (SwiftPM pins + OS packages) under
+# /usr/share/doc/timetrack. The OS part is generated here, after all packages are installed.
+COPY LICENSE /usr/share/doc/timetrack/LICENSE
+COPY --from=build /notices/THIRD-PARTY-NOTICES.swiftpm /tmp/notices/swiftpm
+COPY scripts/third-party-notices.sh /tmp/notices/third-party-notices.sh
+RUN cp /tmp/notices/swiftpm /usr/share/doc/timetrack/THIRD-PARTY-NOTICES \
+    && /tmp/notices/third-party-notices.sh --dpkg >> /usr/share/doc/timetrack/THIRD-PARTY-NOTICES \
+    && rm -rf /tmp/notices
 
 WORKDIR /app
 COPY --from=build --chown=timetrack:timetrack /staging/ /app/

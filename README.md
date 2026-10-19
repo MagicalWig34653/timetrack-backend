@@ -82,4 +82,4 @@ Das Projekt wird mit Coding-Agents entwickelt; das Repository ist das Projektged
 
 ## Lizenz
 
-[GNU AGPL-3.0-only](LICENSE). Abhängigkeiten stehen unter eigenen Lizenzen ([docs/LIZENZEN.md](docs/LIZENZEN.md); die Release-Prüfung ist noch offen).
+[GNU AGPL-3.0-only](LICENSE). Abhängigkeiten stehen unter eigenen Lizenzen ([docs/LIZENZEN.md](docs/LIZENZEN.md); die Release-Prüfung ist noch offen). Das Image enthält die Lizenztexte unter `/usr/share/doc/timetrack/THIRD-PARTY-NOTICES` (erzeugt mit `scripts/third-party-notices.sh`). **Vorschlag, nicht in Kraft:** [LICENSE-EXCEPTION.md](LICENSE-EXCEPTION.md) (OpenSSL-Verlinkungsausnahme nach AGPL §7), nötig nur solange das eingebettete BoringSSL von `swift-nio-ssl` 2.37.5 die alte OpenSSL-Lizenz trägt; die Entscheidung liegt beim Rechteinhaber, kein Rechtsrat.
