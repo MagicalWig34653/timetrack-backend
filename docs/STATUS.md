@@ -96,7 +96,7 @@ Signierung: bezahltes Apple Developer Program, Team im Apple-Repo hinterlegt; As
 - Vertrag: 189 Redocly-Lint-Fehler (überwiegend fehlende `summary`), Request-Schemas nicht abgeglichen.
 
 **Lizenz und Veröffentlichung**
-- Release-Prüfung der Abhängigkeiten offen (`LIZENZEN.md`): insbesondere eingebettetes BoringSSL in `swift-nio-ssl` (OpenSSL/ISC-Hinweise) und Beilage der Lizenztexte in Binär-/PWA-Auslieferung.
+- Release-Prüfung der Abhängigkeiten offen (`LIZENZEN.md`, Paket L3): `swift-nio-ssl` 2.37.5 (neuestes Release) bettet BoringSSL mit 323 Dateien unter der alten OpenSSL-Lizenz ein; Upstream-`main` ist bereits auf Apache-2.0 umgestellt (BoringSSL `8eb25be6…`), ein Release fehlt. **Entscheidung des Rechteinhabers nötig:** auf Release warten bzw. `main` pinnen, und/oder die vorgeschlagene AGPL-§7-Ausnahme (`LICENSE-EXCEPTION.md`, Vorschlag, nicht in Kraft) übernehmen. Erledigt in L3: `THIRD-PARTY-NOTICES` im Image und als Release-Asset (`scripts/third-party-notices.sh`), Betriebssystempakete und XKCP inventarisiert. Offen: Lizenzbeilage im PWA-Bundle (PWA-Repo), Apple-Apps. Details `docs/handoffs/L3.md`.
 - Commit-Hashes in Handoffs und älteren Dokumenten sind seit der Historienbereinigung veraltet.
 
 **Nicht begonnen** (Etappe 5/6): KI-Entwurfs-Worker (Mac), Kalenderbrücke (EventKit/Google), Standortautomatik auf iOS (Region Monitoring), Selbstständigenfunktionen, strukturierter PDF-Altberichtimport, Offline-Schreiben, E-Mail als Hinweiskanal.

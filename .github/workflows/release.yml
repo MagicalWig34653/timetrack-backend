@@ -1,5 +1,5 @@
 # Release: on a tag v* run the full CI, then create a GitHub Release with generated notes, the OpenAPI contract
-# and a source bundle. The container image for the same tag is built by docker.yml. Documentation: docs/CI.md.
+# a source bundle and the third-party notices. The container image for the same tag is built by docker.yml. Documentation: docs/CI.md.
 name: Release
 
 on:
@@ -36,6 +36,10 @@ jobs:
           mkdir -p dist
           git archive --format=tar.gz --prefix="timetrack-backend-${TAG}/" -o "dist/timetrack-backend-${TAG}-source.tar.gz" "$TAG"
           cp contracts/openapi.yaml "dist/openapi-${TAG}.yaml"
+          # Licence texts of all SwiftPM pins (package L3). The container image carries the same file plus the OS packages.
+          docker run --rm -v "$PWD:/w" -w /w swift:6.3-noble bash -c \
+            'swift package resolve && scripts/third-party-notices.sh --swiftpm -o dist/THIRD-PARTY-NOTICES.txt'
+          mv dist/THIRD-PARTY-NOTICES.txt "dist/THIRD-PARTY-NOTICES-${TAG}.txt"
           (cd dist && sha256sum ./* > SHA256SUMS)
       - name: Release notes header
         run: |
@@ -46,6 +50,8 @@ jobs:
           \`timetrack-backend-${TAG}-source.tar.gz\` bei und ist im Git-Tag \`${TAG}\` enthalten.
           Das Container-Image \`ghcr.io/${GITHUB_REPOSITORY_OWNER}/timetrack-backend:${TAG#v}\` entsteht aus genau diesem Stand
           (Workflow Docker). API-Vertrag: \`openapi-${TAG}.yaml\`.
+          Lizenztexte der Abhängigkeiten: \`THIRD-PARTY-NOTICES-${TAG}.txt\` (im Container-Image zusätzlich unter
+          \`/usr/share/doc/timetrack/\`, dort inklusive der Betriebssystempakete).
 
           NOTES
       - name: Create the release
@@ -53,4 +59,4 @@ jobs:
           flags=()
           case "$TAG" in *-*) flags+=(--prerelease) ;; esac
           gh release create "$TAG" --verify-tag --title "$TAG" --generate-notes --notes-file dist/notes.md "${flags[@]}" \
-            "dist/timetrack-backend-${TAG}-source.tar.gz" "dist/openapi-${TAG}.yaml" dist/SHA256SUMS
+            "dist/timetrack-backend-${TAG}-source.tar.gz" "dist/openapi-${TAG}.yaml" "dist/THIRD-PARTY-NOTICES-${TAG}.txt" dist/SHA256SUMS
