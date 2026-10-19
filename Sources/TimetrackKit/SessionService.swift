@@ -51,6 +51,19 @@ extension AuthService {
 }
 
 struct ContextKey: StorageKey { typealias Value = AuthContext }
+/// Result of the credential check of this very request (S1b): the session cookie is verified against the database once per
+/// request; `ModuleGuard` and `SessionMiddleware` share it. It is request storage only, so a revocation takes effect on the
+/// next request. Writes still re-verify inside their locked transaction (ADR-0017), which is deliberate.
+struct VerifiedSessionKey: StorageKey { typealias Value = AuthContext }
+extension AuthService {
+    /// `authenticate` with a per-request cache. Failures are not cached (they end the request or fall through unauthenticated).
+    func authenticate(_ token: String?, for request: Request) async throws -> AuthContext {
+        if let cached = request.storage[VerifiedSessionKey.self], cached.token == token { return cached }
+        let context = try await authenticate(token, on: request.db)
+        request.storage[VerifiedSessionKey.self] = context
+        return context
+    }
+}
 extension Request {
     var authContext: AuthContext { get throws { guard let value = storage[ContextKey.self] else { throw APIError.unauthorized }; return value } }
 }
@@ -59,7 +72,7 @@ struct SessionMiddleware: AsyncMiddleware {
     func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         if let token = request.cookies["tt_session"]?.string {
             let context: AuthContext?
-            do { context = try await service.authenticate(token, on: request.db) }
+            do { context = try await service.authenticate(token, for: request) }
             catch let error as APIError where error.code == "unauthorized" { context = nil }
             if let context {
                 if ![.GET, .HEAD, .OPTIONS].contains(request.method) {

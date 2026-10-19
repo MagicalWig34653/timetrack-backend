@@ -160,7 +160,15 @@ final class MailCheckRunner: @unchecked Sendable {
         let problem = steps.first { $0.status == "failed" }
         let summary = problem.map { "Die Prüfung ist bei „\($0.title)“ fehlgeschlagen. \($0.problem?.message ?? "")" }
             ?? "Alles in Ordnung: Der Server ist erreichbar, die Verschlüsselung und die Anmeldung funktionieren und der Absender wird akzeptiert. Es wurde keine Nachricht gesendet."
-        return MailCheckResult(ok: problem == nil, summary: summary, checkedAt: Date(), totalMs: Self.milliseconds(clock.now - start), steps: steps)
+        // Defence in depth: configured credentials never leave in any returned text, whatever produced it.
+        let secrets = redactionSecrets()
+        func scrub(_ value: String) -> String { Self.redact(value, secrets: secrets) }
+        let safeSteps = steps.map { step in
+            MailCheckStep(id: step.id, title: step.title, status: step.status, durationMs: step.durationMs, details: step.details.map(scrub),
+                          warnings: step.warnings.map(scrub), certificate: step.certificate,
+                          problem: step.problem.map { MailCheckProblem(code: $0.code, message: scrub($0.message), advice: scrub($0.advice)) })
+        }
+        return MailCheckResult(ok: problem == nil, summary: scrub(summary), checkedAt: Date(), totalMs: Self.milliseconds(clock.now - start), steps: safeSteps)
     }
 
     private func execute(_ id: String, _ title: String) async -> MailCheckStep {
@@ -188,6 +196,17 @@ final class MailCheckRunner: @unchecked Sendable {
             return step("failed", StepBody(), MailCheckProblem(code: "unexpected", message: "Unerwarteter Fehler bei der Prüfung.",
                 advice: "Versuche die Prüfung erneut. Tritt der Fehler wieder auf, sieh in den Server-Logs nach."))
         }
+    }
+
+    private func redactionSecrets() -> [String] {
+        var secrets: [String] = []
+        // A user name that equals the sender address stays readable: SMTP_FROM is shown on purpose in the messages.
+        if let user = config.user, user.lowercased() != config.from.lowercased() { secrets.append(user) }
+        if let password = config.password {
+            secrets.append(password)
+            if let user = config.user { secrets.append(Data(("\0" + user + "\0" + password).utf8).base64EncodedString()) }
+        }
+        return secrets
     }
 
     // MARK: Steps
@@ -336,15 +355,10 @@ final class MailCheckRunner: @unchecked Sendable {
         try await send("MAIL FROM:<\(config.from)>")
         let reply = try await readReply(expecting: "MAIL FROM")
         guard reply.code == 250 else {
-            if reply.code == 530 || reply.text.contains("5.7.0") {
-                throw failure("auth_required", "Der Server verlangt vor dem Senden eine Anmeldung (Antwort \(reply.code)).",
-                              "Setze SMTP_USER und SMTP_PASSWORD (bzw. SMTP_PASSWORD_FILE).", details: [Self.serverLine(reply)])
-            }
-            if reply.code >= 400 && reply.code < 500 {
-                throw failure("sender_temporary", "Der Server nimmt den Absender gerade nicht an (Antwort \(reply.code)).", "Versuche es später erneut.", details: [Self.serverLine(reply)])
-            }
-            throw failure("sender_rejected", "Der Server lehnt die Absenderadresse „\(Self.clean(config.from))“ ab (Antwort \(reply.code)).",
-                          "Die Adresse in SMTP_FROM muss zum angemeldeten Konto gehören oder beim Anbieter als Absender freigegeben sein.", details: [Self.serverLine(reply)])
+            // The server's free text is never passed on (Q1 finding 3): it may echo the account, the sender address or
+            // internal policy details. Only the classified German reason and the numeric code remain.
+            let verdict = Self.classifyMailFrom(reply, from: Self.clean(config.from))
+            throw failure(verdict.code, verdict.message, verdict.advice, details: ["Antwort des Servers: \(reply.code)"])
         }
         // Reset instead of continuing: nothing is sent.
         try? await send("RSET"); _ = try? await readReply(expecting: "RSET")
@@ -483,6 +497,44 @@ final class MailCheckRunner: @unchecked Sendable {
     /// Printable ASCII only, so server- or certificate-controlled text cannot inject markup or control characters.
     static func clean(_ value: String, limit: Int = 80) -> String {
         String(String.UnicodeScalarView(value.unicodeScalars.filter { (32...126).contains($0.value) }.prefix(limit)))
+    }
+
+    /// Classifies a refused `MAIL FROM` by numeric code and enhanced status code (RFC 3463). The server text is only
+    /// inspected, never returned.
+    static func classifyMailFrom(_ reply: SMTPReply, from: String) -> (code: String, message: String, advice: String) {
+        let enhanced = reply.text.split(separator: " ", maxSplits: 1).first.map(String.init) ?? ""
+        if reply.code == 530 || reply.code == 535 || enhanced.hasPrefix("5.7.0") || enhanced.hasPrefix("5.7.8") {
+            return ("auth_required", "Der Server verlangt vor dem Senden eine Anmeldung (Antwort \(reply.code)).",
+                    "Setze SMTP_USER und SMTP_PASSWORD (bzw. SMTP_PASSWORD_FILE).")
+        }
+        if reply.code >= 400 && reply.code < 500 {
+            let reason: String
+            switch reply.code {
+            case 421: reason = "Der Server ist gerade nicht verfügbar"
+            case 450, 451: reason = "Der Server hat die Anfrage vorübergehend zurückgestellt (zum Beispiel Greylisting oder Ratenbegrenzung)"
+            case 452: reason = "Der Server hat gerade nicht genug Speicher oder Kapazität"
+            default: reason = "Der Server nimmt den Absender gerade nicht an"
+            }
+            return ("sender_temporary", "\(reason) (Antwort \(reply.code)).", "Versuche es später erneut.")
+        }
+        let reason: String
+        switch reply.code {
+        case 551: reason = "Der Server verlangt eine andere Absenderadresse als „\(from)“"
+        case 552: reason = "Der Server lehnt die Anfrage wegen einer Größen- oder Mengenbegrenzung ab"
+        case 554: reason = "Der Server hat die Absenderprüfung nicht bestanden (Richtlinie oder Sperrliste)"
+        case 555: reason = "Der Server versteht die Parameter der Absenderadresse „\(from)“ nicht"
+        default: reason = "Der Server lehnt die Absenderadresse „\(from)“ ab"
+        }
+        return ("sender_rejected", "\(reason) (Antwort \(reply.code)).",
+                "Die Adresse in SMTP_FROM muss zum angemeldeten Konto gehören oder beim Anbieter als Absender freigegeben sein.")
+    }
+
+    /// Replaces configured credentials (user, password and the base64 AUTH PLAIN payload) in text that is returned to the
+    /// client. Secrets shorter than four characters are skipped because replacing them would garble ordinary words.
+    static func redact(_ text: String, secrets: [String]) -> String {
+        var result = text
+        for secret in secrets where secret.count >= 4 { result = result.replacingOccurrences(of: secret, with: "***") }
+        return result
     }
 
     static func serverLine(_ reply: SMTPReply) -> String { "Antwort des Servers: \(reply.code) \(clean(reply.text, limit: 100))" }

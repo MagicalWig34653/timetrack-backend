@@ -30,6 +30,17 @@ struct ReportService: Sendable {
         }
     }
 
+    /// Read-only requests (S1b): the session middleware authenticated the cookie in this very request, so there is no second
+    /// authentication and no global `auth_lock`; a plain transaction keeps one consistent snapshot. Writers use `session`.
+    static func read<T: Sendable>(_ context: AuthContext, auth: AuthService, db: any Database,
+                                  operation: @escaping @Sendable (ReportService) async throws -> T) async throws -> T {
+        try context.normal()
+        let account = try context.account.requireID(), disabled = auth.configuration.disabledModules
+        return try await db.transaction { tx in
+            try await operation(ReportService(accountId: account, db: tx, time: .init(accountId: account, db: tx, disabledModules: disabled)))
+        }
+    }
+
     // MARK: Validation
 
     private func name(_ raw: String) throws -> String {

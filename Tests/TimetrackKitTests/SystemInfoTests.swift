@@ -33,10 +33,18 @@ extension AuthTests {
             XCTAssertEqual(pwa["version"] as? String, "0.2.0")
             XCTAssertEqual(pwa["revision"] as? String, "1234567890abcdef1234567890abcdef12345678")
             XCTAssertEqual(pwa["buildDate"] as? String, "2026-10-18T08:00:00Z")
-            // Any role may read it (not admin-only).
+            // Any role may read the version fields, but operational fields are for administrators only (Q1 finding 2).
             let member = try await second(app, auth, admin)
             let memberResponse = try await app.testable().sendRequest(.GET, "/api/v1/system/info", headers: headers(member))
             XCTAssertEqual(memberResponse.status, .ok)
+            let memberJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(memberResponse.body.readableBytesView)) as? [String: Any])
+            let memberBackend = try XCTUnwrap(memberJSON["backend"] as? [String: Any])
+            XCTAssertEqual(Set(memberBackend.keys), ["version", "revision", "revisionShort", "buildDate", "apiVersion"])
+            XCTAssertEqual(memberBackend["version"] as? String, "0.2.0")
+            XCTAssertEqual(memberBackend["apiVersion"] as? String, apiContractVersion)
+            XCTAssertNotNil(memberJSON["pwa"] as? [String: Any])
+            let raw = memberResponse.body.string
+            for hidden in ["hostName", "replicaId", "database", "sqlite", "uptime", "schemaMigrations"] { XCTAssertFalse(raw.contains(hidden), "\(hidden) leaked to a member") }
             // /health carries the same version and revision, without a session.
             let health = try await app.testable().sendRequest(.GET, "/health")
             XCTAssertEqual(health.status, .ok)

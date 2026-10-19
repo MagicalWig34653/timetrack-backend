@@ -52,3 +52,11 @@ Messung und Zahlen im [Handoff B2](../handoffs/B2.md) (`AUTH_LOCK_BENCH=1`, nich
 
 Wiederholen der Transaktion bei Fehler 1020 (würde unter Last erneut scheitern, weil jeder Wiederholungsversuch wieder vor dem Warten die Sicht öffnet), Aufräumen als eigenes
 Programm (zweiter Deployment-Pfad, aber dieselbe Logik; der CLI-Befehl deckt Cron ab), `failed`-Status für Importe (siehe oben). Keine neue Migration, keine neue Abhängigkeit.
+
+## Nachtrag S1b (19.10.2026): Anmeldung einmal pro Anfrage
+
+Der Sitzungs-Cookie wurde je Anfrage mehrfach gegen die Datenbank geprüft: `ModuleGuard` (nur modulgesteuerte Pfade), `SessionMiddleware` und, bei Diensten mit gesperrter Transaktion (`auth.transaction`), ein weiteres Mal im Dienst. Gemessen mit Fluents Abfrageverlauf am Beispiel `GET /api/v1/reports/learning-fields` (Modul `reports`): **8 Fluent-Abfragen und 2 Sitzungsabfragen vorher, 6 und 1 nachher**.
+
+- `AuthService.authenticate(_:for:)` prüft einmal je Anfrage und legt das Ergebnis im Request-Speicher ab (`VerifiedSessionKey`). `ModuleGuard` und `SessionMiddleware` teilen es. Es gilt nur für diese Anfrage; ein Widerruf wirkt ab der nächsten. Fehlschläge werden nicht zwischengespeichert.
+- **Lesende** Dienste prüfen nicht erneut und nehmen den `auth_lock` nicht: `ReportService.read` (GET `learning-fields`, `weeks`, `weeks/…/text`, `sources`), `StorageService.readSession` (Speichereinstellungen, Dateimetadaten, Download, Anhangsliste), `AccountAdminService.list`, `AccountExportService.archive` (zusätzlich zu `TimeServices.read` und dem Planungsmuster aus B2).
+- **Schreibende** Dienste prüfen bewusst weiter innerhalb der gesperrten Transaktion erneut. Das ist die Absicherung gegen gleichzeitigen Widerruf, Deaktivieren und die Regel „letzter Administrator“ (ADR-0016); sie ist nicht redundant. Gleiches gilt für `addPasskey` und das anschließende Neulesen der Sitzung (eine Recovery-Sitzung wird dort hochgestuft, der Cookie braucht das neue Ablaufdatum).

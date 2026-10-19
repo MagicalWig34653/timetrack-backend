@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.22.0
+  version: 0.23.0
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -56,6 +56,8 @@ info:
     v0.21.0 (AC2, ADR-0020 Nachtrag): AccentId um wine, slate, cocoa, olive, ocean, ink erweitert (dunkle Töne mit weißer Schrift). Server vor v0.21.0 lehnen die IDs mit 400 ab; Clients ohne Kenntnis der IDs zeigen sie als Blau, bestehende Konten bleiben unverändert. Kein Schemawechsel.
     --- V2 (v0.22.0, additiv) ---
     v0.22.0 (V2, ADR-0025): GET /api/v1/vacation/suggestions (Urlaubsplanung: Brückentage, Feiertagsblöcke, Schulferien-Erweiterungen, Auszeiten; Modul planning). Rein lesend, kein Schemawechsel. Feiertage der Region der Urlaubseinstellungen, Arbeitstage des Arbeitsmodells, selbst eingetragene Schulferien (keine eingebauten Termine), bestehende Abwesenheiten, Berufsschul- und Plantage; Budget aus dem Urlaubskonto (halbe Tage möglich). Fehler: 400 invalid, 400 range_too_large (mehr als 18 Monate).
+    --- S1b (v0.23.0) ---
+    v0.23.0 (S1b, ADR-0023 Nachtrag): GET /api/v1/system/info liefert Betriebsfelder (`database`, `schemaMigrations`, `migrationsPending`, `uptimeSeconds`, `replicaId`) nur noch Administratoren; normale Konten erhalten die Versionsfelder (`version`, `revision`, `revisionShort`, `buildDate`, `apiVersion`) und `pwa`. Die Betriebsfelder sind jetzt optional (Schlüssel fehlt statt Nullwert); Clients müssen sie tolerieren. Jede Operation trägt eine kurze deutsche `summary`. MAIL FROM-Fehler der SMTP-Prüfung nennen nur noch die klassifizierte Ursache und den numerischen Code, nie den Serverantworttext.
     --- S1a (v0.20.0, additiv) ---
     v0.20.0 (S1a, ADR-0024): Jede /api/v1-Operation kann bei nicht erreichbarer Datenbank (Verbindungsfehler, Pool-Zeitlimit) mit 503 `database_unavailable` und Header `Retry-After` (Sekunden) antworten, statt mit 500. Gemeinsame Antwort `ServiceUnavailable`; Clients wiederholen nach Ablauf. Kein Schemawechsel.
 servers:
@@ -64,6 +66,7 @@ paths:
   /health:
     get:
       operationId: health
+      summary: Prozess-Liveness prüfen
       description: Prozess-Liveness, ohne Datenbank. Enthält Version und Git-Revision des Images (keine Geheimnisse).
       responses:
         '200':
@@ -74,6 +77,7 @@ paths:
   /.well-known/apple-app-site-association:
     get:
       operationId: appleAppSiteAssociation
+      summary: Associated Domains für native Passkeys abrufen
       description: |
         Associated Domains für native Passkeys (ADR-0015). Öffentlich, ohne Sitzung/CSRF, ohne Weiterleitung.
         Inhalt aus der Umgebungsvariable APPLE_APP_IDS (kommagetrennt, `<TeamID>.<BundleID>`); ohne Einträge 404.
@@ -98,6 +102,7 @@ paths:
   /ready:
     get:
       operationId: ready
+      summary: Bereitschaft inklusive Datenbank prüfen
       description: Readiness inklusive Datenbankverbindung und angewendeter Migrationen.
       responses:
         '200': { description: bereit, content: { application/json: { schema: { $ref: '#/components/schemas/Status' } } } }
@@ -105,6 +110,7 @@ paths:
   /api/v1/invitations/{token}:
     get:
       operationId: inspectInvitation
+      summary: Einladungstoken prüfen
       description: Prüft, ob ein Einladungstoken gültig ist (ohne Details zum Einladenden).
       parameters: [ { name: token, in: path, required: true, schema: { type: string } } ]
       responses:
@@ -122,6 +128,7 @@ paths:
   /api/v1/auth/register/options:
     post:
       operationId: registerOptions
+      summary: Registrierung per Einladung starten
       description: Startet Registrierung per Einladung; liefert WebAuthn-Creation-Options.
       requestBody:
         required: true
@@ -146,6 +153,7 @@ paths:
   /api/v1/auth/register/verify:
     post:
       operationId: registerVerify
+      summary: Registrierung abschließen
       description: |
         Prüft die Attestation und legt Konto, ersten Passkey und Sitzung atomar an; verbraucht die
         Einladung genau einmal (paralleles Einlösen: genau ein Erfolg).
@@ -169,6 +177,7 @@ paths:
   /api/v1/auth/login/options:
     post:
       operationId: loginOptions
+      summary: Anmeldung starten
       description: Startet Anmeldung (discoverable credentials, keine Kontoangabe nötig).
       responses:
         '200':
@@ -178,6 +187,7 @@ paths:
   /api/v1/auth/login/verify:
     post:
       operationId: loginVerify
+      summary: Anmeldung abschließen
       requestBody:
         required: true
         content:
@@ -196,6 +206,7 @@ paths:
   /api/v1/auth/session:
     get:
       operationId: currentSession
+      summary: Aktuelle Sitzung abrufen
       description: Aktuelle Sitzung samt CSRF-Token und Konto.
       security: [ { session: [] } ]
       responses:
@@ -203,12 +214,14 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
     delete:
       operationId: logout
+      summary: Abmelden
       security: [ { session: [], csrf: [] } ]
       responses:
         '204': { description: Sitzung beendet }
   /api/v1/me/passkeys:
     get:
       operationId: listPasskeys
+      summary: Eigene Passkeys auflisten
       security: [ { session: [] } ]
       responses:
         '200':
@@ -219,6 +232,7 @@ paths:
   /api/v1/me/passkeys/options:
     post:
       operationId: addPasskeyOptions
+      summary: Weiteren Passkey vorbereiten
       description: Weiteren Passkey hinzufügen; erfordert frische Authentisierung oder Recovery-Sitzung.
       security: [ { session: [], csrf: [] } ]
       responses:
@@ -226,6 +240,7 @@ paths:
   /api/v1/me/passkeys/verify:
     post:
       operationId: addPasskeyVerify
+      summary: Weiteren Passkey speichern
       security: [ { session: [], csrf: [] } ]
       requestBody:
         required: true
@@ -243,6 +258,7 @@ paths:
   /api/v1/me/passkeys/{id}:
     patch:
       operationId: renamePasskey
+      summary: Passkey umbenennen
       security: [ { session: [], csrf: [] } ]
       parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
       requestBody:
@@ -253,6 +269,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     delete:
       operationId: revokePasskey
+      summary: Passkey widerrufen
       description: Widerruft einen Passkey. Der letzte Passkey kann nur widerrufen werden, wenn eine Recovery-Methode aktiv ist.
       security: [ { session: [], csrf: [] } ]
       parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
@@ -263,12 +280,14 @@ paths:
   /api/v1/me/recovery:
     get:
       operationId: recoveryStatus
+      summary: Wiederherstellungsstatus abrufen
       security: [ { session: [] } ]
       responses:
         '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/RecoveryStatus' } } } }
   /api/v1/me/recovery/recovery-codes:
     post:
       operationId: generateRecoveryCodes
+      summary: Recovery-Codes erzeugen
       description: Erzeugt einen neuen Satz Recovery-Codes (invalidiert den alten). Klartext nur in dieser Antwort.
       security: [ { session: [], csrf: [] } ]
       responses:
@@ -282,11 +301,13 @@ paths:
                 properties: { codes: { type: array, items: { type: string } } }
     delete:
       operationId: disableRecoveryCodes
+      summary: Recovery-Codes abschalten
       security: [ { session: [], csrf: [] } ]
       responses: { '204': { description: deaktiviert } }
   /api/v1/me/recovery/fallback-password:
     put:
       operationId: setFallbackPassword
+      summary: Rückfallpasswort setzen
       description: Setzt oder ersetzt das Rückfallpasswort (nur für Recovery, nie für normale Anmeldung).
       security: [ { session: [], csrf: [] } ]
       requestBody:
@@ -295,11 +316,13 @@ paths:
       responses: { '204': { description: gesetzt }, '400': { $ref: '#/components/responses/BadRequest' } }
     delete:
       operationId: removeFallbackPassword
+      summary: Rückfallpasswort entfernen
       security: [ { session: [], csrf: [] } ]
       responses: { '204': { description: entfernt } }
   /api/v1/me/recovery/email:
     put:
       operationId: enableEmailRecovery
+      summary: Wiederherstellung per E-Mail einrichten
       description: Startet Verifikation der Adresse; 409/501 wenn Server ohne Mailversand konfiguriert ist.
       security: [ { session: [], csrf: [] } ]
       requestBody:
@@ -308,11 +331,13 @@ paths:
       responses: { '202': { description: Verifikationscode versendet }, '501': { $ref: '#/components/responses/NotImplemented' } }
     delete:
       operationId: disableEmailRecovery
+      summary: Wiederherstellung per E-Mail abschalten
       security: [ { session: [], csrf: [] } ]
       responses: { '204': { description: deaktiviert } }
   /api/v1/me/recovery/email/verify:
     post:
       operationId: verifyRecoveryEmail
+      summary: Wiederherstellungsadresse bestätigen
       security: [ { session: [], csrf: [] } ]
       requestBody:
         required: true
@@ -321,6 +346,7 @@ paths:
   /api/v1/auth/recovery/start:
     post:
       operationId: recoveryStart
+      summary: Wiederherstellung starten
       description: |
         Startet Wiederherstellung. Antwort ist für unbekannte Konten und gültige Konten gleich (202),
         um Kontoexistenz nicht zu verraten. Methode `email` sendet einen Code (falls aktiv), `recovery-code`
@@ -341,6 +367,7 @@ paths:
   /api/v1/auth/recovery/complete:
     post:
       operationId: recoveryComplete
+      summary: Wiederherstellung abschließen
       description: |
         Prüft Nachweis (Code bzw. Passwort) atomar und einmalig; eröffnet eine kurzlebige Recovery-Sitzung
         (Cookie tt_session mit Flag recovery=true), die nur das Einrichten eines neuen Passkeys und
@@ -362,18 +389,21 @@ paths:
   /api/v1/me/sessions:
     delete:
       operationId: revokeOtherSessions
+      summary: Andere Sitzungen beenden
       description: Widerruft alle anderen Sitzungen des Kontos.
       security: [ { session: [], csrf: [] } ]
       responses: { '204': { description: widerrufen } }
   /api/v1/admin/invitations:
     get:
       operationId: listInvitations
+      summary: Einladungen auflisten
       security: [ { session: [] } ]
       responses:
         '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Invitation' } } } } }
         '403': { $ref: '#/components/responses/Forbidden' }
     post:
       operationId: createInvitation
+      summary: Einladung erzeugen
       description: Erzeugt eine Einladung; Klartext-Token nur in dieser Antwort (Server speichert nur den Hash).
       security: [ { session: [], csrf: [] } ]
       requestBody:
@@ -390,12 +420,14 @@ paths:
   /api/v1/admin/invitations/{id}:
     delete:
       operationId: revokeInvitation
+      summary: Einladung widerrufen
       security: [ { session: [], csrf: [] } ]
       parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
       responses: { '204': { description: widerrufen }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/v1/admin/accounts:
     get:
       operationId: listAccounts
+      summary: Konten auflisten
       description: |
         Nur Admin. Seitenweise Liste aller Konten (nach createdAt, handle). Enthält ausschließlich Identität, Rolle, Zustand,
         letzte Aktivität und Passkey-Anzahl, niemals Zeit-, Abwesenheits-, Berichts- oder Freigabedaten.
@@ -411,6 +443,7 @@ paths:
   /api/v1/admin/accounts/{id}:
     patch:
       operationId: updateAccount
+      summary: Konto ändern
       description: |
         Nur Admin. Mindestens eines von role/state. `state=disabled` macht sofort alle Sitzungen, persönlichen Tokens, OAuth-Grants
         (samt Access-/Refresh-Tokens), Gerätetokens und Push-Abos des Kontos unbrauchbar (Sitzungen/Tokens/Grants werden widerrufen,
@@ -428,6 +461,7 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
     delete:
       operationId: deleteAccount
+      summary: Konto löschen
       description: |
         Nur Admin, frische Sitzung nötig (403 reauth_required). Body `confirmHandle` muss dem Handle des Kontos entsprechen
         (400 confirmation_mismatch). Löscht das Konto mit allen Daten (Zeiten, Abwesenheiten, Planung, Freigaben in beide Richtungen,
@@ -448,6 +482,7 @@ paths:
   /api/v1/admin/accounts/{id}/sessions:
     delete:
       operationId: revokeAccountSessions
+      summary: Sitzungen eines Kontos beenden
       description: Nur Admin. Widerruft alle Sitzungen des Kontos (Tokens und Grants bleiben unberührt).
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
@@ -458,6 +493,7 @@ paths:
   /api/v1/me/export:
     get:
       operationId: exportMyData
+      summary: Eigene Daten exportieren
       description: |
         ZIP mit den eigenen Daten: manifest.json, account.json, je Tabelle <name>.json (zusätzlich .csv für time-entries, absences,
         report-entries), time-entry-revisions, work-models, places, day-preferences, balance-adjustments, vacation-*, calendar-days, plan-days,
@@ -473,6 +509,7 @@ paths:
   /api/v1/me:
     delete:
       operationId: deleteMyAccount
+      summary: Eigenes Konto löschen
       description: |
         Selbstlöschung mit denselben Regeln und derselben Kaskade wie DELETE /admin/accounts/{id}: frische Sitzung (403 reauth_required),
         Body `confirmHandle` (400 confirmation_mismatch), der letzte aktive Admin kann sich nicht löschen (409 last_admin). Das Cookie wird geleert.
@@ -489,11 +526,13 @@ paths:
   /api/v1/me/profile:
     get:
       operationId: getMyProfile
+      summary: Eigenes Profil abrufen
       description: Eigenes Profil. Der Handle ist nur lesend. `emailVerified` ist erst nach Bestätigung des Codes wahr; `pendingEmail` zeigt eine noch offene Änderung. `mailAvailable=false`, wenn der Server kein SMTP hat (Adresse bleibt dann optional und unbestätigt). Nicht für Recovery-Sitzungen (403).
       security: [ { session: [] } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Profile' } } } }, '403': { $ref: '#/components/responses/Forbidden' } }
     patch:
       operationId: updateMyProfile
+      summary: Eigenes Profil ändern
       description: Ändert den Anzeigenamen (1 bis 80 Zeichen nach dem Trimmen). Unbekannte Felder (insbesondere handle) werden ignoriert; der Handle ändert sich nie.
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [displayName], properties: { displayName: { type: string, minLength: 1, maxLength: 80 } } } } } }
@@ -501,6 +540,7 @@ paths:
   /api/v1/me/profile/email:
     put:
       operationId: requestProfileEmailChange
+      summary: E-Mail-Adresse ändern
       description: |
         Sendet einen Bestätigungscode (10 Minuten gültig, 5 Versuche) an die neue Adresse; die Adresse (kleingeschrieben) wird erst nach `verify` übernommen.
         Ersetzt eine offene Änderung. Frische Sitzung nötig (403 reauth_required). Ohne SMTP 501 not_implemented. Dieselbe bereits bestätigte Adresse → 400.
@@ -510,12 +550,14 @@ paths:
       responses: { '202': { description: Code versendet }, '400': { $ref: '#/components/responses/BadRequest' }, '403': { $ref: '#/components/responses/Forbidden' }, '429': { $ref: '#/components/responses/TooMany' }, '501': { $ref: '#/components/responses/NotImplemented' } }
     delete:
       operationId: removeProfileEmail
+      summary: E-Mail-Adresse entfernen
       description: Entfernt die Adresse und eine offene Änderung. Frische Sitzung nötig. Eine getrennt eingerichtete Recovery-E-Mail (`/me/recovery/email`) bleibt unberührt.
       security: [ { session: [], csrf: [] } ]
       responses: { '204': { description: entfernt }, '403': { $ref: '#/components/responses/Forbidden' } }
   /api/v1/me/profile/email/verify:
     post:
       operationId: verifyProfileEmail
+      summary: E-Mail-Adresse bestätigen
       description: Bestätigt den Code. Falscher/abgelaufener/verbrauchter Code 400 invalid_code. Hat ein anderes Konto die Adresse bereits bestätigt, 409 email_taken (die Anforderung ist dann verbraucht). Bei gleichzeitigen Bestätigungen derselben Adresse gewinnt genau eine.
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [code], properties: { code: { type: string } } } } } }
@@ -523,11 +565,13 @@ paths:
   /api/v1/me/preferences:
     get:
       operationId: getMyPreferences
+      summary: Darstellungseinstellungen abrufen
       description: Darstellungseinstellungen des Kontos (Akzentfarbe, Farbschema), gemeinsam für PWA und native Apps. Ohne gespeicherten Wert die Standardwerte (accent=blue, colorScheme=system, updatedAt fehlt). App-Icon und Transparenz sind gerätelokal und nicht Teil davon. Nicht für Recovery-Sitzungen (403).
       security: [ { session: [] } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Preferences' } } } }, '403': { $ref: '#/components/responses/Forbidden' } }
     patch:
       operationId: updateMyPreferences
+      summary: Darstellungseinstellungen ändern
       description: |
         Merge-Patch: nur die gesendeten Schlüssel ändern sich, `accentCustomHex: null` löscht. Erlaubte Schlüssel: accent, accentCustomHex, colorScheme, glow; jeder andere Schlüssel und ein leerer Body ergeben 400. `accent=custom` verlangt einen gültigen `accentCustomHex` (`#RRGGBB`, wird in Großbuchstaben gespeichert); bei jedem anderen Akzent ist der Wert null (ein Wechsel auf eine Voreinstellung löscht ihn, ein mitgesendeter Wert ist 400). Body über 1 KiB: 413 payload_too_large. Letzter Schreiber gewinnt; keine frische Sitzung nötig.
       security: [ { session: [], csrf: [] } ]
@@ -536,6 +580,7 @@ paths:
   /api/v1/me/onboarding:
     put:
       operationId: setMyOnboarding
+      summary: Stand der Einrichtung speichern
       description: Merker der geführten Einrichtung je Konto. Neue Konten sind `pending`; Konten aus der Zeit vor v0.13.0 stehen auf `skipped`. Die Einrichtung selbst nutzt nur bestehende Endpunkte (Arbeitsmodelle, Urlaubseinstellungen, Module).
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [state], properties: { state: { type: string, enum: [pending, completed, skipped] } } } } } }
@@ -543,11 +588,13 @@ paths:
   /api/v1/work-models:
     get:
       operationId: listWorkModels
+      summary: Arbeitsmodelle auflisten
       description: Alle Arbeitsmodell-Versionen des Kontos, nach validFrom sortiert.
       security: [ { session: [] } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/WorkModel' } } } } } }
     post:
       operationId: createWorkModel
+      summary: Arbeitsmodell anlegen
       description: Legt eine neue Modellversion an. Eine laufende Vorversion wird am Vortag von validFrom beendet; Vergangenheit wird nie verändert (409 model_overlap bei Überschneidung mit späteren Versionen).
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/WorkModelInput' } } } }
@@ -555,11 +602,13 @@ paths:
   /api/v1/work-models/{id}:
     get:
       operationId: getWorkModel
+      summary: Arbeitsmodell abrufen
       security: [ { session: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/WorkModel' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
     patch:
       operationId: endWorkModel
+      summary: Arbeitsmodell beenden
       description: Setzt nur validTo (z. B. Ausbildungsende). Weitere Felder ändert PUT (Korrektur, mit Vorschau); neue Regeln ab einem Datum = neue Version per POST.
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
@@ -567,6 +616,7 @@ paths:
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/WorkModel' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' } }
     put:
       operationId: correctWorkModel
+      summary: Arbeitsmodell korrigieren
       description: 'Korrektur (M1): ersetzt alle bearbeitbaren Felder dieser Version, auch validFrom/validTo. Die Auswertung aller betroffenen Tage ändert sich (sie wird beim Lesen berechnet); vorher POST .../preview aufrufen. Header If-Match mit `version` ist optional (412 stale_version). 409 model_overlap bei Überschneidung mit Nachbarversionen; ist die Vorversion unmittelbar anschließend, wird ihr validTo auf den Vortag von validFrom gesetzt.'
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' }, { name: If-Match, in: header, required: false, schema: { type: string } } ]
@@ -575,6 +625,7 @@ paths:
   /api/v1/work-models/{id}/preview:
     post:
       operationId: previewWorkModelCorrection
+      summary: Korrektur eines Arbeitsmodells vorab prüfen
       description: Vorschau der Korrektur (M1) ohne zu speichern, gleiche Prüfung wie PUT. Vergleicht das Zeitkonto bis heute mit dem gespeicherten und dem korrigierten Modellsatz.
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
@@ -583,22 +634,26 @@ paths:
   /api/v1/places:
     get:
       operationId: listPlaces
+      summary: Orte auflisten
       security: [ { session: [] } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Place' } } } } } }
     post:
       operationId: createPlace
+      summary: Ort anlegen
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PlaceInput' } } } }
       responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/Place' } } } } }
   /api/v1/places/{id}:
     put:
       operationId: updatePlace
+      summary: Ort ändern
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PlaceInput' } } } }
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Place' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
     delete:
       operationId: archivePlace
+      summary: Ort archivieren
       description: Archiviert den Ort (bestehende Segmente behalten ihre Referenz).
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
@@ -606,6 +661,7 @@ paths:
   /api/v1/time/segments:
     get:
       operationId: listSegments
+      summary: Zeitabschnitte auflisten
       description: Segmente, deren Beginn in [from, to) (UTC-Instants) liegt; Rohzeiten und Revisionsanzahl enthalten, stornierte nur mit includeVoided.
       security: [ { session: [] } ]
       parameters:
@@ -615,6 +671,7 @@ paths:
       responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Segment' } } } } } }
     post:
       operationId: createSegment
+      summary: Zeitabschnitt anlegen
       description: Manueller Eintrag (abgeschlossen oder, ohne endedAt, laufend). Überschneidung mit anderem Segment → 409 segment_overlap.
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SegmentInput' } } } }
@@ -622,11 +679,13 @@ paths:
   /api/v1/time/segments/{id}:
     get:
       operationId: getSegment
+      summary: Zeitabschnitt abrufen
       security: [ { session: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Segment' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
     patch:
       operationId: correctSegment
+      summary: Zeitabschnitt korrigieren
       description: Korrektur mit Pflichtgrund; If-Match muss die aktuelle version enthalten (sonst 412 stale_version). Rohzeiten bleiben erhalten, es entsteht eine Revision.
       security: [ { session: [], csrf: [] } ]
       parameters:
@@ -636,6 +695,7 @@ paths:
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Segment' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' }, '412': { description: veraltete Version, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } } }
     delete:
       operationId: voidSegment
+      summary: Zeitabschnitt stornieren
       description: Storniert das Segment (Soft-Delete mit Grund im Query `reason`); Rohdaten bleiben.
       security: [ { session: [], csrf: [] } ]
       parameters:
@@ -645,11 +705,13 @@ paths:
   /api/v1/time/timer:
     get:
       operationId: currentTimer
+      summary: Laufenden Timer abrufen
       security: [ { session: [] } ]
       responses: { '200': { description: laufendes Segment oder null, content: { application/json: { schema: { oneOf: [ { $ref: '#/components/schemas/Segment' }, { type: 'null' } ] } } } } }
   /api/v1/time/timer/start:
     post:
       operationId: startTimer
+      summary: Timer starten
       description: Idempotent über clientEventId. Läuft bereits ein anderes Segment → 409 timer_already_running.
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [clientEventId], properties: { clientEventId: { type: string, format: uuid }, kind: { $ref: '#/components/schemas/SegmentKind' }, placeId: { type: [string, 'null'], format: uuid } } } } } }
@@ -657,6 +719,7 @@ paths:
   /api/v1/time/timer/stop:
     post:
       operationId: stopTimer
+      summary: Timer stoppen
       description: Idempotent über clientEventId; ohne laufendes Segment und ohne früheres Ereignis → 409 no_running_timer.
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [clientEventId], properties: { clientEventId: { type: string, format: uuid } } } } } }
@@ -664,6 +727,7 @@ paths:
   /api/v1/time/days:
     get:
       operationId: listDayEvaluations
+      summary: Tagesbewertungen auflisten
       description: Bewertungen für lokale Tage von..bis (max. 93 Tage), einschließlich Tagen ohne Segmente (Soll/Markierung).
       security: [ { session: [] } ]
       parameters:
@@ -673,6 +737,7 @@ paths:
   /api/v1/time/weeks/{isoWeek}:
     get:
       operationId: getTimeWeek
+      summary: Wochenübersicht abrufen
       description: |
         Wochenübersicht in einem Aufruf (K1, ADR-0021): sieben Tage Montag..Sonntag mit Markierung, Soll, Ist, Saldo, Plan und Wochensumme samt Zeitkontostand vor und nach der Woche.
         Alles stammt aus der Tagesbewertung; für Tage nach heute ist balanceSeconds null, die Wochen-balanceSeconds summiert nur Tage bis heute. Kontostände: wie GET /time/account mit asOf = Vortag der Woche bzw. Sonntag (laufende Woche: bis heute).
@@ -682,11 +747,13 @@ paths:
   /api/v1/time/days/{date}:
     get:
       operationId: getDayEvaluation
+      summary: Tagesbewertung abrufen
       security: [ { session: [] } ]
       parameters: [ { name: date, in: path, required: true, schema: { type: string, format: date } } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/DayEvaluation' } } } } }
     put:
       operationId: setDayPreferences
+      summary: Tagesmarkierung und Pausenwahl setzen
       description: Tagesmarkierung und/oder Überspringen fester Pausen setzen (leere Markierung `none` entfernt sie).
       security: [ { session: [], csrf: [] } ]
       parameters: [ { name: date, in: path, required: true, schema: { type: string, format: date } } ]
@@ -695,6 +762,7 @@ paths:
   /api/v1/time/account:
     get:
       operationId: getTimeAccount
+      summary: Zeitkonto abrufen
       description: Zeitkontosaldo bis einschließlich asOf (Standard heute); heutiger Tag ist vorläufig.
       security: [ { session: [] } ]
       parameters: [ { name: asOf, in: query, schema: { type: string, format: date } } ]
@@ -702,6 +770,7 @@ paths:
   /api/v1/time/account/adjustments:
     post:
       operationId: createAccountAdjustment
+      summary: Zeitkonto-Korrektur anlegen
       description: Anfangsstand (kind=opening, höchstens einer, setzt accountStart) oder datierte Korrektur.
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [kind, date, seconds, reason], properties: { kind: { type: string, enum: [opening, correction] }, date: { type: string, format: date }, seconds: { type: integer }, reason: { type: string, maxLength: 200 } } } } } }
@@ -709,11 +778,13 @@ paths:
   /api/v1/time/suggestions:
     get:
       operationId: listSuggestions
+      summary: Zeitvorschläge auflisten
       security: [ { session: [] } ]
       responses: { '200': { description: offene Vorschläge, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Suggestion' } } } } } }
   /api/v1/time/suggestions/{id}/accept:
     post:
       operationId: acceptSuggestion
+      summary: Zeitvorschlag übernehmen
       description: Erzeugt aus dem Vorschlag ein Segment bzw. beendet das offene (Zeiten optional überschreibbar). Einmalig; zweites Mal → 409.
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
@@ -722,16 +793,19 @@ paths:
   /api/v1/time/suggestions/{id}/reject:
     post:
       operationId: rejectSuggestion
+      summary: Zeitvorschlag ablehnen
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '204': { description: verworfen }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/v1/me/device-tokens:
     get:
       operationId: listDeviceTokens
+      summary: Geräte-Tokens auflisten
       security: [ { session: [] } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/DeviceToken' } } } } } }
     post:
       operationId: createDeviceToken
+      summary: Geräte-Token erzeugen
       description: Erzeugt ein Gerätetoken (nur Automation-Scope). Klartext nur in dieser Antwort.
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string, maxLength: 80 }, expiresInDays: { type: integer, minimum: 1, maximum: 730 } } } } } }
@@ -739,12 +813,14 @@ paths:
   /api/v1/me/device-tokens/{id}:
     delete:
       operationId: revokeDeviceToken
+      summary: Geräte-Token widerrufen
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '204': { description: widerrufen }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/v1/automation/events:
     post:
       operationId: postAutomationEvent
+      summary: Automatisierungsereignis melden
       description: |
         Für Shortcuts. Auth: `Authorization: Bearer <device token>` (kein Cookie/CSRF). Idempotent über eventId; ein Duplikat liefert das erste Ergebnis.
         Ergebnis je nach Ortsmodus: `booked`, `suggested`, `ignored`, `recorded` (nur festgehalten), `duplicate`, `needs_review`.
@@ -756,10 +832,12 @@ paths:
   /api/v1/vacation/settings:
     get:
       operationId: getVacationSettings
+      summary: Urlaubseinstellungen abrufen
       security: [ { session: [] } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/VacationSettings' } } } } }
     put:
       operationId: putVacationSettings
+      summary: Urlaubseinstellungen speichern
       description: Region, Jahresanspruch und Übertragsregel. Standard laut ADR-0005 (Annahme für Onboarding) 30 Tage und Region DE-ST.
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/VacationSettings' } } } }
@@ -767,6 +845,7 @@ paths:
   /api/v1/vacation/snapshots:
     post:
       operationId: createVacationSnapshot
+      summary: Urlaubsbestand zum Stichtag erfassen
       description: Stichtagsbestand (Resturlaub zu einem Datum). Ersetzt die davor liegende Kontohistorie; Verbrauch/Anspruch zählen erst ab dem Stichtag.
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [date, remainingHalfDays], properties: { date: { type: string, format: date }, remainingHalfDays: { type: integer, minimum: 0 } } } } } }
@@ -774,12 +853,14 @@ paths:
   /api/v1/vacation/adjustments:
     post:
       operationId: createVacationAdjustment
+      summary: Urlaubskorrektur anlegen
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [date, halfDays, reason], properties: { date: { type: string, format: date }, halfDays: { type: integer }, reason: { type: string, maxLength: 200 } } } } } }
       responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/VacationBalance' } } } } }
   /api/v1/vacation/balance:
     get:
       operationId: getVacationBalance
+      summary: Urlaubskonto abrufen
       description: Kontostand für ein Urlaubsjahr (Kalenderjahr). available = Anspruch + Übertrag + Korrekturen − gebucht(genehmigt/genommen); geplant/beantragt separat, `availableAfterPlanned` als Vorschau.
       security: [ { session: [] } ]
       parameters: [ { name: year, in: query, required: true, schema: { type: integer } } ]
@@ -787,6 +868,7 @@ paths:
   /api/v1/vacation/suggestions:
     get:
       operationId: getVacationSuggestions
+      summary: Urlaubsvorschläge abrufen
       description: |
         Urlaubsvorschläge (ADR-0025, Modul planning). Deterministisch, ohne Netzwerk. Fenster ohne Urlaubstage kommen nicht vor;
         bereits gebuchter Urlaub wird nie erneut vorgeschlagen; Fenster mit Berufsschul- oder Plantagen, Abwesenheiten oder
@@ -808,6 +890,7 @@ paths:
   /api/v1/vacation/entries:
     get:
       operationId: listVacationEntries
+      summary: Urlaubsbestände und Korrekturen auflisten
       description: Stichtagsbestände und Korrekturen mit IDs.
       security: [ { session: [] } ]
       parameters: [ { name: year, in: query, required: true, schema: { type: integer } } ]
@@ -815,6 +898,7 @@ paths:
   /api/v1/vacation/entries/{id}:
     delete:
       operationId: deleteVacationEntry
+      summary: Urlaubsbestand oder Korrektur löschen
       description: Löscht einen Stichtagsbestand oder eine Korrektur (eigene ID).
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
@@ -822,6 +906,7 @@ paths:
   /api/v1/absences:
     get:
       operationId: listAbsences
+      summary: Abwesenheiten auflisten
       security: [ { session: [] } ]
       parameters:
         - { name: from, in: query, required: true, schema: { type: string, format: date } }
@@ -829,6 +914,7 @@ paths:
       responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Absence' } } } } } }
     post:
       operationId: createAbsence
+      summary: Abwesenheit anlegen
       description: Urlaub/Krankheit/sonstige Abwesenheit. Überlappung mit anderer Abwesenheit → 409 absence_overlap. Verbrauch in halben Tagen nur an Arbeitstagen des Modells, nicht an Feiertagen.
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AbsenceInput' } } } }
@@ -836,11 +922,13 @@ paths:
   /api/v1/absences/{id}:
     get:
       operationId: getAbsence
+      summary: Abwesenheit abrufen
       security: [ { session: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Absence' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
     put:
       operationId: updateAbsence
+      summary: Abwesenheit ändern
       description: Ändert Zeitraum/Status; Statuswechsel zählt Tage nie doppelt (genehmigt→genommen). If-Match auf version.
       security: [ { session: [], csrf: [] } ]
       parameters:
@@ -850,12 +938,14 @@ paths:
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Absence' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '412': { description: veraltete Version, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } } }
     delete:
       operationId: deleteAbsence
+      summary: Abwesenheit löschen
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '204': { description: gelöscht }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/v1/calendar/holidays:
     get:
       operationId: listHolidays
+      summary: Feiertage und eigene Tage abrufen
       description: Gesetzliche Feiertage der eingestellten Region (fest eingebaut, DE inkl. Bundesländer) plus eigene Einträge; Schulferien nur als vom Nutzer erfasste Zeiträume.
       security: [ { session: [] } ]
       parameters:
@@ -865,6 +955,7 @@ paths:
   /api/v1/calendar/custom-days:
     post:
       operationId: createCustomCalendarDay
+      summary: Eigenen Kalendertag anlegen
       description: Eigener Feiertag/Brückentag oder Schulferien-Zeitraum.
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [kind, startDate, endDate, name], properties: { kind: { type: string, enum: [holiday, school_holiday] }, startDate: { type: string, format: date }, endDate: { type: string, format: date }, name: { type: string, maxLength: 80 } } } } } }
@@ -872,12 +963,14 @@ paths:
   /api/v1/calendar/custom-days/{id}:
     delete:
       operationId: deleteCustomCalendarDay
+      summary: Eigenen Kalendertag löschen
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '204': { description: gelöscht }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/v1/plan/days:
     get:
       operationId: listPlanDays
+      summary: Tagespläne auflisten
       description: Geplante Arbeitsform je Tag (Büro/HO/Kunde/Schule/frei) für den Zeitraum; Urlaub/Feiertage werden im Kalender zusätzlich abgeleitet geliefert.
       security: [ { session: [] } ]
       parameters:
@@ -887,24 +980,28 @@ paths:
   /api/v1/plan/days/{date}:
     put:
       operationId: putPlanDay
+      summary: Tagesplan speichern
       security: [ { session: [], csrf: [] } ]
       parameters: [ { name: date, in: path, required: true, schema: { type: string, format: date } } ]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PlanDayInput' } } } }
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/PlanDay' } } } } }
     delete:
       operationId: deletePlanDay
+      summary: Tagesplan löschen
       security: [ { session: [], csrf: [] } ]
       parameters: [ { name: date, in: path, required: true, schema: { type: string, format: date } } ]
       responses: { '204': { description: gelöscht } }
   /api/v1/plan/weeks/{isoWeek}:
     get:
       operationId: getPlanWeek
+      summary: Wochenplan abrufen
       description: Wochenplan (K1, ADR-0021, Modul planning). Sieben Tage mit Plan, Soll aus dem Arbeitsmodell (ohne Ist), effektiv geplanten Sekunden und blockedBy (holiday, vacation, sick, excused), wenn Feiertag oder Abwesenheit den Plan überstimmt (ein halber Urlaubstag blockiert nicht). Summen der Woche.
       security: [ { session: [] } ]
       parameters: [ { $ref: '#/components/parameters/IsoWeek' } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/PlanWeek' } } } }, '400': { $ref: '#/components/responses/BadRequest' } }
     put:
       operationId: putPlanWeek
+      summary: Wochenplan speichern
       description: Schreibt bis zu 7 Tagespläne der Woche in einer Transaktion (alles oder nichts). Jeder Eintrag ersetzt den Tag vollständig. replace=true löscht zusätzlich alle nicht genannten Pläne der Woche. Antwort wie GET.
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/IsoWeek' } ]
@@ -913,11 +1010,13 @@ paths:
   /api/v1/shares:
     get:
       operationId: listShares
+      summary: Eigene Freigaben auflisten
       description: Eigene ausgehende Freigaben.
       security: [ { session: [] } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Share' } } } } } }
     post:
       operationId: createShare
+      summary: Freigabe anlegen
       description: Freigabe an ein anderes Konto derselben Instanz (Empfänger per handle), je Umfang plan/actual/vacation getrennt, nur lesend, standardmäßig nichts geteilt. Unbekannter Empfänger → 404 recipient_not_found (Annahme; kleine Instanz).
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [recipientHandle, scopes], properties: { recipientHandle: { type: string }, scopes: { $ref: '#/components/schemas/ShareScopes' } } } } } }
@@ -925,12 +1024,14 @@ paths:
   /api/v1/shares/{id}:
     patch:
       operationId: updateShare
+      summary: Freigabe ändern
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [scopes], properties: { scopes: { $ref: '#/components/schemas/ShareScopes' } } } } } }
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Share' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
     delete:
       operationId: revokeShare
+      summary: Freigabe widerrufen
       description: Widerruft sofort; neue Abrufe liefern 404.
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
@@ -938,11 +1039,13 @@ paths:
   /api/v1/shares/incoming:
     get:
       operationId: listIncomingShares
+      summary: Erhaltene Freigaben auflisten
       security: [ { session: [] } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/IncomingShare' } } } } } }
   /api/v1/shares/incoming/{shareId}/view:
     get:
       operationId: viewShared
+      summary: Freigegebene Ansicht abrufen
       description: |
         Begrenzte Ansicht für den Empfänger. Je freigegebenem Scope: plan = geplante Arbeitsform je Tag ohne Notizen; actual = nur bewertete Beginn/Ende und Dauer je Tag, keine Orte/Notizen/Segmente;
         vacation = nur als Urlaub erkennbare Abwesenheiten (Zeiträume), niemals Krankheit/Unterlagen/Notizen. Nicht freigegebene Scopes fehlen. Widerrufen/fremd → 404.
@@ -955,6 +1058,7 @@ paths:
   /api/v1/export/time:
     get:
       operationId: exportTime
+      summary: Arbeitszeit exportieren
       description: Arbeitszeitexport (siehe ADR-0006). Antwort ist eine Datei mit Content-Disposition attachment.
       security: [ { session: [] } ]
       parameters:
@@ -971,6 +1075,7 @@ paths:
   /api/v1/imports:
     post:
       operationId: uploadImport
+      summary: Importdatei hochladen
       description: Lädt eine CSV- oder XLSX-Datei (multipart/form-data, Feld file) hoch. Es werden noch keine Zeiten angelegt.
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, required: [file], properties: { file: { type: string, format: binary } } } } } }
@@ -978,11 +1083,13 @@ paths:
   /api/v1/imports/{id}:
     get:
       operationId: getImport
+      summary: Import abrufen
       security: [ { session: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/ImportJob' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
     delete:
       operationId: discardImport
+      summary: Import verwerfen
       description: Verwirft einen noch nicht übernommenen Import samt hochgeladener Datei.
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
@@ -990,6 +1097,7 @@ paths:
   /api/v1/imports/{id}/preview:
     get:
       operationId: previewImportRows
+      summary: Rohvorschau eines Imports abrufen
       description: Rohvorschau (erste 50 Zeilen des Blatts) zur Wahl von Kopfzeile und Spalten.
       security: [ { session: [] } ]
       parameters:
@@ -999,6 +1107,7 @@ paths:
   /api/v1/imports/{id}/mapping:
     put:
       operationId: putImportMapping
+      summary: Spaltenzuordnung eines Imports speichern
       description: Speichert die Zuordnung und liefert die Validierungsvorschau (noch keine Übernahme).
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
@@ -1007,6 +1116,7 @@ paths:
   /api/v1/imports/{id}/commit:
     post:
       operationId: commitImport
+      summary: Import übernehmen
       description: Übernimmt die zuletzt validierte Zuordnung in einer Transaktion. Wiederholung derselben Datei erzeugt keine Duplikate (skipped). Nur wenn keine Zeilenfehler bestehen oder ignoreErrors=true.
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
@@ -1015,6 +1125,7 @@ paths:
   /api/v1/imports/{id}/rollback:
     post:
       operationId: rollbackImport
+      summary: Import zurücknehmen
       description: Nimmt eine übernommene Charge zurück (storniert deren Segmente), sofern sie seitdem unverändert sind; sonst 409 mit Konfliktliste.
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
@@ -1022,27 +1133,32 @@ paths:
   /api/v1/import-templates:
     get:
       operationId: listImportTemplates
+      summary: Importvorlagen auflisten
       security: [ { session: [] } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ImportTemplate' } } } } } }
     post:
       operationId: createImportTemplate
+      summary: Importvorlage anlegen
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name, mapping], properties: { name: { type: string, maxLength: 80 }, mapping: { $ref: '#/components/schemas/ImportMapping' } } } } } }
       responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/ImportTemplate' } } } } }
   /api/v1/import-templates/{id}:
     delete:
       operationId: deleteImportTemplate
+      summary: Importvorlage löschen
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '204': { description: gelöscht }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/v1/admin/storage:
     get:
       operationId: getStorageSettings
+      summary: Speichereinstellungen abrufen
       description: Nur Admin. Geheimnisse werden nie ausgegeben (hasSecret).
       security: [ { session: [] } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/StorageSettings' } } } }, '403': { $ref: '#/components/responses/Forbidden' } }
     put:
       operationId: putStorageSettings
+      summary: Speichereinstellungen speichern
       description: Nur Admin. Wirkt nur auf neue Uploads. secretAccessKey wird nur geschrieben, wenn angegeben. Ohne STORAGE_SECRET_KEY auf dem Server → 501 not_implemented bei S3.
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/StorageSettingsInput' } } } }
@@ -1050,18 +1166,21 @@ paths:
   /api/v1/admin/mail:
     get:
       operationId: getMailStatus
+      summary: Mailkonfiguration abrufen
       description: Nur Admin. Zeigt die SMTP-Einstellungen aus der Umgebung ohne Benutzername und Passwort (`authConfigured`) samt Hinweisen. Ohne SMTP_HOST ist `configured` false.
       security: [ { session: [] } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/MailStatus' } } } }, '403': { $ref: '#/components/responses/Forbidden' } }
   /api/v1/admin/mail/check:
     post:
       operationId: checkMail
+      summary: Mailserver live prüfen
       description: Nur Admin, normale Sitzung. Prüft live DNS, TCP, TLS, EHLO, Anmeldung und Absender (MAIL FROM, danach RSET) mit höchstens 20 s; es wird keine Nachricht gesendet. Ein fehlgeschlagener Schritt ist ein normales Ergebnis (200, ok=false). 6 je 10 Minuten und Admin. Ohne SMTP 501 not_implemented.
       security: [ { session: [], csrf: [] } ]
       responses: { '200': { description: Ergebnis, content: { application/json: { schema: { $ref: '#/components/schemas/MailCheckResult' } } } }, '403': { $ref: '#/components/responses/Forbidden' }, '429': { $ref: '#/components/responses/TooMany' }, '501': { $ref: '#/components/responses/NotImplemented' } }
   /api/v1/admin/mail/test:
     post:
       operationId: sendMailTest
+      summary: Testmail senden
       description: Nur Admin, frische Sitzung (sonst 403 reauth_required), weil an beliebige Adressen gesendet wird. Fester Betreff und Text ohne Nutzereingabe, Absender nur SMTP_FROM. Ohne `to` geht die Mail an die bestätigte eigene Adresse (sonst 400 no_recipient). 3 je 10 Minuten und Admin, 3 je Stunde und Empfänger.
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: false, content: { application/json: { schema: { $ref: '#/components/schemas/MailTestInput' } } } }
@@ -1069,6 +1188,7 @@ paths:
   /api/v1/files:
     post:
       operationId: uploadFile
+      summary: Datei hochladen
       description: Lädt eine Datei hoch (multipart, Feld file). Speicherort nach Admin-Regeln. Typ-Whitelist und Größenlimit; 413 file_too_large, 415 unsupported_type.
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, required: [file], properties: { file: { type: string, format: binary } } } } } }
@@ -1076,23 +1196,27 @@ paths:
   /api/v1/files/{id}:
     get:
       operationId: downloadFile
+      summary: Datei herunterladen
       description: Nur Eigentümer. Content-Disposition attachment, nosniff.
       security: [ { session: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '200': { description: Datei, content: { application/octet-stream: { schema: { type: string, format: binary } } } }, '404': { $ref: '#/components/responses/NotFound' } }
     delete:
       operationId: deleteFile
+      summary: Datei löschen
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '204': { description: gelöscht }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/v1/absences/{id}/attachments:
     get:
       operationId: listAbsenceAttachments
+      summary: Anhänge einer Abwesenheit auflisten
       security: [ { session: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/FileMeta' } } } } }, '404': { $ref: '#/components/responses/NotFound' } }
     post:
       operationId: attachFileToAbsence
+      summary: Datei an Abwesenheit anhängen
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [fileId], properties: { fileId: { type: string, format: uuid } } } } } }
@@ -1100,6 +1224,7 @@ paths:
   /api/v1/absences/{id}/attachments/{fileId}:
     delete:
       operationId: detachFileFromAbsence
+      summary: Anhang von Abwesenheit lösen
       security: [ { session: [], csrf: [] } ]
       parameters:
         - { $ref: '#/components/parameters/Id' }
@@ -1108,11 +1233,13 @@ paths:
   /api/v1/auth/oidc/config:
     get:
       operationId: oidcConfig
+      summary: OpenID-Connect-Konfiguration abrufen
       description: Ob OIDC auf diesem Server konfiguriert ist (OIDC_ISSUER und OIDC_CLIENT_ID). Optional, keine Pflicht.
       responses: { '200': { description: ok, content: { application/json: { schema: { type: object, required: [enabled], properties: { enabled: { type: boolean }, name: { type: string, description: Anzeigename des Anbieters } } } } } } }
   /api/v1/auth/oidc/start:
     post:
       operationId: oidcStart
+      summary: Anmeldung über OpenID Connect starten
       description: |
         Startet Authorization Code Flow mit PKCE (S256), state und nonce serverseitig gespeichert (10 min, einmalig).
         purpose=login: Anmeldung mit bereits verknüpfter Identität. purpose=link: eingeloggtes Konto verknüpft eine Identität (frische Sitzung nötig). purpose=register: Einladung (inviteToken) mit Identität einlösen.
@@ -1125,6 +1252,7 @@ paths:
   /api/v1/auth/oidc/callback:
     get:
       operationId: oidcCallback
+      summary: Rückleitung von OpenID Connect verarbeiten
       description: |
         Redirect-Ziel des Anbieters (PUBLIC_BASE_URL/api/v1/auth/oidc/callback). Tauscht den Code (PKCE), validiert id_token (Signatur über JWKS, iss, aud, exp, nonce, azp) und wertet die Identität (issuer, sub) aus; E-Mail-Adressen verknüpfen nie automatisch.
         Antwort ist immer ein 302 auf die PWA: login → `/` (Sitzungscookie gesetzt); link → `/settings/identities?linked=1`; register → `/invite/<token>?oidc=<pendingId>` (Konto wird erst mit POST /auth/oidc/register angelegt);
@@ -1137,17 +1265,20 @@ paths:
   /api/v1/auth/oidc/register:
     post:
       operationId: oidcRegister
+      summary: Registrierung über OpenID Connect abschließen
       description: Schließt die Registrierung per Einladung und OIDC-Identität ab (handle und Anzeigename wählen). Einladung und Identität werden atomar verbraucht; es entsteht ein Konto ohne Passkey, die PWA bietet anschließend die Passkey-Einrichtung an.
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [pendingId, handle, displayName], properties: { pendingId: { type: string }, handle: { type: string, pattern: '^[a-z0-9][a-z0-9._-]{2,31}$' }, displayName: { type: string, minLength: 1, maxLength: 80 } } } } } }
       responses: { '201': { description: Konto angelegt; Set-Cookie tt_session, content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' } }
   /api/v1/me/identities:
     get:
       operationId: listIdentities
+      summary: Verknüpfte Identitäten auflisten
       security: [ { session: [] } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ExternalIdentity' } } } } } }
   /api/v1/me/identities/{id}:
     delete:
       operationId: unlinkIdentity
+      summary: Identität trennen
       description: Entfernt die Verknüpfung (frische Sitzung nötig). Nicht möglich, wenn dadurch keine Anmeldemethode (Passkey oder andere Identität) übrig bliebe → 409 last_login_method.
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
@@ -1155,16 +1286,19 @@ paths:
   /api/v1/reports/learning-fields:
     get:
       operationId: listLearningFields
+      summary: Lernfelder auflisten
       security: [ { session: [] } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/LearningField' } } } } } }
     post:
       operationId: createLearningField
+      summary: Lernfeld anlegen
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LearningFieldInput' } } } }
       responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/LearningField' } } } }, '409': { $ref: '#/components/responses/Conflict' } }
   /api/v1/reports/learning-fields/{id}:
     put:
       operationId: updateLearningField
+      summary: Lernfeld ändern
       description: Benennt um oder sortiert; bestehende Einträge behalten ihren Namens-Snapshot.
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
@@ -1172,18 +1306,21 @@ paths:
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/LearningField' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
     delete:
       operationId: deleteLearningField
+      summary: Lernfeld löschen
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '204': { description: gelöscht }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/v1/reports/entries:
     post:
       operationId: createReportEntry
+      summary: Berichtsheft-Eintrag anlegen
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReportEntryInput' } } } }
       responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/ReportEntry' } } } }, '400': { $ref: '#/components/responses/BadRequest' } }
   /api/v1/reports/entries/{id}:
     put:
       operationId: updateReportEntry
+      summary: Berichtsheft-Eintrag ändern
       description: If-Match mit version; sonst 412 stale_version.
       security: [ { session: [], csrf: [] } ]
       parameters:
@@ -1193,12 +1330,14 @@ paths:
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/ReportEntry' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '412': { description: veraltete Version, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } } }
     delete:
       operationId: deleteReportEntry
+      summary: Berichtsheft-Eintrag löschen
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '204': { description: gelöscht }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/v1/reports/weeks/{year}/{week}:
     get:
       operationId: getReportWeek
+      summary: Berichtswoche abrufen
       description: ISO-Woche mit Einträgen, Summen, Status, Quellenanzahl und der bewerteten Arbeitszeit der Woche als Hinweis.
       security: [ { session: [] } ]
       parameters:
@@ -1207,6 +1346,7 @@ paths:
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/ReportWeek' } } } }, '400': { $ref: '#/components/responses/BadRequest' } }
     put:
       operationId: putReportWeekStatus
+      summary: Status einer Berichtswoche setzen
       security: [ { session: [], csrf: [] } ]
       parameters:
         - { name: year, in: path, required: true, schema: { type: integer } }
@@ -1216,6 +1356,7 @@ paths:
   /api/v1/reports/weeks/{year}/{week}/text:
     get:
       operationId: getReportWeekText
+      summary: Berichtswoche als Text abrufen
       description: Kopierbare Klartextausgabe im Standardformat (ADR-0008), text/plain; charset=utf-8.
       security: [ { session: [] } ]
       parameters:
@@ -1225,6 +1366,7 @@ paths:
   /api/v1/reports/sources:
     get:
       operationId: listReportSources
+      summary: Berichtsquellen auflisten
       security: [ { session: [] } ]
       parameters:
         - { name: year, in: query, required: true, schema: { type: integer } }
@@ -1232,6 +1374,7 @@ paths:
       responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ReportSource' } } } } } }
     post:
       operationId: createReportSource
+      summary: Berichtsquelle anlegen
       description: Textquelle (note) oder Dateiquelle (fileId aus POST /files).
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReportSourceInput' } } } }
@@ -1239,28 +1382,33 @@ paths:
   /api/v1/reports/sources/{id}:
     delete:
       operationId: deleteReportSource
+      summary: Berichtsquelle löschen
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '204': { description: gelöscht }, '404': { $ref: '#/components/responses/NotFound' } }
   /.well-known/oauth-protected-resource:
     get:
       operationId: oauthProtectedResource
+      summary: Metadaten der geschützten Ressource abrufen
       description: RFC 9728 Metadaten der MCP-Ressource.
       responses: { '200': { description: ok, content: { application/json: { schema: { type: object, required: [resource, authorization_servers], properties: { resource: { type: string }, authorization_servers: { type: array, items: { type: string } }, scopes_supported: { type: array, items: { type: string } }, bearer_methods_supported: { type: array, items: { type: string } } } } } } } }
   /.well-known/oauth-authorization-server:
     get:
       operationId: oauthAuthorizationServer
+      summary: Metadaten des Autorisierungsservers abrufen
       description: RFC 8414 Metadaten (issuer = PUBLIC_BASE_URL, PKCE S256, public clients, code + refresh_token).
       responses: { '200': { description: ok, content: { application/json: { schema: { type: object } } } } }
   /oauth/register:
     post:
       operationId: oauthRegister
+      summary: OAuth-Client registrieren
       description: Dynamic Client Registration (RFC 7591), nur öffentliche Clients.
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [redirect_uris], properties: { client_name: { type: string, maxLength: 100 }, redirect_uris: { type: array, minItems: 1, maxItems: 5, items: { type: string, format: uri } }, grant_types: { type: array, items: { type: string } }, token_endpoint_auth_method: { type: string, enum: [none] } } } } } }
       responses: { '201': { description: registriert, content: { application/json: { schema: { type: object, required: [client_id, redirect_uris], properties: { client_id: { type: string }, client_name: { type: string }, redirect_uris: { type: array, items: { type: string } }, token_endpoint_auth_method: { type: string } } } } } }, '400': { description: invalid_client_metadata } }
   /oauth/authorize:
     get:
       operationId: oauthAuthorize
+      summary: OAuth-Autorisierung starten
       description: Autorisierungsendpunkt; leitet zur PWA-Seite /oauth/consent?request=<id> weiter (Login falls nötig). Fehler vor gültiger redirect_uri als HTML/JSON-Fehler, danach als Redirect mit error.
       parameters:
         - { name: response_type, in: query, required: true, schema: { type: string, enum: [code] } }
@@ -1275,16 +1423,19 @@ paths:
   /oauth/token:
     post:
       operationId: oauthToken
+      summary: OAuth-Token ausstellen
       requestBody: { required: true, content: { application/x-www-form-urlencoded: { schema: { type: object, required: [grant_type], properties: { grant_type: { type: string, enum: [authorization_code, refresh_token] }, code: { type: string }, redirect_uri: { type: string }, client_id: { type: string }, code_verifier: { type: string }, refresh_token: { type: string }, resource: { type: string } } } } } }
       responses: { '200': { description: Token, content: { application/json: { schema: { type: object, required: [access_token, token_type, expires_in], properties: { access_token: { type: string }, token_type: { type: string, const: Bearer }, expires_in: { type: integer }, refresh_token: { type: string }, scope: { type: string } } } } } }, '400': { description: invalid_grant / invalid_request / invalid_client } }
   /oauth/revoke:
     post:
       operationId: oauthRevoke
+      summary: OAuth-Token widerrufen
       requestBody: { required: true, content: { application/x-www-form-urlencoded: { schema: { type: object, required: [token], properties: { token: { type: string }, client_id: { type: string } } } } } }
       responses: { '200': { description: immer 200 (RFC 7009) } }
   /api/v1/oauth/requests/{id}:
     get:
       operationId: getOAuthRequest
+      summary: OAuth-Anfrage zur Zustimmung abrufen
       description: Consent-Daten für die angemeldete Person (Client-Name, Redirect-Host, angefragte Scopes). Nur der angemeldete Konto-Browser sieht sie (an Sitzung gebunden), 10 min gültig.
       security: [ { session: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
@@ -1292,6 +1443,7 @@ paths:
   /api/v1/oauth/requests/{id}/decision:
     post:
       operationId: decideOAuthRequest
+      summary: OAuth-Anfrage genehmigen oder ablehnen
       description: Genehmigt (mit gewählter Scope-Teilmenge) oder lehnt ab; einmalig. Antwort liefert die Redirect-URL (mit code/state bzw. error).
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
@@ -1300,21 +1452,25 @@ paths:
   /api/v1/me/oauth-grants:
     get:
       operationId: listOAuthGrants
+      summary: OAuth-Freigaben auflisten
       security: [ { session: [] } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/OAuthGrant' } } } } } }
   /api/v1/me/oauth-grants/{id}:
     delete:
       operationId: revokeOAuthGrant
+      summary: OAuth-Freigabe widerrufen
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '204': { description: widerrufen }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/v1/me/api-tokens:
     get:
       operationId: listApiTokens
+      summary: Persönliche API-Tokens auflisten
       security: [ { session: [] } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ApiToken' } } } } } }
     post:
       operationId: createApiToken
+      summary: Persönliches API-Token erzeugen
       description: Persönliches MCP-Token; frische Sitzung nötig (403 reauth_required). Klartext nur in dieser Antwort.
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name, scopes, expiresInDays], properties: { name: { type: string, maxLength: 80 }, scopes: { type: array, minItems: 1, items: { $ref: '#/components/schemas/McpScope' } }, expiresInDays: { type: integer, minimum: 1, maximum: 365 } } } } } }
@@ -1322,22 +1478,26 @@ paths:
   /api/v1/me/api-tokens/{id}:
     delete:
       operationId: revokeApiToken
+      summary: Persönliches API-Token widerrufen
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '204': { description: widerrufen }, '404': { $ref: '#/components/responses/NotFound' } }
   /mcp:
     post:
       operationId: mcp
+      summary: MCP-Nachricht verarbeiten
       description: MCP Streamable HTTP (JSON-RPC 2.0), siehe ADR-0009 (initialize, ping, tools/list, tools/call). Auth per Authorization-Header mit Bearer-Token (tto_… oder ttp_…).
       security: [ { bearer: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object } } } }
       responses: { '200': { description: JSON-RPC Antwort }, '202': { description: Notification angenommen }, '401': { description: Token fehlt/ungültig (WWW-Authenticate mit resource_metadata) }, '403': { description: insufficient_scope } }
     get:
       operationId: mcpGet
+      summary: MCP-Stream abfragen
       responses: { '405': { description: kein SSE-Stream in v1 } }
   /api/v1/notifications:
     get:
       operationId: listNotifications
+      summary: Hinweise auflisten
       security: [ { session: [] } ]
       parameters:
         - { name: unreadOnly, in: query, schema: { type: boolean, default: false } }
@@ -1347,6 +1507,7 @@ paths:
   /api/v1/notifications/read:
     post:
       operationId: markNotificationsRead
+      summary: Hinweise als gelesen markieren
       description: Markiert die angegebenen (oder bei all=true alle) Hinweise als gelesen.
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { ids: { type: array, items: { type: string, format: uuid }, maxItems: 200 }, all: { type: boolean } } } } } }
@@ -1354,32 +1515,38 @@ paths:
   /api/v1/notifications/{id}:
     delete:
       operationId: deleteNotification
+      summary: Hinweis löschen
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '204': { description: gelöscht }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/v1/notifications/settings:
     get:
       operationId: getNotificationSettings
+      summary: Hinweiseinstellungen abrufen
       security: [ { session: [] } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/NotificationSettings' } } } } }
     put:
       operationId: putNotificationSettings
+      summary: Hinweiseinstellungen speichern
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/NotificationSettings' } } } }
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/NotificationSettings' } } } }, '400': { $ref: '#/components/responses/BadRequest' } }
   /api/v1/push/config:
     get:
       operationId: pushConfig
+      summary: Push-Konfiguration abrufen
       description: Ob Web Push auf diesem Server verfügbar ist (VAPID konfiguriert) und der öffentliche Schlüssel.
       security: [ { session: [] } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { type: object, required: [available], properties: { available: { type: boolean }, vapidPublicKey: { type: string, description: base64url uncompressed P-256 } } } } } } }
   /api/v1/me/push-subscriptions:
     get:
       operationId: listPushSubscriptions
+      summary: Push-Abos auflisten
       security: [ { session: [] } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/PushSubscriptionInfo' } } } } } }
     post:
       operationId: createPushSubscription
+      summary: Push-Abo anlegen
       description: Registriert das Gerät (idempotent über endpoint). 501 wenn Push nicht verfügbar, 409 bei mehr als 10 Abos.
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [endpoint, keys], properties: { endpoint: { type: string, format: uri }, keys: { type: object, required: [p256dh, auth], properties: { p256dh: { type: string }, auth: { type: string } } }, userAgent: { type: string, maxLength: 200 } } } } } }
@@ -1387,6 +1554,7 @@ paths:
   /api/v1/me/push-subscriptions/replace:
     post:
       operationId: replacePushSubscription
+      summary: Push-Abo ersetzen
       description: |
         Für das `pushsubscriptionchange`-Ereignis des Service Workers (B2, ADR-0017). Tauscht das Abo mit `previousEndpoint`
         (= `oldSubscription.endpoint`, nur im eigenen Konto gesucht) atomar gegen das neue aus: gleiche Id, neue Endpunkt-Adresse und Schlüssel,
@@ -1400,12 +1568,14 @@ paths:
   /api/v1/me/push-subscriptions/{id}:
     delete:
       operationId: deletePushSubscription
+      summary: Push-Abo löschen
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '204': { description: entfernt }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/v1/me/push-subscriptions/{id}/test:
     post:
       operationId: sendTestPush
+      summary: Test-Push senden
       description: Sendet eine generische Testnachricht an dieses Abo (Rate-Limit 5 je Stunde).
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
@@ -1413,8 +1583,10 @@ paths:
   /api/v1/system/info:
     get:
       operationId: getSystemInfo
+      summary: Versions- und Build-Angaben abrufen
       description: |
         Versions- und Build-Angaben (ADR-0023) für Hilfe und Fehlermeldungen. Jedes angemeldete Konto, nicht modulgesteuert.
+        Betriebsfelder (`database`, `schemaMigrations`, `migrationsPending`, `uptimeSeconds`, `replicaId`) nur für Administratoren (ADR-0023 Nachtrag); normale Konten erhalten Version, Revision, Build-Datum, API-Version und `pwa`.
         `backend.revision` ist der Git-Commit, aus dem das Image gebaut wurde; die Registry-Digest des Images kennt nur der Betreiber
         (`docker service inspect`). `pwa` stammt aus `version.json` im PWA-Verzeichnis, `null` ohne eingebaute PWA.
         Ohne Build-Argumente (lokaler Build) lauten `version` "dev" und `revision` "unknown".
@@ -1423,12 +1595,14 @@ paths:
   /api/v1/modules:
     get:
       operationId: listModules
+      summary: Module des Kontos auflisten
       description: Status der abschaltbaren Module (ADR-0012) für das angemeldete Konto.
       security: [ { session: [] } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ModuleStatus' } } } } } }
   /api/v1/me/modules:
     put:
       operationId: putMyModules
+      summary: Eigene Modulauswahl speichern
       description: Eigene Auswahl. Nicht genannte Module bleiben unverändert; ein vom Server abgeschaltetes Modul kann nicht eingeschaltet werden (409 module_locked).
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [modules], properties: { modules: { type: object, additionalProperties: { type: boolean } } } } } } }
@@ -1436,10 +1610,12 @@ paths:
   /api/v1/admin/modules:
     get:
       operationId: getServerModules
+      summary: Serverweite Module abrufen
       security: [ { session: [] } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ServerModule' } } } } }, '403': { $ref: '#/components/responses/Forbidden' } }
     put:
       operationId: putServerModules
+      summary: Serverweite Module speichern
       description: Nur Admin. Setzt die serverweite Verfügbarkeit; vom Betreiber per Umgebung gesperrte Module sind nicht änderbar (409 module_locked).
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [modules], properties: { modules: { type: object, additionalProperties: { type: boolean } } } } } } }
@@ -1447,6 +1623,7 @@ paths:
   /api/v1/import-profiles/worktime/default-rules:
     get:
       operationId: worktimeDefaultRules
+      summary: Standardregeln des Arbeitszeit-Imports abrufen
       description: Standard-Bemerkungsregeln des Import-Profils worktime_workbook (ADR-0013).
       security: [ { session: [] } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/WorktimeRemarkRule' } } } } } }
@@ -1486,7 +1663,8 @@ components:
       properties:
         backend:
           type: object
-          required: [version, revision, revisionShort, buildDate, apiVersion, database, schemaMigrations, migrationsPending, uptimeSeconds, replicaId]
+          required: [version, revision, revisionShort, buildDate, apiVersion]
+          description: 'Die Betriebsfelder database, schemaMigrations, migrationsPending, uptimeSeconds und replicaId fehlen für normale Konten (nur Administratoren).'
           properties:
             version: { type: string }
             revision: { type: string }

@@ -3,7 +3,7 @@ import Fluent
 import SQLKit
 
 /// Version of contracts/openapi.yaml (`info.version`). A test compares this constant with the contract.
-let apiContractVersion = "0.22.0"
+let apiContractVersion = "0.23.0"
 
 /// Build metadata baked into the container image (Dockerfile build args -> ENV, ADR-0023). Local builds without
 /// the build args report "dev" / "unknown".
@@ -37,20 +37,21 @@ struct SystemInfoDTO: Content {
         let revisionShort: String
         let buildDate: String?
         let apiVersion: String
-        let database: String
-        let schemaMigrations: Int
-        let migrationsPending: Bool
-        let uptimeSeconds: Int
-        let replicaId: String
+        /// Operational fields: present for administrators only (Q1 finding 2, ADR-0023 addendum); omitted for members.
+        let database: String?
+        let schemaMigrations: Int?
+        let migrationsPending: Bool?
+        let uptimeSeconds: Int?
+        let replicaId: String?
 
         enum CodingKeys: String, CodingKey { case version, revision, revisionShort, buildDate, apiVersion, database, schemaMigrations, migrationsPending, uptimeSeconds, replicaId }
         /// `buildDate` is an explicit `null` for local builds (the contract lists the key as required).
         func encode(to encoder: any Encoder) throws {
             var c = encoder.container(keyedBy: CodingKeys.self)
             try c.encode(version, forKey: .version); try c.encode(revision, forKey: .revision); try c.encode(revisionShort, forKey: .revisionShort)
-            try c.encode(buildDate, forKey: .buildDate); try c.encode(apiVersion, forKey: .apiVersion); try c.encode(database, forKey: .database)
-            try c.encode(schemaMigrations, forKey: .schemaMigrations); try c.encode(migrationsPending, forKey: .migrationsPending)
-            try c.encode(uptimeSeconds, forKey: .uptimeSeconds); try c.encode(replicaId, forKey: .replicaId)
+            try c.encode(buildDate, forKey: .buildDate); try c.encode(apiVersion, forKey: .apiVersion); try c.encodeIfPresent(database, forKey: .database)
+            try c.encodeIfPresent(schemaMigrations, forKey: .schemaMigrations); try c.encodeIfPresent(migrationsPending, forKey: .migrationsPending)
+            try c.encodeIfPresent(uptimeSeconds, forKey: .uptimeSeconds); try c.encodeIfPresent(replicaId, forKey: .replicaId)
         }
     }
     struct PWA: Content {
@@ -82,14 +83,20 @@ enum SystemInfoService {
         return pwa.version == nil && pwa.revision == nil ? nil : pwa
     }
 
-    static func make(request: Request, configuration: Configuration, startedAt: Date) async throws -> SystemInfoDTO {
+    static func make(request: Request, configuration: Configuration, startedAt: Date, includeOperational: Bool) async throws -> SystemInfoDTO {
+        let info = configuration.buildInfo
+        guard includeOperational else {
+            return SystemInfoDTO(
+                backend: .init(version: info.version, revision: info.revision, revisionShort: info.revisionShort, buildDate: info.buildDate,
+                               apiVersion: apiContractVersion, database: nil, schemaMigrations: nil, migrationsPending: nil, uptimeSeconds: nil, replicaId: nil),
+                pwa: readPWA(directory: configuration.pwaStaticDirectory))
+        }
         let sql = try requireSQL(request.db)
         var count = 0
         if let row = try? await sql.raw("SELECT COUNT(*) AS c FROM _fluent_migrations").first() {
             count = (try? row.decode(column: "c", as: Int.self)) ?? 0
         }
         let pending = (try? await request.application.migrator.previewPrepareBatch().get().isEmpty == false) ?? false
-        let info = configuration.buildInfo
         let hostname = ProcessInfo.processInfo.hostName
         return SystemInfoDTO(
             backend: .init(version: info.version, revision: info.revision, revisionShort: info.revisionShort, buildDate: info.buildDate,

@@ -41,6 +41,27 @@ final class ContractRoutesTests: XCTestCase, @unchecked Sendable {
         return result
     }
 
+    /// S1b contract hygiene: every operation carries a short German `summary` (one line, no trailing period) and an operationId.
+    func testEveryOperationHasShortGermanSummary() throws {
+        let operations = Contract.operations(try Contract.load())
+        var problems: [String] = []
+        var ids: [String: String] = [:]
+        for (key, operation) in operations.sorted(by: { $0.key < $1.key }) {
+            guard let summary = operation["summary"] as? String, !summary.trimmingCharacters(in: .whitespaces).isEmpty else {
+                problems.append("\(key): summary missing"); continue
+            }
+            if summary.count > 70 || summary.contains("\n") { problems.append("\(key): summary too long or multi-line") }
+            if summary.hasSuffix(".") { problems.append("\(key): summary ends with a period") }
+            guard let id = operation["operationId"] as? String else { problems.append("\(key): operationId missing"); continue }
+            if let other = ids[id] { problems.append("\(key): operationId \(id) also used by \(other)") }
+            ids[id] = key
+        }
+        XCTAssertEqual(problems, [])
+        // Summaries are meant to differ per operation so generated clients and docs stay readable.
+        let summaries = operations.values.compactMap { $0["summary"] as? String }
+        XCTAssertEqual(Set(summaries).count, summaries.count, "summaries must be unique")
+    }
+
     func testRoutesMatchContract() async throws {
         let documented = Set(Contract.operations(try Contract.load()).keys)
         let implemented = try await registeredRoutes()

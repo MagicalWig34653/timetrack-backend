@@ -42,7 +42,7 @@ Ungültige Werte verhindern den Start; der Fehler nennt die Variable (z. B. `Inv
 | `BIND_ADDR` | `0.0.0.0` | Nur Compose: Host-Adresse des veröffentlichten Ports. `127.0.0.1`, wenn der Proxy auf demselben Server läuft. |
 | `PUBLISHED_PORT` | `18080` | Veröffentlichter Port (Compose: auf dem Host; Swarm: auf jedem Knoten, Routing-Mesh). |
 | `TRUSTED_PROXY_CIDRS` | leer | Kommagetrennte IP-Adressen oder CIDR-Netze der Reverse Proxys (z. B. `172.18.0.0/16`). Nur von dort wird `X-Forwarded-For` geglaubt. Leer: niemand. `/0` und ungültige Einträge verhindern den Start. [Reverse Proxy und TLS](proxy.md). |
-| `TRUSTED_PROXY_HEADER` | `X-Forwarded-For` | Oder `X-Real-IP`. |
+| `TRUSTED_PROXY_HEADER` | `X-Forwarded-For` | Oder `X-Real-IP`. Bei `X-Real-IP` **muss der Proxy den Header bei jeder Anfrage überschreiben** (nginx: `proxy_set_header X-Real-IP $remote_addr;`), sonst kann ein Client seine Adresse fälschen; das Backend warnt beim Start einmal. Im Zweifel `X-Forwarded-For`. [Details](proxy.md). |
 | `APPLE_APP_IDS` | leer | Kommagetrennt `<TeamID>.<BundleID>` (Team-ID 10 Zeichen). Leer: `/.well-known/apple-app-site-association` antwortet 404. Platzhalter: `ABCDE12345.com.example.timetrack`. |
 | `PWA_STATIC_DIR` | `/srv/pwa` | Verzeichnis der Web-App im Image. Nur ändern, wenn du die Web-App getrennt bereitstellst. |
 

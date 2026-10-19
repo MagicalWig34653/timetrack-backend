@@ -1,6 +1,6 @@
 # Lizenzinventar C4
 
-Stand: 17.10.2026 (Paket D3: SwiftPM-Pins gegen `Package.resolved` abgeglichen, 43 Pins unverändert; npm-Abschnitt neu ausgezählt, Website und Apple-Repo ergänzt; die Texte der übrigen Pakete stammen aus C4, 14.10.2026, und D1, 15.10.2026). Projektlizenz: `AGPL-3.0-only`.
+Stand: 19.10.2026 (Paket S1b: Abschnitt „Kette BoringSSL / swift-crypto / NIOSSL im Laufzeit-Image“ ergänzt, Pins unverändert); 17.10.2026 (Paket D3: SwiftPM-Pins gegen `Package.resolved` abgeglichen, 43 Pins unverändert; npm-Abschnitt neu ausgezählt, Website und Apple-Repo ergänzt; die Texte der übrigen Pakete stammen aus C4, 14.10.2026, und D1, 15.10.2026). Projektlizenz: `AGPL-3.0-only`.
 
 ## SwiftPM
 
@@ -60,6 +60,23 @@ Die erfassten Hauptlizenzen `MIT` und `Apache-2.0` sind mit dem AGPLv3-Projekt v
 - `Argon2Swift`: **unstabile Branch-Abhängigkeit `main`**, im Lockfile auf obige Revision fixiert. Updates können API und transitive Revisionen verändern. Vor Updates gezielt testen und Inventar erneuern.
 - `phc-winner-argon2`: Branch `master`, ebenfalls revisionsfixiert. `LICENSE` erlaubt ausdrücklich `CC0-1.0 OR Apache-2.0`. Für die Bewertung kann Apache-2.0 gewählt werden. Auch `Argon2Swift/Sources/Argon2/LICENSE` enthält diesen dualen C-Lizenztext.
 - **Offener Lizenzbefund: eingebettetes BoringSSL in `swift-nio-ssl`.** Die Hauptlizenz Apache-2.0 deckt keine pauschale Freigabe aller eingebetteten Quellen ab. `NOTICE.txt` nennt ISC und OpenSSL; `Sources/CNIOBoringSSL/crypto/crypto.cc` enthält ISC-Bedingungen, `Sources/CNIOBoringSSL/include/CNIOBoringSSL_base.h` verweist ausdrücklich auf die OpenSSL-Lizenz. Im Checkout fehlt eine separate BoringSSL-LICENSE-Datei. Die alte `OpenSSL`-Lizenz ist laut [GNU-Lizenzübersicht](https://www.gnu.org/licenses/license-list.html#OpenSSL) GPL-inkompatibel. Daher **keine vollständige AGPL-3.0-only-Veröffentlichungsfreigabe** aus diesem Inventar ableiten: genaue Lizenzabdeckung und eventuell erforderliche Ausnahme durch Rechteinhaber vor Release klären. C3 ändert die bestehende Projektlizenz nicht; NIOSSL war bereits transitiv enthalten.
+
+### Kette BoringSSL / swift-crypto / NIOSSL im Laufzeit-Image (Paket S1b, 19.10.2026)
+
+Geprüft anhand `Package.resolved` (43 Pins, unverändert gegenüber D3), der lokalen Checkouts von `swift-nio-ssl` 2.37.5 und `swift-crypto` 4.5.2 sowie des `Dockerfile`. Es gibt **zwei getrennte, eingebettete BoringSSL-Kopien** und eine Keccak-Kopie; die frühere Fassung dieses Inventars nannte nur die erste.
+
+| Bestandteil | Eingebettet in | Lizenzköpfe der Quelldateien (gezählt, Quelltext `.c/.cc/.h/.S`) | Bewertung |
+| --- | --- | --- | --- |
+| `CNIOBoringSSL` | `swift-nio-ssl` (`type: .static`, direkt eingebunden für TLS/SMTP; zusätzlich über Vapor und AsyncHTTPClient) | 323 Dateien „Licensed under the OpenSSL license“ (OpenSSL/SSLeay-Altlizenz), 200 ISC, 1 CC0/Public Domain (`poly1305_arm_asm.S`), 119 ohne Kopf (überwiegend generierte Header) | **Offener Befund bleibt:** Die Altlizenz „OpenSSL“ ist laut GNU GPL-inkompatibel. Eine eigene BoringSSL-`LICENSE`-Datei liegt im Checkout nicht bei; `NOTICE.txt` verweist auf „Combination ISC and OpenSSL license“. |
+| `CCryptoBoringSSL` | `swift-crypto` (auf Linux die Implementierung von `Crypto`; Abhängigkeit von Vapor, `webauthn-swift`, `swift-certificates`) | 491 Dateien „Licensed under the Apache License, Version 2.0“, 1 CC0 (`poly1305_arm_asm.S`), 129 ohne Kopf (`.inc`-Prüfwerte u. a.), **keine** Datei mit OpenSSL-Altlizenz oder Eric-Young-Hinweis (0 Treffer). Neuere BoringSSL-Revision (`0226f304…`) | Apache-2.0, mit AGPL-3.0 vereinbar. Bisher im Inventar nicht aufgeführt; `NOTICE.txt` und `README.md` von `swift-crypto` nennen BoringSSL und XKCP als Drittanteile. |
+| `CXKCP` (Keccak, FIPS 202) | `swift-crypto` | `brg_endian.h` mit BSD-Kopf, übrige Dateien ohne Kopf; Herkunft XKCP (`vendored-sources.txt`) | Dateien einzeln gegen den XKCP-Upstream (CC0/BSD/MIT-Mischung) prüfen, bevor die Beilage abgeschlossen wird. Offen. |
+
+Im Image landen beide BoringSSL-Kopien als **statisch gelinkter Bestandteil** der Binärdatei `App` (Build-Stufe `swift build -c release --product App`, Laufzeit-Stufe `swift:6.3-noble-slim`, kein Node und kein separater OpenSSL-Bezug des Backends). Konsequenzen:
+
+- Mit dem Image wird Binärcode mit der OpenSSL-Altlizenz ausgeliefert (über `CNIOBoringSSL`). Deren Werbeklausel und Attributionspflichten verlangen Beilage der Texte (siehe unten) und sind der Grund, warum die Aussage „AGPL-3.0-only ohne Einschränkung“ weiterhin nicht belegt ist. Das Projekt ändert seine Lizenz deswegen nicht; die Klärung (Einschätzung von `swift-nio-ssl`/Apple oder eine rechtliche Prüfung) bleibt vor einem Release mit Binärverteilung offen.
+- `swift-crypto` als Apache-2.0-BoringSSL-Kopie ist unkritisch, braucht aber Lizenzbeilage und Hinweis auf BoringSSL/XKCP in `NOTICE`-Form.
+- Die Beilage fehlt derzeit: Das Image enthält weder `LICENSE`/`NOTICE`-Dateien der Abhängigkeiten noch ein Lizenzverzeichnis (`COPY` im `Dockerfile` kopiert nur `App`, Ressourcen und PWA). Zu ergänzen: ein generiertes `THIRD-PARTY-NOTICES` im Image (Lizenztexte der 43 Pins inklusive BoringSSL-Dateiköpfe und NOTICE-Inhalte, `swift-crypto`-README-Hinweis auf XKCP).
+- Betriebssystempakete des Laufzeit-Images (`ca-certificates`, `libsqlite3-0`, `tzdata`, `curl` samt Abhängigkeiten, Basis `swift:6.3-noble-slim`) sind weiterhin **nicht inventarisiert**; `curl` ist nur das Healthcheck-Programm, nicht in `App` gelinkt.
 
 ### NOTICE und Attribution
 
@@ -166,4 +183,4 @@ Weitere Sonderkennungen: `MIT-0` (zwei @csstools-Pakete) ist permissiv ohne MIT-
 
 ## Release-Prüfung
 
-Weiterhin **offen** (siehe oben): BoringSSL/OpenSSL in `swift-nio-ssl`, Beilage der Lizenztexte und NOTICE-Inhalte in Container-Image, PWA-Build und Apps, MPL-Marker, Quellcode-Lizenzprüfung der npm-Pakete über die Metadaten hinaus.
+Weiterhin **offen** (siehe oben): BoringSSL/OpenSSL in `swift-nio-ssl` (323 Dateien mit OpenSSL-Altlizenz, statisch in `App`), Prüfung der XKCP-Dateien in `swift-crypto`, `THIRD-PARTY-NOTICES` im Image, Beilage der Lizenztexte und NOTICE-Inhalte in Container-Image, PWA-Build und Apps, MPL-Marker, Quellcode-Lizenzprüfung der npm-Pakete über die Metadaten hinaus.

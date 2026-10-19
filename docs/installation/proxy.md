@@ -162,6 +162,18 @@ Setzt du am Proxy eine Begrenzung (nginx `limit_req`/`limit_conn`, Traefik `rate
 4. In `.env` bzw. `.env`: `TRUSTED_PROXY_CIDRS=10.0.0.0/24`, `TRUSTED_PROXY_HEADER=X-Forwarded-For`, neu ausrollen (siehe [Aktualisieren](../UPDATE.md)).
 5. Prüfen: Rate-Limit-Verhalten, siehe [Betrieb](../BETRIEB.md), Abschnitt 6, Schritt 3. Ohne die Einstellung teilen sich **alle** Clients einen Zähler (60 Ereignisse je 5 Minuten): ein Angreifer sperrt die Anmeldung für alle. Pro Konto gilt zusätzlich eine eigene Grenze (15 je 5 Minuten).
 
+## TRUSTED_PROXY_HEADER: X-Forwarded-For oder X-Real-IP
+
+Standard ist `X-Forwarded-For`. Das Backend liest die Liste **von rechts** und übernimmt den ersten Eintrag, der nicht zu einem vertrauenswürdigen Proxy gehört. Vom Client mitgeschickte Einträge links davon werden nie gelesen. Der Proxy darf den Header anhängen (nginx `$proxy_add_x_forwarded_for`, Traefik, Caddy) oder ersetzen.
+
+`X-Real-IP` ist nur sicher, wenn der Proxy den Header **bei jeder Anfrage überschreibt**. Das Backend übernimmt den einen Wert von einem vertrauenswürdigen Verbindungspartner unverändert. Reicht der Proxy einen vom Client gesendeten `X-Real-IP` durch (oder setzt ihn nur, wenn er fehlt), kann jeder Client seine Adresse frei wählen und damit die Ratenbegrenzung je Adresse umgehen.
+
+- nginx: `proxy_set_header X-Real-IP $remote_addr;` (überschreibt immer).
+- Traefik und Caddy setzen `X-Real-IP` nicht von sich aus zuverlässig; verwende dort `X-Forwarded-For`.
+- Steht davor ein weiterer Proxy (z. B. ein CDN), muss **jeder** vertrauenswürdige Hop den Header überschreiben oder `X-Forwarded-For` genutzt werden.
+
+Ist `TRUSTED_PROXY_HEADER=X-Real-IP` mit `TRUSTED_PROXY_CIDRS` gesetzt, schreibt das Backend beim Start einmal eine Warnung mit diesem Hinweis ins Log. Im Zweifel `X-Forwarded-For` verwenden.
+
 ## Apple App Site Association
 
 Für Passkeys in den Apple-Apps muss `APPLE_APP_IDS` gesetzt sein und der Proxy die Datei unverändert durchreichen. Erzeugung, Prüfbefehle (inklusive Apples CDN) und Fehlerbilder: [Deployment-Anleitung](../DEPLOYMENT.md), Abschnitt 11.

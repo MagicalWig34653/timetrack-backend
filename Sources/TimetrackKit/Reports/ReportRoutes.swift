@@ -7,6 +7,10 @@ func registerReportRoutes(_ app: Application, auth: AuthService) {
     @Sendable func run(_ req: Request, _ operation: @escaping @Sendable (ReportService) async throws -> Response) async throws -> Response {
         try await ReportService.session(req.authContext, auth: auth, db: req.db, operation: operation)
     }
+    /// GET routes: no second authentication and no global lock (S1b).
+    @Sendable func runRead(_ req: Request, _ operation: @escaping @Sendable (ReportService) async throws -> Response) async throws -> Response {
+        try await ReportService.read(req.authContext, auth: auth, db: req.db, operation: operation)
+    }
     @Sendable func id(_ req: Request) throws -> UUID {
         guard let id = req.parameters.get("id", as: UUID.self) else { throw APIError.missing }; return id
     }
@@ -15,7 +19,7 @@ func registerReportRoutes(_ app: Application, auth: AuthService) {
         return (year, week)
     }
 
-    api.get("learning-fields") { req async throws -> Response in try await run(req) { try timeResponse(await $0.learningFields()) } }
+    api.get("learning-fields") { req async throws -> Response in try await runRead(req) { try timeResponse(await $0.learningFields()) } }
     api.post("learning-fields") { req async throws -> Response in
         let input = try timeDecode(LearningFieldInput.self, request: req)
         return try await run(req) { try timeResponse(await $0.createLearningField(input), status: .created) }
@@ -43,7 +47,7 @@ func registerReportRoutes(_ app: Application, auth: AuthService) {
 
     api.get("weeks", ":year", ":week") { req async throws -> Response in
         let (year, number) = try week(req)
-        return try await run(req) { try timeResponse(await $0.week(year: year, week: number)) }
+        return try await runRead(req) { try timeResponse(await $0.week(year: year, week: number)) }
     }
     api.put("weeks", ":year", ":week") { req async throws -> Response in
         struct Input: Decodable { var status: String }
@@ -52,7 +56,7 @@ func registerReportRoutes(_ app: Application, auth: AuthService) {
     }
     api.get("weeks", ":year", ":week", "text") { req async throws -> Response in
         let (year, number) = try week(req)
-        return try await run(req) { service in
+        return try await runRead(req) { service in
             var headers = HTTPHeaders()
             headers.replaceOrAdd(name: .contentType, value: "text/plain; charset=utf-8")
             headers.replaceOrAdd(name: .cacheControl, value: "no-store")
@@ -62,7 +66,7 @@ func registerReportRoutes(_ app: Application, auth: AuthService) {
 
     api.get("sources") { req async throws -> Response in
         guard let year: Int = req.query["year"], let number: Int = req.query["week"] else { throw APIError.invalid }
-        return try await run(req) { try timeResponse(await $0.sources(year: year, week: number)) }
+        return try await runRead(req) { try timeResponse(await $0.sources(year: year, week: number)) }
     }
     api.post("sources") { req async throws -> Response in
         let input = try timeDecode(ReportSourceInput.self, request: req)

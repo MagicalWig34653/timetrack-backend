@@ -16,9 +16,9 @@ struct AccountExportService: Sendable {
     typealias Row = [String: JSONValue]
 
     func archive(_ context: AuthContext, now: Date = Date()) async throws -> (data: Data, fileName: String) {
-        let current = try await auth.authenticate(context.token, on: db)
-        try current.normal()
-        let account = current.account, id = try account.requireID()
+        // Read-only: the session middleware verified the credentials in this request (S1b).
+        try context.normal()
+        let account = context.account, id = try account.requireID()
         let zip = try Archive(accessMode: .create)
         func add(_ path: String, _ data: Data) throws {
             try zip.addEntry(with: path, type: .file, uncompressedSize: Int64(data.count), modificationDate: now, compressionMethod: .deflate) { position, size in

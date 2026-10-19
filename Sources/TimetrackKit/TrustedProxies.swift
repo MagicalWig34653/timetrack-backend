@@ -125,6 +125,13 @@ public struct TrustedProxies: Sendable, Equatable {
         self.init(cidrs: list, header: header)
     }
 
+    /// One-time startup hint (Q1 finding 1): `X-Real-IP` is taken at face value from a trusted peer, so the proxy must overwrite it
+    /// on every request. Nil for the default header or when no proxy is trusted.
+    var startupWarning: String? {
+        guard header == .realIP, !cidrs.isEmpty else { return nil }
+        return "TRUSTED_PROXY_HEADER=X-Real-IP: the header is trusted as sent by the proxy; the proxy must overwrite X-Real-IP with the client address on every request (nginx: proxy_set_header X-Real-IP $remote_addr). If it passes a client-supplied value through, clients can spoof their address and bypass per-address rate limits. X-Forwarded-For is safer because it is read from the right."
+    }
+
     func isTrusted(_ address: IPAddressValue) -> Bool { cidrs.contains { $0.contains(address) } }
 
     /// Resolves the client address. `peer` is the socket peer; forwarded values are only read when the peer is trusted.

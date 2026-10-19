@@ -126,6 +126,14 @@ final class TrustedProxyTests: XCTestCase, @unchecked Sendable {
 
     // MARK: configuration
 
+    func testXRealIPStartupWarning() throws {
+        XCTAssertNil(try TrustedProxies(cidrs: "10.0.0.0/8", header: nil).startupWarning)
+        XCTAssertNil(try TrustedProxies(cidrs: "10.0.0.0/8", header: "X-Forwarded-For").startupWarning)
+        XCTAssertNil(try TrustedProxies(cidrs: "", header: "X-Real-IP").startupWarning, "no trusted proxy: the header has no effect")
+        let warning = try XCTUnwrap(TrustedProxies(cidrs: "10.0.0.0/8", header: "x-real-ip").startupWarning)
+        XCTAssertTrue(warning.contains("overwrite"))
+    }
+
     func testConfiguration() throws {
         XCTAssertTrue(try Configuration(environment: [:]).trustedProxies.isEmpty)
         XCTAssertEqual(try Configuration(environment: [:]).trustedProxies.header, .forwardedFor)

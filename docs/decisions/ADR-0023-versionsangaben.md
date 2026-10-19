@@ -14,3 +14,12 @@ Status: Umsetzungsentscheidung von Paket V1 (Nutzerwunsch 18.10.2026: in der PWA
 ## Native Apps
 
 Nicht Teil von V1. Die Endpunkte sind für sie nutzbar: `GET /api/v1/system/info` (Sitzung oder Gerätetoken wie bei den übrigen Lese-Endpunkten des Kerns) und `GET /health`.
+
+## Nachtrag S1b (19.10.2026): Betriebsfelder nur für Administratoren
+
+Befund Q1 (Codex-Sicherheitsreview): `GET /api/v1/system/info` zeigte jedem Konto Hostname (Container-Id), Datenbanktreiber, Migrationsstand und Laufzeit. Das hilft einem Angreifer mit normalem Konto bei der Aufklärung und hat für Mitglieder keinen Nutzen.
+
+- **Mitglieder** erhalten `backend.version`, `revision`, `revisionShort`, `buildDate`, `apiVersion` und `pwa`.
+- **Administratoren** (Rolle `admin`, normale Sitzung) erhalten zusätzlich `database`, `schemaMigrations`, `migrationsPending`, `uptimeSeconds`, `replicaId`. Für Mitglieder fehlen diese Schlüssel (kein Nullwert), und die zugehörigen Abfragen (Migrationstabelle, Migrationsvorschau) laufen nicht.
+- Vertrag v0.23.0: die fünf Felder sind nicht mehr `required`. Das ist für Clients, die sie als Pflichtfelder lesen, eine Verhaltensänderung (Mitglieder sehen die Hilfe-Zeilen nicht); PWA-Anpassung im Handoff S1b.
+- Bleibt unverändert: Endpunkt für jedes angemeldete Konto, nicht modulgesteuert; `GET /health` zeigt weiter nur Version und Revision.

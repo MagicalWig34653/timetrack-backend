@@ -287,7 +287,7 @@ Zusammenarbeit durch Dritte (Pull Requests, Issues) ist über die GitHub-Vorlage
 | K1 | Wochenplanung (Plan mit Beginn/Ende) und Wochenübersicht, Backend + PWA | integriert (Vertrag 0.17.0); Backend 315 Tests SQLite, PWA 692 Unit + Echt-E2E 186 vom Lead |
 | REL | Release v0.1.0 (Changelog, Tag in allen drei Repos, Docker-Image 0.1.0) | wartet auf stabile Produktion und K1 |
 | A12 | Apple Watch: schneller Start (Snapshot zuerst), eigenständig (Sitzung, Offline-Warteschlange, Hintergrundaktualisierung) | integriert (Apple-Merge A12); 141+22 Paket-Tests und drei Builds vom Lead; Kaltstart-Ziel 2,5 s verfehlt (2,9 s, ein Lauf); Anmeldung auf der Uhr ohne iPhone nicht möglich (watchOS), Gerätekopplung im Backend wäre nötig; echte Uhr ungeprüft |
-| S1 | Sicherheit und Vertragsqualität: `summary` je Operation, Authentifizierung nur einmal pro Anfrage, Pool-Zeitlimit als 503 mit `Retry-After`, Lizenzprüfung vor Release (BoringSSL) | geplant (nach K1, wegen Vertragskonflikten) |
+| S1 | Sicherheit und Vertragsqualität: `summary` je Operation, Authentifizierung nur einmal pro Anfrage, Pool-Zeitlimit als 503 mit `Retry-After`, Lizenzprüfung vor Release (BoringSSL) | S1a und S1b umgesetzt (Lead-Prüfung offen); offen: Lizenzbeilage im Image (`THIRD-PARTY-NOTICES`) und BoringSSL-Klärung |
 | N1 | Native Apps auf PWA-Stand: Wochenplanung/-übersicht (K1), Arbeitsmodell bearbeiten und Urlaubskarte (M1), acht neue Akzente und Leuchteffekt (G1), Haptik-Schalter für Uhr/Mac | geplant (nach K1) |
 | F2 | Fokus-Filter (iOS `SetFocusFilterIntent`, Modi aus/Vorschlag/direkt wie bei der Standortautomatik) zusammen mit Wochenplan und -übersicht im nächsten Release | geplant |
 | LA1 | Live Activity (iPhone, Uhr/Smart Stack) überarbeiten: geplante Feierabendzeit, Fortschritt „wie viel schon rum", Knopf **Pause/Weiter** (Pause = Timer anhalten, Lücke bleibt echte Pause, nichts erfundenes) und Stopp | geplant (nach K1, nutzt Plan-Endpunkte) |
@@ -331,6 +331,12 @@ Claude-Agent in getrennten Worktrees (Branches `mail1-smtp-check`), nicht gemerg
 | ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
 | --- | --- | --- | --- | --- | --- |
 | S1a | Teil von S1: Datenbankausfall als 503 `database_unavailable` mit `Retry-After` (Klassifizierung in `APIErrorMiddleware`), Vertrag v0.20.0, ADR-0024; Details `docs/handoffs/S1a.md` | Claude-Agent | 2 | Branch `S1a`, Lead-Prüfung offen; 331 Tests SQLite und MariaDB ohne Fehler | V1 |
+
+## S1b (19.10.2026)
+
+| ID | Paket | Verantwortung | Punkte | Status | Abhängigkeiten |
+| --- | --- | --- | --- | --- | --- |
+| S1b | Rest von S1: Q1-Befunde (`system/info` nur Administratoren, SMTP-Diagnose ohne Serverantwort, OIDC-Transportfehler, `X-Real-IP`-Doku/Warnung), `summary` je Operation mit Vertragstest, Anmeldung einmal pro Anfrage (Request-Speicher, lesende Dienste ohne zweite Prüfung), Lizenzkette BoringSSL; Vertrag v0.23.0; Details `docs/handoffs/S1b.md` | Claude-Agent | 4 | Branch `worktree-agent-aecf20448f928398e`, Lead-Prüfung offen; 353 Tests SQLite und MariaDB ohne Fehler; PWA-Anpassung offen | S1a |
 
 ## Q1 – Codex-Sicherheitsreview Backend (18.10.2026)
 

@@ -24,3 +24,11 @@ E-Mail (ADR-0003, ADR-0019) ist optional und wird nur über Umgebungsvariablen e
 - Ein Schritt „Bounce/Zustellung beim Empfänger“ ist nicht möglich; „gesendet“ heißt: vom Server angenommen.
 - Kein Test von SPF/DKIM/DMARC (nur der Hinweis bei abweichender Absenderdomain).
 - Mehrere Replikate: die Prüfung läuft auf dem Replikat, das die Anfrage bekommt; Netzwerkregeln können sich unterscheiden.
+
+## Nachtrag S1b (19.10.2026): kein Serverantworttext nach der Anmeldung
+
+Befund Q1: Die Prüfung gab bei einem abgelehnten `MAIL FROM` den rohen Antworttext des Servers zurück. Er kann das Konto, interne Hostnamen oder Richtlinien-Details enthalten.
+
+- Der Schritt `mailFrom` nennt nur noch die **klassifizierte deutsche Ursache** und den **numerischen SMTP-Code** (`Antwort des Servers: 550`); der Text wird nur ausgewertet (Code und erweiterter Statuscode nach RFC 3463), nie zurückgegeben. Klassen: `auth_required` (530, 535, 5.7.0, 5.7.8), `sender_temporary` (4xx; 421, 450/451, 452 mit eigener Erklärung), `sender_rejected` (5xx; 551, 552, 554, 555 mit eigener Erklärung).
+- **Schwärzung als zweite Schicht:** Vor der Rückgabe werden konfigurierter Benutzername, Passwort und die Base64-Nutzlast von `AUTH PLAIN` in allen Texten (Zusammenfassung, Details, Warnungen, Problem, Hinweis) durch `***` ersetzt. Werte unter vier Zeichen werden nicht ersetzt (würden normale Wörter zerstören); ein Benutzername, der der Absenderadresse entspricht, bleibt lesbar, weil `SMTP_FROM` bewusst angezeigt wird.
+- Antworttexte vor der Anmeldung (Begrüßung, EHLO) bleiben als Diagnose sichtbar: sie enthalten keine Kontodaten und helfen bei falschem Host/Port.

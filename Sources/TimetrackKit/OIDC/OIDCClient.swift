@@ -45,7 +45,11 @@ actor OIDCClient {
         request.headers = headers
         request.headers.replaceOrAdd(name: "Accept", value: "application/json")
         if let body { request.body = .bytes(ByteBuffer(string: body)) }
-        let response = try await http.execute(request, timeout: .seconds(10))
+        // Transport failures of this outbound call must never reach `InfrastructureError` as raw NIO errors (they would be
+        // reported as "database unavailable", Q1 finding 4).
+        let response: HTTPClientResponse
+        do { response = try await http.execute(request, timeout: .seconds(10)) }
+        catch { throw OIDCClientError.network }
         guard response.status == .ok else {
             // Drain a bounded amount so the connection can be released; the body is never inspected or logged.
             _ = try? await response.body.collect(upTo: 4096)
@@ -56,6 +60,7 @@ actor OIDCClient {
             var buffer = try await response.body.collect(upTo: limit)
             return buffer.readData(length: buffer.readableBytes) ?? Data()
         } catch is NIOTooManyBytesError { throw OIDCClientError.tooLarge }
+        catch { throw OIDCClientError.network }
     }
 
     private func json(_ data: Data) throws -> [String: Any] {
@@ -151,4 +156,4 @@ actor OIDCClient {
     }
 }
 
-enum OIDCClientError: Error, Sendable { case status, tooLarge, invalidDocument, issuerMismatch }
+enum OIDCClientError: Error, Sendable { case status, tooLarge, invalidDocument, issuerMismatch, network }

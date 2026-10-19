@@ -197,6 +197,35 @@ extension AuthTests {
         XCTAssertEqual(unknown.steps[0].problem?.code, "host_not_found")
     }
 
+    /// Q1 finding 3 / S1b: after authentication the raw MAIL FROM reply text is never returned; credentials are redacted.
+    func testMailFromReplyTextIsNeverReturned() async throws {
+        let secretText = "secret-user is not allowed to send as internal-gateway-7.corp.example (policy PX-42)"
+        let (serverTLS, trusted, _) = try tlsFixture()
+        for (reply, code, step) in [("550 5.7.1 \(secretText)", "sender_rejected", "550"), ("554 \(secretText)", "sender_rejected", "554"),
+                                    ("451 4.7.1 \(secretText) \(Self.mailPassword)", "sender_temporary", "451"), ("530 5.7.0 \(secretText)", "auth_required", "530")] {
+            let server = FakeMailServer(FakeMailServer.Options(mailFromReply: reply), tls: serverTLS); try server.start(); defer { server.stop() }
+            let result = await runCheck(try smtp(host: "localhost", port: server.port, tls: "starttls", auth: true), tls: trusted)
+            XCTAssertEqual(statuses(result).suffix(2), ["auth:ok", "mailFrom:failed"])
+            let mailFrom = try XCTUnwrap(result.steps.last)
+            XCTAssertEqual(mailFrom.id, "mailFrom")
+            XCTAssertEqual(mailFrom.problem?.code, code, reply)
+            XCTAssertEqual(mailFrom.details, ["Antwort des Servers: \(step)"])
+            let json = String(decoding: try JSONEncoder().encode(result), as: UTF8.self)
+            for leaked in ["internal-gateway", "PX-42", "policy", "secret-user", Self.mailPassword] { XCTAssertFalse(json.contains(leaked), "\(leaked) leaked for \(reply)") }
+            XCTAssertTrue(json.contains(step))
+        }
+    }
+
+    func testMailRedactionRemovesConfiguredCredentials() throws {
+        let credentials = Data("\0alice-login\0hunter2-hunter2".utf8).base64EncodedString()
+        let text = "user alice-login pw hunter2-hunter2 blob \(credentials) ok"
+        XCTAssertEqual(MailCheckRunner.redact(text, secrets: ["alice-login", "hunter2-hunter2", credentials]), "user *** pw *** blob *** ok")
+        // Very short secrets are not replaced (would garble ordinary text).
+        XCTAssertEqual(MailCheckRunner.redact("a b c", secrets: ["a"]), "a b c")
+        let verdict = MailCheckRunner.classifyMailFrom(SMTPReply(code: 552, lines: ["5.3.4 too big"]), from: "x@example.test")
+        XCTAssertEqual(verdict.code, "sender_rejected"); XCTAssertFalse(verdict.message.contains("too big"))
+    }
+
     func testMailHostnameMatchingAndHints() throws {
         XCTAssertTrue(MailCheckRunner.hostnameMatches("smtp.example.org", pattern: "*.example.org"))
         XCTAssertFalse(MailCheckRunner.hostnameMatches("a.smtp.example.org", pattern: "*.example.org"))

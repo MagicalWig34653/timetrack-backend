@@ -75,11 +75,13 @@ func registerRoutes(_ app: Application, service: AuthService) {
         try await limit(req, subject: .credential(Data(proof.credential.rawID)))
         return try await sessionResponse(service.login(proof, on: req.db), request: req)
     }
-    // Version information (ADR-0023): any signed-in account, not module-gated.
+    // Version information (ADR-0023): any signed-in account, not module-gated. Operational fields (replica, database,
+    // migrations, uptime) are returned to administrators only (Q1 finding 2).
     let startedAt = Date()
     api.get("system", "info") { req async throws -> SystemInfoDTO in
-        _ = try req.authContext
-        return try await SystemInfoService.make(request: req, configuration: service.configuration, startedAt: startedAt)
+        let context = try req.authContext
+        return try await SystemInfoService.make(request: req, configuration: service.configuration, startedAt: startedAt,
+                                                includeOperational: context.account.role == .admin && !context.session.recovery)
     }
     api.get("auth", "session") { req throws -> SessionDTO in try req.authContext.response }
     api.delete("auth", "session") { req async throws -> Response in
@@ -93,6 +95,7 @@ func registerRoutes(_ app: Application, service: AuthService) {
     api.post("me", "passkeys", "verify") { req async throws -> Response in
         let key = try await service.addPasskey(req.content.decode(RegisterProof.self), context: req.authContext, on: req.db)
         let response = try await key.encodeResponse(status: .created, for: req)
+        // Deliberately re-read: a recovery session was promoted inside addPasskey (new expiry), so the cookie needs the new row.
         let current = try await service.authenticate(req.authContext.token, on: req.db)
         response.cookies["tt_session"] = service.cookie(current)
         return response

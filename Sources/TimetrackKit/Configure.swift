@@ -49,6 +49,7 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
     }
     let sender = try mailSender ?? config.smtp.map { try SMTPMailSender(configuration: $0, group: app.eventLoopGroup) }
     app.trustedProxies = config.trustedProxies
+    if let warning = config.trustedProxies.startupWarning { app.logger.warning("\(warning)") }
     let service = AuthService(configuration: config, mailSender: sender)
     // Replace Vapor's default error and URL logging middleware: invite URLs contain secrets.
     app.middleware = Middlewares()

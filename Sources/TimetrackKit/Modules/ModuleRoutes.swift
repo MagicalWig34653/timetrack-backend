@@ -32,7 +32,7 @@ struct ModuleGuard: AsyncMiddleware {
             // Server visibility takes precedence; bearer account rejection remains 401 in authenticators.
             try await auth.modules.require(keys, account: nil, on: req.db)
             if let token = req.cookies["tt_session"]?.string {
-                let context = try await auth.authenticate(token, on: req.db)
+                let context = try await auth.authenticate(token, for: req)
                 try context.normal()
                 try await auth.modules.require(keys, account: context.account.requireID(), on: req.db)
             }

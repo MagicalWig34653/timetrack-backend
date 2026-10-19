@@ -29,6 +29,24 @@ final class InfrastructureErrorTests: XCTestCase, @unchecked Sendable {
         XCTAssertNil(InfrastructureError.classify(APIError.invalid))
     }
 
+    /// Q1 finding 4 / S1b: an unreachable OIDC provider (an outbound HTTP call, not the database) surfaces as a typed OIDC
+    /// error, never as a raw NIO error that the middleware would report as "database unavailable".
+    func testOutboundOIDCFailureIsNotClassifiedAsDatabaseOutage() async throws {
+        let listener = try await ServerBootstrap(group: MultiThreadedEventLoopGroup.singleton).bind(host: "127.0.0.1", port: 0).get()
+        let port = try XCTUnwrap(listener.localAddress?.port)
+        try await listener.close()   // nothing listens on this port any more: connection refused
+        let configuration = try XCTUnwrap(OIDCConfiguration(environment: ["OIDC_ISSUER": "http://127.0.0.1:\(port)", "OIDC_CLIENT_ID": "client"]))
+        let client = OIDCClient(configuration: configuration, group: MultiThreadedEventLoopGroup.singleton)
+        do {
+            _ = try await client.discover()
+            XCTFail("discovery against a closed port must fail")
+        } catch {
+            guard case OIDCClientError.network = error else { return XCTFail("expected OIDCClientError.network, got \(error)") }
+            XCTAssertNil(InfrastructureError.classify(error))
+        }
+        await client.shutdown()
+    }
+
     func testRetryAfterDiffersForPoolTimeout() {
         XCTAssertEqual(InfrastructureError.Kind.poolTimeout.retryAfterSeconds, 5)
         XCTAssertEqual(InfrastructureError.Kind.connectionFailed.retryAfterSeconds, 2)

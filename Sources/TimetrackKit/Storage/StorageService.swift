@@ -70,12 +70,21 @@ struct StorageService: Sendable {
         }
     }
 
+    /// Read-only requests (S1b): the session middleware authenticated the cookie in this very request, so there is no second
+    /// authentication and no global `auth_lock`. A plain transaction keeps one consistent snapshot. Writers use `session`.
+    private func readSession<T: Sendable>(_ context: AuthContext, admin: Bool = false,
+                                          _ operation: @escaping @Sendable (any Database, UUID) async throws -> T) async throws -> T {
+        if admin { try context.admin() } else { try context.normal() }
+        let account = try context.account.requireID()
+        return try await db.transaction { tx in try await operation(tx, account) }
+    }
+
     private func settingsRow(_ db: any Database) async throws -> StorageSettingsRecord? {
         try await StorageSettingsRecord.find(StorageSettingsRecord.rowId, on: db)
     }
 
     func settings(_ context: AuthContext) async throws -> StorageSettingsDTO {
-        try await session(context, admin: true) { tx, _ in try await settingsRow(tx).map(StorageSettingsDTO.init) ?? .defaults }
+        try await readSession(context, admin: true) { tx, _ in try await settingsRow(tx).map(StorageSettingsDTO.init) ?? .defaults }
     }
 
     func putSettings(_ context: AuthContext, _ input: StorageSettingsInput) async throws -> StorageSettingsDTO {
@@ -229,11 +238,11 @@ struct StorageService: Sendable {
     }
 
     func meta(_ context: AuthContext, id: UUID) async throws -> FileMetaDTO {
-        try await session(context) { tx, account in try FileMetaDTO(await ownedFile(tx, account, id)) }
+        try await readSession(context) { tx, account in try FileMetaDTO(await ownedFile(tx, account, id)) }
     }
 
     func download(_ context: AuthContext, id: UUID) async throws -> (file: StoredFileRecord, data: Data) {
-        let (row, backend) = try await session(context) { tx, account -> (StoredFileRecord, any StorageBackend) in
+        let (row, backend) = try await readSession(context) { tx, account -> (StoredFileRecord, any StorageBackend) in
             let row = try await ownedFile(tx, account, id)
             guard StorageBackendKind(rawValue: row.backend) != nil else { throw StorageErrors.corrupt }
             // The file is always read through the backend it was written to, never through a fallback.
@@ -306,7 +315,7 @@ struct StorageService: Sendable {
     }
 
     func attachments(_ context: AuthContext, absence id: UUID) async throws -> [FileMetaDTO] {
-        try await session(context) { tx, account in
+        try await readSession(context) { tx, account in
             try await absence(tx, account, id)
             let links = try await AbsenceAttachmentRecord.query(on: tx).filter(\.$absenceId == id).filter(\.$accountId == account).sort(\.$createdAt).all()
             guard !links.isEmpty else { return [] }

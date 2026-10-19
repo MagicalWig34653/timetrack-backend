@@ -17,3 +17,9 @@ In Swarm (2 Replikate, MariaDB) war auf einem Replikat die Datenbank nicht errei
 
 - MCP-Werkzeugaufrufe melden Infrastrukturfehler weiterhin als `internal_error` (kein HTTP-Status im JSON-RPC-Ergebnis).
 - Die PWA behandelt 503 mit `Retry-After` noch nicht automatisch (Wiederholung); Folgepaket im PWA-Repo.
+
+## Nachtrag S1b (19.10.2026): Klassifizierung und ausgehende Aufrufe
+
+Befund Q1: Allgemeine NIO-Fehler (`IOError`, `NIOConnectionError`, `ChannelError`, `NIOSSLError`) werden als Datenbankausfall gemeldet, auch wenn sie von einem anderen ausgehenden Aufruf stammen. Geprüft: Alle ausgehenden Netzwerkaufrufe fangen oder verpacken ihre Fehler selbst (S3 `StorageBackendError`, SMTP `SMTPError`/Diagnose-Ergebnis, Push `PushOutcome.retry`, MCP als JSON-RPC-Fehler); die einzige Lücke war der OIDC-Client (`http.execute`/`collect`): sein Transportfehler wird jetzt als `OIDCClientError.network` geworfen (Test mit geschlossenem Port; `InfrastructureError.classify` liefert dafür `nil`).
+
+Bewusst **nicht** umgesetzt: eine harte Beschränkung der Middleware auf Fehler, die nachweislich aus einer Datenbankoperation stammen. Eine Grenze im Treiber (Verpacken von `Database`) bricht die SQL-Zugriffe (`requireSQL`), und Fluents Abfrageverlauf erfasst Rohabfragen (`auth_lock`, Migrationen) nicht. Ein Beschränken auf einzelne Transaktions-Helfer würde unauthentifizierte Pfade (Anmeldung) wieder auf 500 zurückfallen lassen, also genau den Fehler aus dem Kontext dieses ADR. Stattdessen: ausgehende Aufrufe liefern nie rohe NIO-Fehler (Regel für neue Clients), und die Warnzeile nennt jetzt zusätzlich den Swift-Typ (`infrastructure error: database connection failed (IOError)`, ohne Meldungstext), damit eine Fehlzuordnung im Log auffällt.

@@ -29,7 +29,8 @@ struct APIErrorMiddleware: AsyncMiddleware {
                 failure = APIError(abort.status, abort.status == .notFound ? "not_found" : "bad_request")
             } else if let kind = InfrastructureError.classify(error) {
                 // Logged once per failed request with the classified reason only (no host, credentials or SQL).
-                request.logger.warning("infrastructure error: \(kind.rawValue)")
+                // The Swift type name helps operators spot a misclassified non-database error (no message text is logged).
+                request.logger.warning("infrastructure error: \(kind.rawValue) (\(type(of: error)))")
                 failure = APIError(.serviceUnavailable, "database_unavailable")
                 retryAfter = kind.retryAfterSeconds
             } else { failure = APIError(.internalServerError, "not_ready") }
