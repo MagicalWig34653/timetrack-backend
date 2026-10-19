@@ -17,6 +17,10 @@ Zahlen unten sind die zuletzt vom Lead selbst gemessenen (Stand der Pakete P2/A8
 | GitHub (öffentlich) | Repos mit Workflows (W1), GitHub-Pages-Website aus `site/` (Pages-Lauf grün), Dependabot-Pull-Requests offen (Stand 17.10.: Backend 2, PWA 3, Apple 1) |
 | TestFlight | Archiv und Export lokal mit `scripts/testflight.sh` im Apple-Repo bestätigt; **Upload steht aus**, weil er auf die AASA-Auslieferung der Produktionsdomain wartet |
 
+## Paket B7 (Urlaubsantrag-Vorlage, 19.10.2026, Lead-Prüfung offen)
+
+Branch `worktree-agent-a5d512514485f6486`: Vorlage (PDF) und Zuordnung für den Urlaubsantrag je Konto, fünf Endpunkte unter `/vacation/request-form`, Datei im Dateispeicher, Export und Kontolöschung (Vertrag v0.25.0, ADR-0026). 357 Tests, 0 Fehler (SQLite und MariaDB). Details `docs/handoffs/B7.md`.
+
 ## Paket B6 (Anhangzahl und Inline-Vorschau, 19.10.2026, Lead-Prüfung offen)
 
 Branch `worktree-agent-a0c3a2218a5ea8324`: `Absence.attachmentCount` (eine aggregierte Abfrage je Liste), `GET /absences?hasAttachment=true|false`, `GET /files/{id}?disposition=inline` nur für sichere Vorschautypen mit nosniff und CSP-Sandbox (Vertrag v0.24.0, ADR-0006 Nachtrag). 354 Tests, 0 Fehler (SQLite und MariaDB). Details `docs/handoffs/B6.md`.

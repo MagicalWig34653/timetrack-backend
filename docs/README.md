@@ -72,6 +72,7 @@ und keine Nutzerentscheidungen (siehe jeweilige Statuszeile). Nummer 0004 existi
 | 0020 | Darstellung (Akzentfarbe, Farbschema) je Konto | akzeptiert (Nutzerentscheidung 16.10.); umgesetzt (P2, A8) | [ADR-0020](decisions/ADR-0020-darstellung-konto.md) |
 | 0021 | Wochenplanung (geplante Zeiten) und Wochenübersicht | Umsetzungsentscheidung (K1); Lead-Prüfung offen | [ADR-0021](decisions/ADR-0021-wochenplanung.md) |
 | 0025 | Urlaubsplanung (Urlaubsvorschläge) | Umsetzungsentscheidung (V2); Lead-Prüfung offen | [ADR-0025](decisions/ADR-0025-urlaubsplanung.md) |
+| 0026 | Vorlage für den Urlaubsantrag je Konto | Umsetzungsentscheidung (B7); Lead-Prüfung offen | [ADR-0026](decisions/ADR-0026-urlaubsantrag-vorlage.md) |
 
 ## Namensgebung und Kennungen (Entscheidung 17.10.2026)
 

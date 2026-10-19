@@ -87,6 +87,13 @@ struct AccountExportService: Sendable {
                                                          "carryOver": .object($0.carryOver.mapValues { .number(Double($0)) }), "carryOverExpiry": Self.opt($0.carryOverExpiry)] })
         let vacationAdjustments = try await VacationAdjustmentRecord.query(on: db).filter(\.$accountId == id).sort(\.$date).all()
         try table("vacation-adjustments", vacationAdjustments.map { ["date": .string($0.date), "halfDays": .number(Double($0.halfDays)), "reason": .string($0.reason), "createdAt": Self.iso($0.createdAt)] })
+        if let form = try await VacationRequestFormRecord.query(on: db).filter(\.$accountId == id).first(),
+           let file = try await StoredFileRecord.query(on: db).filter(\.$id == form.fileId).first() {
+            // The PDF itself is part of `files/` below; this entry links it to its role and carries the mapping.
+            try add("vacation-request-form.json", try Self.json(.object(["fileId": .string(form.fileId.uuidString), "fileName": .string(file.name),
+                "sizeBytes": .number(Double(file.size)), "mapping": form.mapping, "updatedAt": Self.iso(form.updatedAt)])))
+            counts["vacation-request-form"] = .number(1)
+        }
         let calendar = try await CustomCalendarDayRecord.query(on: db).filter(\.$accountId == id).sort(\.$startDate).all()
         try table("calendar-days", calendar.map { ["kind": .string($0.kind), "startDate": .string($0.startDate), "endDate": .string($0.endDate), "name": .string($0.name)] })
         let plan = try await PlanDayRecord.query(on: db).filter(\.$accountId == id).sort(\.$date).all()
