@@ -204,3 +204,9 @@ Stand L3 (19.10.2026). Checkliste vor jedem Release mit Binärverteilung (Image,
 - [ ] PWA-Build: npm-Lizenztexte und die OFL-Schrift (Inter) im ausgelieferten Bundle beilegen (liegt im PWA-Repo; hier nicht umgesetzt). Lockfile-Zählung vom 19.10.2026 stimmt mit der Tabelle oben überein (393 Pfade, gleiche Verteilung; Lockfile-Hash hat sich seit 17.10. geändert).
 - [ ] Apple-Apps: keine externen Swift-Abhängigkeiten laut Inventar; Repo war bei L3 lokal nicht auffindbar, Stand nicht erneut verifiziert.
 - [ ] MPL-Marker (Lightning CSS, nur Build-Werkzeug), Quellcode-Lizenzprüfung der npm-Pakete über die Metadaten hinaus (unverändert offen).
+
+## Entscheidung zur OpenSSL-Lizenz von swift-nio-ssl (19.10.2026)
+
+Nutzerentscheidung: **Weg A**. Auf ein `swift-nio-ssl`-Release warten, das BoringSSL ab Revision `8eb25be6` enthält (Apache-2.0 statt alter OpenSSL-Lizenz), dann `Package.resolved` aktualisieren und die Dateien neu zählen. Kein Pinning eines `main`-Standes, keine Ausnahmeerklärung (`LICENSE-EXCEPTION.md` bleibt ein ungenutzter Entwurf).
+
+Stand 19.10.2026: Neueste Version 2.37.5 (17.09.2026) enthält noch die alte Lizenz. Auf `main` ist BoringSSL seit Commit #607 (09.10.2026) aktualisiert, ein Release fehlt noch. Vor jedem Release prüfen: `gh api repos/apple/swift-nio-ssl/releases --jq '.[0].tag_name'`. Bis dahin sind Binär-Releases und Images mit 2.37.5 lizenzrechtlich nicht freigegeben.
