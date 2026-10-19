@@ -85,6 +85,8 @@ struct AbsenceDTO: Encodable, Sendable {
     var documentReferenceStart: LocalDate?
     var documentReferenceEnd: LocalDate?
     var countedHalfDays: Int
+    /// Linked files that are stored and readable (the same set `GET /absences/{id}/attachments` lists).
+    var attachmentCount: Int
 }
 
 struct CalendarDayDTO: Encodable, Sendable {

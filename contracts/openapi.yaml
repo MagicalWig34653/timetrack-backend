@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.23.0
+  version: 0.24.0
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -56,6 +56,7 @@ info:
     v0.21.0 (AC2, ADR-0020 Nachtrag): AccentId um wine, slate, cocoa, olive, ocean, ink erweitert (dunkle Töne mit weißer Schrift). Server vor v0.21.0 lehnen die IDs mit 400 ab; Clients ohne Kenntnis der IDs zeigen sie als Blau, bestehende Konten bleiben unverändert. Kein Schemawechsel.
     --- V2 (v0.22.0, additiv) ---
     v0.22.0 (V2, ADR-0025): GET /api/v1/vacation/suggestions (Urlaubsplanung: Brückentage, Feiertagsblöcke, Schulferien-Erweiterungen, Auszeiten; Modul planning). Rein lesend, kein Schemawechsel. Feiertage der Region der Urlaubseinstellungen, Arbeitstage des Arbeitsmodells, selbst eingetragene Schulferien (keine eingebauten Termine), bestehende Abwesenheiten, Berufsschul- und Plantage; Budget aus dem Urlaubskonto (halbe Tage möglich). Fehler: 400 invalid, 400 range_too_large (mehr als 18 Monate).
+    v0.24.0 (B6, ADR-0017 Nachtrag): `Absence.attachmentCount` (integer, additiv, immer vorhanden; gespeicherte, lesbare Anhänge, dieselbe Menge wie `GET /absences/{id}/attachments`); `GET /absences` mit optionalem Filter `hasAttachment=true|false` (anderer Wert → 400 bad_request); `GET /files/{id}?disposition=inline` liefert nur für image/png, image/jpeg, image/gif, image/webp, application/pdf und text/plain `Content-Disposition: inline` (mit nosniff und `Content-Security-Policy: sandbox; default-src 'none'`), alles andere bleibt attachment.
     --- S1b (v0.23.0) ---
     v0.23.0 (S1b, ADR-0023 Nachtrag): GET /api/v1/system/info liefert Betriebsfelder (`database`, `schemaMigrations`, `migrationsPending`, `uptimeSeconds`, `replicaId`) nur noch Administratoren; normale Konten erhalten die Versionsfelder (`version`, `revision`, `revisionShort`, `buildDate`, `apiVersion`) und `pwa`. Die Betriebsfelder sind jetzt optional (Schlüssel fehlt statt Nullwert); Clients müssen sie tolerieren. Jede Operation trägt eine kurze deutsche `summary`. MAIL FROM-Fehler der SMTP-Prüfung nennen nur noch die klassifizierte Ursache und den numerischen Code, nie den Serverantworttext.
     --- S1a (v0.20.0, additiv) ---
@@ -911,7 +912,8 @@ paths:
       parameters:
         - { name: from, in: query, required: true, schema: { type: string, format: date } }
         - { name: to, in: query, required: true, schema: { type: string, format: date } }
-      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Absence' } } } } } }
+        - { name: hasAttachment, in: query, required: false, schema: { type: string, enum: ['true', 'false'] }, description: 'true: nur Abwesenheiten mit mindestens einem Anhang, false: nur ohne. Anderer Wert → 400 bad_request.' }
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Absence' } } } } }, '400': { $ref: '#/components/responses/BadRequest' } }
     post:
       operationId: createAbsence
       summary: Abwesenheit anlegen
@@ -1197,9 +1199,14 @@ paths:
     get:
       operationId: downloadFile
       summary: Datei herunterladen
-      description: Nur Eigentümer. Content-Disposition attachment, nosniff.
+      description: |
+        Nur Eigentümer. Standard: Content-Disposition attachment, nosniff. Mit `disposition=inline` wird nur für image/png, image/jpeg, image/gif,
+        image/webp, application/pdf und text/plain `inline` geliefert, zusätzlich mit `Content-Security-Policy: sandbox; default-src 'none'`; jeder andere
+        Typ oder Wert fällt auf attachment zurück. Kontentrennung wie beim normalen Download (fremde Datei → 404).
       security: [ { session: [] } ]
-      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: disposition, in: query, required: false, schema: { type: string, enum: [inline, attachment], default: attachment } }
       responses: { '200': { description: Datei, content: { application/octet-stream: { schema: { type: string, format: binary } } } }, '404': { $ref: '#/components/responses/NotFound' } }
     delete:
       operationId: deleteFile
@@ -2037,8 +2044,8 @@ components:
       allOf:
         - $ref: '#/components/schemas/AbsenceInput'
         - type: object
-          required: [id, version, countedHalfDays]
-          properties: { id: { type: string, format: uuid }, version: { type: integer }, countedHalfDays: { type: integer, description: 'berechneter Verbrauch (nur Arbeitstage, ohne Feiertage)' } }
+          required: [id, version, countedHalfDays, attachmentCount]
+          properties: { id: { type: string, format: uuid }, version: { type: integer }, countedHalfDays: { type: integer, description: 'berechneter Verbrauch (nur Arbeitstage, ohne Feiertage)' }, attachmentCount: { type: integer, minimum: 0, description: 'Anzahl gespeicherter, lesbarer Anhänge (ohne Dateien im Löschen/Fehlerzustand)' } }
     CalendarDay:
       type: object
       required: [startDate, endDate, name, kind, source]

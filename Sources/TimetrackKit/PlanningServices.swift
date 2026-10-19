@@ -1,5 +1,6 @@
 import Foundation
 import Fluent
+import SQLKit
 
 // Stage 3a services. Like the stage-2 services they run inside one serialized unit of work
 // (`TimeServices.session`) and filter every query by the authenticated account.
@@ -136,13 +137,13 @@ extension AbsenceRecord {
         return EngineAbsence(id: try requireID(), kind: kind, startDate: try LocalDate(startDate), endDate: try LocalDate(endDate),
                              status: status, halfDayStart: halfDayStart, halfDayEnd: halfDayEnd)
     }
-    func dto(counted: Int) throws -> AbsenceDTO {
+    func dto(counted: Int, attachments: Int) throws -> AbsenceDTO {
         func optional(_ value: String?) throws -> LocalDate? { try value.map { try LocalDate($0) } }
         let engine = try engine()
         return .init(id: engine.id, version: version, kind: engine.kind, startDate: engine.startDate, endDate: engine.endDate,
                      halfDayStart: halfDayStart, halfDayEnd: halfDayEnd, status: engine.status, note: note, documentStatus: documentStatus,
                      documentSubmittedOn: try optional(documentSubmittedOn), documentReferenceStart: try optional(documentReferenceStart),
-                     documentReferenceEnd: try optional(documentReferenceEnd), countedHalfDays: counted)
+                     documentReferenceEnd: try optional(documentReferenceEnd), countedHalfDays: counted, attachmentCount: attachments)
     }
 }
 
@@ -173,14 +174,36 @@ struct AbsenceService: Sendable {
     }
     func get(_ id: UUID) async throws -> AbsenceDTO {
         let row = try await record(id)
-        return try row.dto(counted: try await counter().lenientCount(row.engine()))
+        return try row.dto(counted: try await counter().lenientCount(row.engine()), attachments: try await attachmentCounts(only: id)[id] ?? 0)
     }
-    func list(from: LocalDate, to: LocalDate) async throws -> [AbsenceDTO] {
+    /// Stored, readable attachments per absence of this account in ONE aggregated query. Links to files that are
+    /// being deleted, failed or still pending do not count (same rule as the attachment list); absences without
+    /// attachments are missing from the result.
+    func attachmentCounts(only absence: UUID? = nil) async throws -> [UUID: Int] {
+        let sql = try requireSQL(scope.db)
+        let rows = try await sql.raw("""
+            SELECT a.absence_id AS absence_id, COUNT(*) AS n FROM absence_attachments a \
+            JOIN stored_files f ON f.id = a.file_id AND f.account_id = a.account_id \
+            WHERE a.account_id = \(bind: scope.accountId) AND f.state = \(bind: FileState.stored.rawValue) GROUP BY a.absence_id
+            """).all()
+        var counts: [UUID: Int] = [:]
+        for row in rows {
+            guard let id = try? row.decode(column: "absence_id", as: UUID.self), let n = try? row.decode(column: "n", as: Int.self) else { continue }
+            if absence == nil || absence == id { counts[id] = n }
+        }
+        return counts
+    }
+    func list(from: LocalDate, to: LocalDate, hasAttachment: Bool? = nil) async throws -> [AbsenceDTO] {
         try LocalDate.checkedRange(from: from, to: to, maxDays: PlanningLimits.planningRangeDays)
         let rows = try await AbsenceRecord.query(on: scope.db).filter(\.$accountId == scope.accountId)
             .filter(\.$startDate <= to.description).filter(\.$endDate >= from.description).sort(\.$startDate).all()
         let counter = try await counter()
-        return try rows.map { try $0.dto(counted: counter.lenientCount($0.engine())) }
+        let attachments = try await attachmentCounts()
+        return try rows.compactMap { row -> AbsenceDTO? in
+            let n = try attachments[row.requireID()] ?? 0
+            if let hasAttachment, (n > 0) != hasAttachment { return nil }
+            return try row.dto(counted: counter.lenientCount(row.engine()), attachments: n)
+        }
     }
     private func validate(_ input: AbsenceInputDTO) throws {
         guard input.startDate <= input.endDate, input.startDate.distance(to: input.endDate) < PlanningLimits.absenceDays,
@@ -209,7 +232,7 @@ struct AbsenceService: Sendable {
         try await ensureNoOverlap(candidate)
         let counted = try await counter().count(candidate)
         try await row.create(on: scope.db)
-        return try row.dto(counted: counted)
+        return try row.dto(counted: counted, attachments: 0)
     }
     func update(_ id: UUID, _ input: AbsenceInputDTO, version: Int?) async throws -> AbsenceDTO {
         let row = try await record(id)
@@ -220,7 +243,7 @@ struct AbsenceService: Sendable {
         try await ensureNoOverlap(candidate)
         let counted = try await counter().count(candidate)
         try await row.update(on: scope.db)
-        return try row.dto(counted: counted)
+        return try row.dto(counted: counted, attachments: try await attachmentCounts(only: id)[id] ?? 0)
     }
     func delete(_ id: UUID) async throws {
         try await record(id).delete(on: scope.db)

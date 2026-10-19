@@ -409,7 +409,7 @@ extension AuthTests {
     }
 
     var storageScenarios: [Scenario] {
-        [scenarioStorageSettings, scenarioFilesCore, scenarioRulesApplyToNewUploadsOnly, scenarioS3EndToEnd, scenarioCompensation, scenarioAttachments]
+        [scenarioStorageSettings, scenarioFilesCore, scenarioRulesApplyToNewUploadsOnly, scenarioS3EndToEnd, scenarioCompensation, scenarioAttachments, scenarioAttachmentCount, scenarioInlineDownload]
     }
 
     func testStorageRESTSQLite() async throws {

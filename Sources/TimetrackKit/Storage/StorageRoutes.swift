@@ -43,8 +43,11 @@ func registerStorageRoutes(_ app: Application, auth: AuthService) {
         let (file, data) = try await service(req).download(req.authContext, id: id(req))
         var headers = HTTPHeaders()
         headers.replaceOrAdd(name: .contentType, value: file.contentType)
-        headers.replaceOrAdd(name: .contentDisposition, value: FilenameSanitizer.contentDisposition(file.name))
+        // `?disposition=inline` only for the safe previewable whitelist; any other value or type falls back to attachment.
+        let inline = req.query[String.self, at: "disposition"] == "inline" && FilenameSanitizer.isInlineSafe(file.contentType)
+        headers.replaceOrAdd(name: .contentDisposition, value: FilenameSanitizer.contentDisposition(file.name, inline: inline))
         headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
+        if inline { headers.replaceOrAdd(name: "Content-Security-Policy", value: FilenameSanitizer.inlineCSP) }
         headers.replaceOrAdd(name: .cacheControl, value: "private, no-store")
         return Response(status: .ok, headers: headers, body: .init(data: data))
     }

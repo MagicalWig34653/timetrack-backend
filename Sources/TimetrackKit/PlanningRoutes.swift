@@ -58,7 +58,13 @@ func registerPlanningRoutes(_ app: Application, auth: AuthService) {
 
     api.get("absences") { req async throws -> Response in
         let from = try query(req, "from"), to = try query(req, "to")
-        return try await runRead(req) { try timeResponse(await $0.absences.list(from: from, to: to)) }
+        // Strict: only the literals true and false are accepted.
+        var hasAttachment: Bool?
+        if let raw = req.query[String.self, at: "hasAttachment"] {
+            switch raw { case "true": hasAttachment = true; case "false": hasAttachment = false; default: throw APIError.invalid }
+        }
+        let filter = hasAttachment
+        return try await runRead(req) { try timeResponse(await $0.absences.list(from: from, to: to, hasAttachment: filter)) }
     }
     api.post("absences") { req async throws -> Response in
         let input = try timeDecode(AbsenceInputDTO.self, request: req)

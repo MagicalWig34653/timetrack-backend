@@ -92,8 +92,17 @@ enum FilenameSanitizer {
         return name
     }
 
-    /// `Content-Disposition: attachment` with an ASCII fallback and an RFC 5987 UTF-8 name.
-    static func contentDisposition(_ name: String) -> String {
+    /// Types that may be served inline for previews. HTML, SVG and anything scriptable are deliberately absent.
+    static let inlineSafeTypes: Set<String> = ["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf", "text/plain"]
+    /// Sandbox without any allowance: no scripts, no forms, no plugins, nothing is loaded from elsewhere.
+    static let inlineCSP = "sandbox; default-src 'none'"
+    static func isInlineSafe(_ contentType: String) -> Bool {
+        let base = contentType.split(separator: ";").first.map { $0.trimmingCharacters(in: .whitespaces).lowercased() } ?? ""
+        return inlineSafeTypes.contains(base)
+    }
+
+    /// `Content-Disposition: attachment` (or `inline` for whitelisted previews) with an ASCII fallback and an RFC 5987 UTF-8 name.
+    static func contentDisposition(_ name: String, inline: Bool = false) -> String {
         let ascii = String(String.UnicodeScalarView(name.unicodeScalars.map { $0.isASCII && $0 != "\"" && $0 != "\\" && $0 != "%" ? $0 : "_" }))
         var encoded = ""
         for byte in name.utf8 {
@@ -103,6 +112,6 @@ enum FilenameSanitizer {
             default: encoded += String(format: "%%%02X", byte)
             }
         }
-        return "attachment; filename=\"\(ascii)\"; filename*=UTF-8''\(encoded)"
+        return "\(inline ? "inline" : "attachment"); filename=\"\(ascii)\"; filename*=UTF-8''\(encoded)"
     }
 }

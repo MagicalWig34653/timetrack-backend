@@ -17,6 +17,10 @@ Zahlen unten sind die zuletzt vom Lead selbst gemessenen (Stand der Pakete P2/A8
 | GitHub (öffentlich) | Repos mit Workflows (W1), GitHub-Pages-Website aus `site/` (Pages-Lauf grün), Dependabot-Pull-Requests offen (Stand 17.10.: Backend 2, PWA 3, Apple 1) |
 | TestFlight | Archiv und Export lokal mit `scripts/testflight.sh` im Apple-Repo bestätigt; **Upload steht aus**, weil er auf die AASA-Auslieferung der Produktionsdomain wartet |
 
+## Paket B6 (Anhangzahl und Inline-Vorschau, 19.10.2026, Lead-Prüfung offen)
+
+Branch `worktree-agent-a0c3a2218a5ea8324`: `Absence.attachmentCount` (eine aggregierte Abfrage je Liste), `GET /absences?hasAttachment=true|false`, `GET /files/{id}?disposition=inline` nur für sichere Vorschautypen mit nosniff und CSP-Sandbox (Vertrag v0.24.0, ADR-0006 Nachtrag). 354 Tests, 0 Fehler (SQLite und MariaDB). Details `docs/handoffs/B6.md`.
+
 ## Paket S1b (Sicherheitsbefunde Q1, 19.10.2026, Lead-Prüfung offen)
 
 Branch `worktree-agent-aecf20448f928398e`: `system/info` Betriebsfelder nur für Administratoren (Vertrag v0.23.0, ADR-0023 Nachtrag; **PWA muss die fehlenden Felder tolerieren, siehe Handoff**), SMTP-Prüfung ohne Serverantworttext und mit Schwärzung der Zugangsdaten, `X-Real-IP`-Doku und Startwarnung, OIDC-Transportfehler nicht mehr als Datenbankausfall, `summary` je Operation (Vertragstest), Anmeldung einmal pro Anfrage (Modul-GET: 8 auf 6 Abfragen, 2 auf 1 Sitzungsabfrage), Lizenzkette BoringSSL ergänzt. 353 Tests, 0 Fehler (SQLite und MariaDB). Details `docs/handoffs/S1b.md`.
