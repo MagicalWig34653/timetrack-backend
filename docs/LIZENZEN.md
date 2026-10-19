@@ -140,6 +140,17 @@ Stand 17.10.2026 (Paket D3, maschinell aus dem Lockfile ausgezählt, nicht erneu
 
 `jszip` (Dual-Lizenz, MIT wählbar) und `pako` sind Abhängigkeiten von `exceljs` und nur in Tests der PWA verwendet; nicht in der Auslieferung (ungeprüft, dass sie nicht gebündelt werden).
 
+### Laufzeit-Abhängigkeiten der PWA: Urlaubsantrag (Pakete P6/P8, 19.10.2026)
+
+Anders als der Rest der PWA-Abhängigkeiten gehören diese beiden Pakete zu den `dependencies` und landen **im ausgelieferten Bundle** (als eigene, erst bei Bedarf geladene Chunks; der Service Worker legt sie vor):
+
+| Paket | Version | Lizenz | Verwendung | Hinweis |
+| --- | --- | --- | --- | --- |
+| `pdf-lib` | 1.17.1 | MIT | PDF-Felder lesen und ausfüllen, Textpositionen setzen, Flatten, im Browser | **Seit Jahren nicht mehr gepflegt** (letzte Version 2021). Risiko: keine Sicherheits- oder Kompatibilitätskorrekturen für neue PDF-Varianten; es verarbeitet nur das eigene, vom Nutzer hochgeladene Formular im Browser (nichts geht an Dritte), das Risiko beschränkt sich damit auf Fehlfunktion bei ungewöhnlichen PDFs und auf die transitiven Pakete. Ersatz bei Bedarf: der gepflegte Fork `@cantoo/pdf-lib` (MIT, gleiche API). Transitiv: `@pdf-lib/standard-fonts` 1.0.0 (MIT), `@pdf-lib/upng` 1.0.1 (MIT), `pako` 1.0.11 (MIT AND Zlib), `tslib` 1.14.1 (0BSD). |
+| `pdfjs-dist` | 6.4.299 | Apache-2.0 | Seitenvorschau im Browser (Haupt-Chunk und Worker) | Gepflegt (Mozilla). Optionale Abhängigkeit `@napi-rs/canvas` wird im Browser nicht benötigt. Das Paket enthält Datenverzeichnisse (`standard_fonts`, `cmaps`, `iccs`) mit eigenen Schrift-/Datenlizenzen (u. a. Foxit, Liberation); die App verweist nicht darauf, ob sie im Build landen, ist vor dem Release zu prüfen. Apache-2.0 verlangt die Beilage von Lizenztext und NOTICE im Bundle. |
+
+Beide sind mit AGPL-3.0-only vereinbar (permissive Lizenzen). Die Lockfile-Zählung oben (393 Pfade, Stand D3) enthält diese Pakete noch nicht; bei der nächsten Neuauszählung sind sie als Laufzeit- statt Build-Abhängigkeiten zu führen. Die echte Arbeitgeber-Vorlage ist kein Teil des Repositories; Tests verwenden synthetische PDFs.
+
 ### Nicht-permissive Einträge (vollständig)
 
 | Lockfile-Pfad | Version | SPDX |
@@ -201,7 +212,7 @@ Stand L3 (19.10.2026). Checkliste vor jedem Release mit Binärverteilung (Image,
 - [x] XKCP-Dateiköpfe in `swift-crypto` geprüft (CC0, Gladman-BSD-artig, Apache); Gladman-Hinweis wird in `THIRD-PARTY-NOTICES` mitgeliefert.
 - [x] `THIRD-PARTY-NOTICES` im Image (`/usr/share/doc/timetrack/`) und als Release-Asset; vor dem Release prüfen, dass das Asset 43 Pakete enthält (`grep -c '^Package:'`).
 - [x] Betriebssystempakete des Images im Notices-Teil 2 (dpkg `copyright`); bei Änderung der Basis-Image-Version Stichprobe auf GPL/LGPL-Pakete und Quellcode-Angebot.
-- [ ] PWA-Build: npm-Lizenztexte und die OFL-Schrift (Inter) im ausgelieferten Bundle beilegen (liegt im PWA-Repo; hier nicht umgesetzt). Lockfile-Zählung vom 19.10.2026 stimmt mit der Tabelle oben überein (393 Pfade, gleiche Verteilung; Lockfile-Hash hat sich seit 17.10. geändert).
+- [ ] PWA-Build: Lizenztexte von `pdf-lib` (MIT), `pdfjs-dist` (Apache-2.0, inkl. NOTICE) und ihren transitiven Paketen sowie prüfen, ob pdf.js-Datenverzeichnisse im Build liegen (neu P8); npm-Lizenztexte und die OFL-Schrift (Inter) im ausgelieferten Bundle beilegen (liegt im PWA-Repo; hier nicht umgesetzt). Lockfile-Zählung vom 19.10.2026 stimmt mit der Tabelle oben überein (393 Pfade, gleiche Verteilung; Lockfile-Hash hat sich seit 17.10. geändert).
 - [ ] Apple-Apps: keine externen Swift-Abhängigkeiten laut Inventar; Repo war bei L3 lokal nicht auffindbar, Stand nicht erneut verifiziert.
 - [ ] MPL-Marker (Lightning CSS, nur Build-Werkzeug), Quellcode-Lizenzprüfung der npm-Pakete über die Metadaten hinaus (unverändert offen).
 
