@@ -163,6 +163,12 @@ PWA nicht als verlässlichen Hintergrund-Geofence planen; PWA-Offline-Sync erset
 Umsetzungsstand: `POST /api/v1/automation/events` mit Gerätetoken (Scope `automation`) umgesetzt (ADR-0004, C6/C7);
 Ereignistypen `arrival`, `presence_confirmed`, `departure`, `cancel`. Erprobung mit realen Shortcuts steht aus.
 
+**W1 (ADR-0027)**: Ein `departure` beendet jeden laufenden Abschnitt, auch manuell gestartete (Modus `direct`: Ende = Ereigniszeit, `suggest`: Ende-Vorschlag, `off`: nur festgehalten); ein an einen anderen Ort gebundener Abschnitt bleibt, Vorbeifahrt bucht nichts, ohne laufenden Timer ist der Abgang ein harmloses `ignored`. Die Regeln liegen in `AutomationService` (`stopRunning`).
+
+**Auslöse-Links (W1, ADR-0027)**: `GET /t/{token}/{start|stop|toggle}` ohne Sitzung für Werkzeuge, die nur einen einfachen GET senden können. Das Token (256 Bit, nur als SHA-256-Hash gespeichert, einmalig bei der Erstellung sichtbar) in der URL ist die einzige Berechtigung. Je Link: Bezeichnung, erlaubte Aktionen, optionaler Ort, Ablauf, Widerruf, „zuletzt benutzt“; Verwaltung per Sitzung unter `/api/v1/me/trigger-links` (Modul `automation`, nicht per MCP). Unbekannte, widerrufene und abgelaufene Token sowie nicht erlaubte Aktionen antworten ununterscheidbar mit 404; Ratenbegrenzung je Link und je Client; `Cache-Control: no-store`; Aktionen sind idempotent (Start bei laufendem Timer und Stopp ohne Timer ändern nichts, `toggle` mit 10-s-Wiederholungsschutz, HEAD und Prefetch lösen nichts aus); `?at=` höchstens 2 Stunden zurück. Es gelten dieselben Ortsmodi und Kontenrechte wie bei der Automation; Daten: Tabelle `trigger_links`, Kontoexport ohne Token, Löschung mit dem Konto.
+
+*Sicherheitshinweis zu GET mit Geheimnis in der URL:* Die URL gelangt in Browserverlauf, Lesezeichen, Synchronisation, Protokolle von Proxys/Zielgeräten und Screenshots; jeder, der sie kennt, kann Zeiten beginnen und beenden (nicht lesen, ändern oder löschen). Daher: ein Link je Zweck mit nur den nötigen Aktionen (und wenn möglich Ort und Ablauf), den Link nicht teilen oder in Chats einfügen, bei Verdacht oder Gerätewechsel sofort widerrufen, Proxy-Zugriffsprotokolle für `/t/` schwärzen (`docs/installation/proxy.md`). Wo ein Header gesetzt werden kann, ist das Gerätetoken mit `POST /automation/events` vorzuziehen. Das Backend protokolliert keine Anfragepfade und schwärzt `/t/<token>` zusätzlich im Konsolenlog.
+
 ## 6. Dateispeicherung
 
 Bestätigt: Admin wählt DB, S3 oder lokalen Pfad, auch abhängig von Dateigröße.

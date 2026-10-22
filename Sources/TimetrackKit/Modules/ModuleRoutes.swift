@@ -19,7 +19,7 @@ struct ModuleGuard: AsyncMiddleware {
         case "time": return parts.dropFirst(3).first == "suggestions" ? [.automation] : []
         case "me":
             switch parts.dropFirst(3).first {
-            case "device-tokens": return [.automation]
+            case "device-tokens", "trigger-links": return [.automation]
             case "oauth-grants", "api-tokens": return [.mcp]
             default: return []
             }

@@ -7,7 +7,7 @@ extension AuthTests {
         [(.reports, ["reports/learning-fields"]),
          (.planning, ["vacation/settings", "absences?from=2026-10-01&to=2026-10-31", "calendar/holidays?year=2026", "vacation/suggestions?from=2026-10-01&to=2026-10-31", "plan/days?from=2026-10-01&to=2026-10-31", "shares", "shares/incoming"]),
          (.transfer, ["export/time?from=2026-10-01&to=2026-10-02&format=csv", "import-templates", "admin/storage"]),
-         (.automation, ["me/device-tokens", "time/suggestions"]),
+         (.automation, ["me/device-tokens", "me/trigger-links", "time/suggestions"]),
          (.mcp, ["me/api-tokens", "me/oauth-grants"])]
     }
     func setModules(_ app: Application, _ context: AuthContext, _ values: [String: Bool], server: Bool = false) async throws {

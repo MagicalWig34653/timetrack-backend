@@ -22,7 +22,7 @@ extension AuthTests {
         var result: [String: Int] = [:]
         func add<M: Model>(_ type: M.Type, _ column: String = "account_id") async throws { result[M.schema + "." + column] = try await countRows(type, column, id, on: db) }
         try await add(WorkModelRecord.self); try await add(PlaceRecord.self); try await add(SegmentRecord.self); try await add(RevisionRecord.self)
-        try await add(DayPreferenceRecord.self); try await add(AdjustmentRecord.self); try await add(SuggestionRecord.self); try await add(DeviceTokenRecord.self)
+        try await add(DayPreferenceRecord.self); try await add(AdjustmentRecord.self); try await add(SuggestionRecord.self); try await add(DeviceTokenRecord.self); try await add(TriggerLinkRecord.self)
         try await add(AutomationEventRecord.self); try await add(TimerEventRecord.self)
         try await add(VacationSettingsRecord.self); try await add(VacationSnapshotRecord.self); try await add(VacationAdjustmentRecord.self)
         try await add(AbsenceRecord.self); try await add(CustomCalendarDayRecord.self); try await add(PlanDayRecord.self)
@@ -72,6 +72,7 @@ extension AuthTests {
 
         let scope = TimeServices(accountId: id, db: app.db)
         let device = try await scope.devices.create(.init(name: "Phone", expiresInDays: 1))
+        _ = try await scope.triggerLinks.create(.init(label: "Seed link", actions: ["start", "stop"]))
         let credentials = OAuthCredentialService(auth: auth, oauth: OAuthService(auth: auth))
         let personal = try await credentials.createToken(.init(name: "Test", scopes: Array(McpScopes.known), expiresInDays: 1), context, on: app.db)
         let client = try await oaRegister(app)
@@ -300,7 +301,7 @@ extension AuthTests {
             let before = try await self.accountRowCounts(bId, on: app.db)
             let beforeA = try await self.accountRowCounts(aId, on: app.db)
             XCTAssertTrue(beforeA.filter { $0.key != "stored_files.account_id" || true }.values.allSatisfy { $0 > 0 || $0 == 0 })
-            for key in ["work_segments.account_id", "absences.account_id", "stored_files.account_id", "shares.owner_id", "shares.recipient_id", "report_entries.account_id", "api_tokens.account_id", "oauth_grants.account_id", "device_tokens.account_id", "push_subscriptions.account_id", "import_jobs.account_id", "sessions.account_id", "passkeys.account_id"] {
+            for key in ["work_segments.account_id", "absences.account_id", "stored_files.account_id", "shares.owner_id", "shares.recipient_id", "report_entries.account_id", "api_tokens.account_id", "oauth_grants.account_id", "device_tokens.account_id", "trigger_links.account_id", "push_subscriptions.account_id", "import_jobs.account_id", "sessions.account_id", "passkeys.account_id"] {
                 XCTAssertGreaterThan(beforeA[key] ?? 0, 0, key)
             }
             if let directory { try await self.eq(self.diskFiles(directory).count, 2) } else { try await self.eq(try await FileBlobRecord.query(on: app.db).count(), 2) }

@@ -18,7 +18,7 @@ struct APIErrorMiddleware: AsyncMiddleware {
     func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         do {
             let response = try await next.respond(to: request)
-            if request.url.path.hasPrefix("/api/") { response.headers.replaceOrAdd(name: .cacheControl, value: "no-store") }
+            if request.url.path.hasPrefix("/api/") || request.url.path.hasPrefix("/t/") { response.headers.replaceOrAdd(name: .cacheControl, value: "no-store") }
             return response
         } catch {
             let failure: APIError

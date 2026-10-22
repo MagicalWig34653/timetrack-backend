@@ -82,6 +82,7 @@ Rundung nur an den äußersten Tagesgrenzen, Roh-/korrigierte/bewertete Zeit get
 Automatik per Gerätetoken je Ort `direct`/`suggest`/`off` mit Vorbeifahrtschutz (Standard 300 s Bestätigung, Rückdatierung auf
 Ankunft). **Nicht auf Echtgeräten geprüft**: Shortcuts mit echter Standortauslösung. Ein globaler Schalter für die Automatik ist
 als Modul `automation` **umgesetzt** (ADR-0012, C20/L17); zusätzlich je Ort `off` bzw. Gerätetoken widerrufen.
+W1 (ADR-0027, **umgesetzt**): Ein Abgangsereignis beendet auch einen manuell oder anderweitig gestarteten laufenden Timer (Modus `direct` zur Ereigniszeit, `suggest` als Vorschlag, `off` nie; Vorbeifahrt bucht nichts). Für Werkzeuge ohne POST/Header gibt es pro Konto Auslöse-Links (`GET /t/<geheimes-token>/start|stop|toggle`, widerrufbar, optional an einen Ort gebunden); Nutzeranforderung, Sicherheitsabwägung in ADR-0027 und `ARCHITEKTUR.md` Abschnitt 5.
 
 Pausenvorlagen nur innerhalb aktiver Arbeitszeit anwenden, Überschneidungen nicht doppelt abziehen.
 Eine übersprungene Pause bleibt als tatsächliche Arbeit erfasst. Keine Pause zur vermeintlichen

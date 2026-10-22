@@ -104,6 +104,14 @@ struct AutomationService: Sendable {
                     // No confirmation in this visit owns the unresolved running segment.
                     let suggestion = try await missingDeparture(running, proposedEnd: input.occurredAt)
                     result = .init(result: "suggested", segmentId: running.id, suggestionId: suggestion.id)
+                } else if arrival == nil, let running = try await scope.timer.current() {
+                    // W1: a departure without any recorded arrival also stops a timer that was started manually (or by another
+                    // means), provided it is not bound to a different place. Mode "direct" stops it at the event time, "suggest" proposes it.
+                    if let bound = running.placeId, bound != input.placeId { result.result = "ignored" }
+                    else { result = try await stopRunning(running, at: input.occurredAt, placeId: input.placeId, mode: place.automationMode) }
+                } else if arrival == nil {
+                    // Nothing runs and no visit is open: harmless no-op.
+                    result.result = "ignored"
                 } else if closed { result.result = "needs_review" }
                 else if let confirmed, let segmentId = confirmed.result.segmentId {
                     let row = try await scope.segments.record(segmentId)
@@ -145,6 +153,22 @@ struct AutomationService: Sendable {
         event.sequence = try await AutomationEventRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).count() + 1
         event.payload = input; event.result = result; try await event.create(on: scope.db)
         return result
+    }
+    /// W1: stops (mode direct) or proposes to stop (mode suggest) a running timer at `at`, whatever started it.
+    /// Shared by departure events and trigger links so that both follow the same rules.
+    func stopRunning(_ running: SegmentRecord, at: Date, placeId: UUID?, mode: String) async throws -> AutomationResult {
+        guard at > running.startedAt else { return .init(result: "needs_review") }
+        if mode == "suggest" {
+            let open = try await SuggestionRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).filter(\.$resolvedAt == nil).all()
+            if let existing = open.first(where: { $0.payload.type == "end" && $0.payload.segmentId == running.id }) {
+                return .init(result: "suggested", segmentId: running.id, suggestionId: existing.payload.id)
+            }
+            let suggestion = try await scope.suggestions.create(type: "end", placeId: placeId, start: nil, end: at, segmentId: running.id)
+            return .init(result: "suggested", segmentId: running.id, suggestionId: suggestion.id)
+        }
+        var next = try running.dto(); next.endedAt = at
+        _ = try await scope.segments.revise(running, value: next, reason: "Automation departure")
+        return .init(result: "booked", segmentId: running.id)
     }
     func reviewMissingDeparture(now: Date = Date()) async throws {
         guard let row = try await scope.timer.current(), row.source == "automation" else { return }

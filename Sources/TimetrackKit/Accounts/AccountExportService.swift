@@ -51,6 +51,13 @@ struct AccountExportService: Sendable {
             ["id": .string(r.id?.uuidString ?? ""), "segmentId": .string(r.segmentId.uuidString), "reason": .string(r.reason),
              "createdAt": Self.iso(r.createdAt), "before": try Self.value(r.before), "after": try Self.value(r.after)]
         })
+        // Trigger links: metadata only, never the token or its hash (W1).
+        let triggerLinks = try await TriggerLinkRecord.query(on: db).filter(\.$accountId == id).sort(\.$createdAt).all()
+        try table("trigger-links", triggerLinks.map { l in
+            ["id": .string(l.id?.uuidString ?? ""), "label": .string(l.label), "actions": .array(l.actions.map(JSONValue.string)), "placeId": Self.uuid(l.placeId),
+             "kind": .string(l.kind), "createdAt": Self.iso(l.createdAt), "expiresAt": Self.iso(l.expiresAt), "revokedAt": Self.iso(l.revokedAt),
+             "lastUsedAt": Self.iso(l.lastUsedAt)]
+        })
         let absences = try await AbsenceRecord.query(on: db).filter(\.$accountId == id).sort(\.$startDate).all()
         try table("absences", absences.map { a in
             ["id": .string(a.id?.uuidString ?? ""), "kind": .string(a.kind), "startDate": .string(a.startDate), "endDate": .string(a.endDate),

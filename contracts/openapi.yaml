@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.25.0
+  version: 0.26.0
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -59,6 +59,8 @@ info:
     v0.24.0 (B6, ADR-0017 Nachtrag): `Absence.attachmentCount` (integer, additiv, immer vorhanden; gespeicherte, lesbare Anhänge, dieselbe Menge wie `GET /absences/{id}/attachments`); `GET /absences` mit optionalem Filter `hasAttachment=true|false` (anderer Wert → 400 bad_request); `GET /files/{id}?disposition=inline` liefert nur für image/png, image/jpeg, image/gif, image/webp, application/pdf und text/plain `Content-Disposition: inline` (mit nosniff und `Content-Security-Policy: sandbox; default-src 'none'`), alles andere bleibt attachment.
     --- B7 (v0.25.0, additiv) ---
     v0.25.0 (B7, ADR-0026): Vorlage für den Urlaubsantrag je Konto (Modul planning, privat, genau eine): GET /api/v1/vacation/request-form (`exists`, `fileName`, `sizeBytes`, `mapping`, `updatedAt`; ohne Vorlage `exists:false` mit Nullwerten), PUT .../file (Body application/pdf, höchstens 5 MB, Magic Number `%PDF-`, Header `X-File-Name` prozent-kodiert; 400 bad_request, 413 file_too_large, 415 unsupported_type; ersetzt die vorige Datei und behält die Zuordnung), PUT .../mapping (JSON-Objekt, undurchsichtig, höchstens 64 KB; 409 no_template ohne Vorlage, 413 mapping_too_large), GET .../file (PDF als attachment, nosniff; 404 ohne Vorlage), DELETE /api/v1/vacation/request-form (idempotent 204). Die Datei folgt den Speicherregeln (DB/S3/lokal), steckt im Kontoexport (`vacation-request-form.json` und `files/`) und wird mit dem Konto gelöscht. Neuer Fehlercode: no_template (409), mapping_too_large (413).
+    --- W1 (v0.26.0, additiv) ---
+    v0.26.0 (W1, ADR-0027): (A) Ein Abgangsereignis (`departure`) in POST /api/v1/automation/events beendet jetzt auch einen laufenden Timer, den keine Ankunft gestartet hat (manuell, Timer-Endpunkt, anderer Weg): Ortsmodus `direct` setzt das Ende auf `occurredAt` (Ergebnis `booked`), `suggest` legt einen Ende-Vorschlag an (`suggested`), `off` bleibt `recorded`. Ein an einen anderen Ort gebundener Timer bleibt unberührt (`ignored`); ohne laufenden Timer und ohne Ankunft ist das Ereignis ein harmloses `ignored` (bisher `needs_review`). Vorbeifahrt (Ankunft ohne Bestätigung) bucht nichts. (B) Auslöse-Links: GET /t/{token}/{action} (ohne Sitzung und Header; das 256-Bit-Token in der URL ist die einzige Berechtigung; `action` start, stop oder toggle; optional `at` (höchstens 2 h zurück), `place`, `format=text`); Antworten immer `Cache-Control: no-store`; unbekannte, widerrufene, abgelaufene Token und nicht erlaubte Aktionen sind ununterscheidbar 404; 429 bei zu vielen Anfragen je Link bzw. zu vielen Fehlversuchen je Client. Verwaltung: GET/POST /api/v1/me/trigger-links und DELETE /api/v1/me/trigger-links/{id} (Modul automation, Sitzung, CSRF; Klartext-Token und `path` nur in der POST-Antwort). Neue Tabelle `trigger_links` (Migration w1.create_trigger_links), Export `trigger-links.json` (ohne Token), Kontolöschung widerruft und entfernt die Links. Neuer Fehlercode: too_many_trigger_links (409).
     --- S1b (v0.23.0) ---
     v0.23.0 (S1b, ADR-0023 Nachtrag): GET /api/v1/system/info liefert Betriebsfelder (`database`, `schemaMigrations`, `migrationsPending`, `uptimeSeconds`, `replicaId`) nur noch Administratoren; normale Konten erhalten die Versionsfelder (`version`, `revision`, `revisionShort`, `buildDate`, `apiVersion`) und `pwa`. Die Betriebsfelder sind jetzt optional (Schlüssel fehlt statt Nullwert); Clients müssen sie tolerieren. Jede Operation trägt eine kurze deutsche `summary`. MAIL FROM-Fehler der SMTP-Prüfung nennen nur noch die klassifizierte Ursache und den numerischen Code, nie den Serverantworttext.
     --- S1a (v0.20.0, additiv) ---
@@ -820,6 +822,59 @@ paths:
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '204': { description: widerrufen }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/me/trigger-links:
+    get:
+      operationId: listTriggerLinks
+      summary: Auslöse-Links auflisten
+      description: Aktive (nicht widerrufene) Links des Kontos. Token und Pfad werden nie wieder ausgegeben.
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/TriggerLink' } } } } } }
+    post:
+      operationId: createTriggerLink
+      summary: Auslöse-Link erzeugen
+      description: |
+        Erzeugt einen Link für `GET /t/{token}/{action}`. `actions` nicht leer, Teilmenge von start, stop, toggle; `placeId` bindet den Link an einen Ort
+        (Start legt den Abschnitt dort an, Ortsmodus wird beachtet); `kind` Standard work. Höchstens 20 aktive Links (409 too_many_trigger_links).
+        Das Token (`token`) und der Pfad (`path`, `/t/<token>`) stehen nur in dieser Antwort.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [label, actions], properties: { label: { type: string, maxLength: 80 }, actions: { type: array, minItems: 1, items: { type: string, enum: [start, stop, toggle] } }, placeId: { type: [string, 'null'], format: uuid }, kind: { type: string, enum: [work, travel, school] }, expiresInDays: { type: integer, minimum: 1, maximum: 730 } } } } } }
+      responses:
+        '201': { description: erzeugt, content: { application/json: { schema: { $ref: '#/components/schemas/TriggerLink' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { description: Höchstzahl aktiver Links erreicht (too_many_trigger_links), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/v1/me/trigger-links/{id}:
+    delete:
+      operationId: revokeTriggerLink
+      summary: Auslöse-Link widerrufen
+      description: Der Link antwortet danach sofort mit 404. Wiederholtes Widerrufen ist ein No-op.
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '204': { description: widerrufen }, '404': { $ref: '#/components/responses/NotFound' } }
+  /t/{token}/{action}:
+    get:
+      operationId: fireTriggerLink
+      summary: Zeiterfassung per Auslöse-Link steuern
+      description: |
+        Ohne Anmeldung: das Token im Pfad ist die einzige Berechtigung (siehe docs/ARCHITEKTUR.md, Sicherheitshinweis). Aktionen sind idempotent:
+        Start bei laufendem Timer (`already_running`) und Stopp ohne laufenden Timer (`already_stopped`) ändern nichts. `toggle` startet oder stoppt;
+        ein zweites toggle desselben Links innerhalb von 10 s gilt als Wiederholung und ändert nichts. Der Stopp beendet jeden laufenden Timer
+        (auch manuell gestartete) zum Ereigniszeitpunkt; ein an einen anderen Ort gebundener Timer bleibt (`ignored`). Ortsmodus `off` liefert `ignored`,
+        `suggest` einen Vorschlag (`suggested`). HEAD und Prefetch-Anfragen (Purpose/Sec-Purpose) lösen nichts aus und antworten 204.
+        Ergebnis: `started`, `stopped`, `suggested`, `already_running`, `already_stopped`, `ignored`, `needs_review`. Start überlappt ein vorhandenes Segment: 409 segment_overlap.
+      security: []
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string, minLength: 43, maxLength: 43 } }
+        - { name: action, in: path, required: true, schema: { type: string, enum: [start, stop, toggle] } }
+        - { name: at, in: query, required: false, description: 'Ereigniszeit (ISO 8601 mit Zeitzone), höchstens 2 Stunden zurück und höchstens 60 s in der Zukunft (wird auf jetzt begrenzt); Standard jetzt', schema: { type: string, format: date-time } }
+        - { name: place, in: query, required: false, description: 'Ort (UUID) für Links ohne feste Ortsbindung; bei gebundenem Link nur derselbe Ort erlaubt', schema: { type: string, format: uuid } }
+        - { name: format, in: query, required: false, description: 'text liefert nur das Ergebniswort als text/plain', schema: { type: string, enum: [json, text] } }
+      responses:
+        '200': { description: verarbeitet (Cache-Control no-store), content: { application/json: { schema: { $ref: '#/components/schemas/TriggerResult' } } } }
+        '204': { description: HEAD oder Prefetch, keine Wirkung }
+        '400': { description: ungültiger Parameter, content: { application/json: { schema: { $ref: '#/components/schemas/TriggerError' } } } }
+        '404': { description: unbekannt, widerrufen, abgelaufen oder Aktion nicht erlaubt (ununterscheidbar), content: { application/json: { schema: { $ref: '#/components/schemas/TriggerError' } } } }
+        '409': { description: Start überlappt ein vorhandenes Segment (segment_overlap), content: { application/json: { schema: { $ref: '#/components/schemas/TriggerError' } } } }
+        '429': { description: zu viele Anfragen (Retry-After), content: { application/json: { schema: { $ref: '#/components/schemas/TriggerError' } } } }
   /api/v1/automation/events:
     post:
       operationId: postAutomationEvent
@@ -827,6 +882,7 @@ paths:
       description: |
         Für Shortcuts. Auth: `Authorization: Bearer <device token>` (kein Cookie/CSRF). Idempotent über eventId; ein Duplikat liefert das erste Ergebnis.
         Ergebnis je nach Ortsmodus: `booked`, `suggested`, `ignored`, `recorded` (nur festgehalten), `duplicate`, `needs_review`.
+        Seit v0.26.0 beendet ein `departure` auch einen laufenden Timer, den keine Ankunft gestartet hat (Modus `direct`: Ende = `occurredAt`; `suggest`: Ende-Vorschlag).
       security: [ { deviceToken: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AutomationEvent' } } } }
       responses:
@@ -1984,6 +2040,36 @@ components:
         createdAt: { type: string, format: date-time }
         expiresAt: { type: [string, 'null'], format: date-time }
         lastUsedAt: { type: [string, 'null'], format: date-time }
+    TriggerLink:
+      type: object
+      required: [id, label, actions, kind, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        label: { type: string }
+        actions: { type: array, items: { type: string, enum: [start, stop, toggle] } }
+        placeId: { type: [string, 'null'], format: uuid }
+        kind: { type: string, enum: [work, travel, school] }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        lastUsedAt: { type: [string, 'null'], format: date-time }
+        lastAction: { type: [string, 'null'], enum: [start, stop, toggle, null] }
+        token: { type: string, description: 'nur in der POST-Antwort' }
+        path: { type: string, description: 'nur in der POST-Antwort: /t/<token>' }
+    TriggerError:
+      type: object
+      required: [error]
+      description: Knappe Fehlerform der Auslöse-Link-Antworten (kein Fehler-Umschlag)
+      properties:
+        error: { type: string }
+    TriggerResult:
+      type: object
+      required: [result, action]
+      properties:
+        result: { type: string, enum: [started, stopped, suggested, already_running, already_stopped, ignored, needs_review] }
+        action: { type: string, enum: [start, stop, toggle] }
+        segmentId: { type: [string, 'null'], format: uuid }
+        suggestionId: { type: [string, 'null'], format: uuid }
+        at: { type: [string, 'null'], format: date-time }
     AutomationEvent:
       type: object
       required: [eventId, deviceId, type, occurredAt, placeId]
