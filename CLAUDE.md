@@ -49,7 +49,7 @@ im Repository sichern. Dokumentationspflege ist Teil jeder Implementierung und i
 - Native Apps SwiftUI/Liquid Glass/Apple HIG; Zielgeräte laut Nutzer auf OS 27.
 - Selbstständigenfunktionen später. Offline-Schreiben optional. iCloud darf bis zur nativen App warten.
 
-- **TestFlight (Nutzerentscheidung 18.10.2026):** Jeder gemergte Stand der iOS-App wird sofort hochgeladen (`scripts/testflight.sh ios upload` im Apple-Repo, vorher `CURRENT_PROJECT_VERSION` in `project.yml` erhöhen und committen). Aktuell Build 12.
+- **TestFlight (Nutzerentscheidung 18.10.2026):** Jeder gemergte Stand der iOS-App wird sofort hochgeladen (`scripts/testflight.sh ios upload` im Apple-Repo, vorher `CURRENT_PROJECT_VERSION` in `project.yml` erhöhen und committen). Aktuelle Build-Nummer steht in project.yml des Apple-Repos.
 
 ## Sprache
 
