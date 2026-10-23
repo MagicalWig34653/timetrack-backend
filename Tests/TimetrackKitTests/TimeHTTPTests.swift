@@ -86,6 +86,44 @@ extension AuthTests {
             try await timeRequest(app, context, .POST, "time/segments", segmentBody("2026-10-12T07:00:00Z", "2026-10-12T11:00:00Z"), status: .created)
         }
     }
+    func testReopenFinishedSegmentWithGuards() async throws {
+        try await withApp { app, auth in
+            let (context, _) = try await registered(auth, db: app.db)
+            let (other, _) = try await registered(auth, db: app.db, handle: "second", admin: context)
+            let first = try await timeRequest(app, context, .POST, "time/segments", segmentBody("2026-10-12T06:00:00Z", "2026-10-12T10:00:00Z"), status: .created)
+            let firstId = try resourceID(first)
+            let second = try await timeRequest(app, context, .POST, "time/segments", segmentBody("2026-10-12T11:00:00Z", "2026-10-12T12:00:00Z"), status: .created)
+            let secondId = try resourceID(second)
+            // A later segment exists: the first one cannot be reopened.
+            let later = try object(await timeRequest(app, context, .PATCH, "time/segments/" + firstId, ["endedAt": NSNull(), "reason": "Continue"], status: .conflict, extra: ["If-Match": "1"]))
+            XCTAssertEqual((later["error"] as? [String: String])?["code"], "segment_overlap")
+            // Another account cannot reopen it.
+            try await timeRequest(app, other, .PATCH, "time/segments/" + secondId, ["endedAt": NSNull(), "reason": "Continue"], status: .notFound, extra: ["If-Match": "1"])
+            // Absent endedAt does not reopen.
+            let untouched = try object(await timeRequest(app, context, .PATCH, "time/segments/" + secondId, ["note": "n", "reason": "Note"], extra: ["If-Match": "1"]))
+            XCTAssertFalse(untouched["endedAt"] is NSNull)
+            // The latest segment can be reopened; raw capture and source/kind/note stay.
+            let reopened = try object(await timeRequest(app, context, .PATCH, "time/segments/" + secondId, ["endedAt": NSNull(), "reason": "Continue"], extra: ["If-Match": "2"]))
+            XCTAssertTrue(reopened["endedAt"] is NSNull); XCTAssertEqual(reopened["rawEndedAt"] as? String, "2026-10-12T12:00:00Z")
+            XCTAssertEqual(reopened["note"] as? String, "n"); XCTAssertEqual(reopened["source"] as? String, "manual"); XCTAssertEqual(reopened["kind"] as? String, "work")
+            XCTAssertEqual(reopened["version"] as? Int, 3)
+            let timer = try object(await timeRequest(app, context, .GET, "time/timer"))
+            XCTAssertEqual(timer["id"] as? String, secondId)
+            let revisions = try await RevisionRecord.query(on: app.db).filter(\.$segmentId == UUID(uuidString: secondId)!).sort(\.$createdAt).all()
+            XCTAssertEqual(revisions.last?.reason, "Reopened: Continue")
+            XCTAssertNotNil(revisions.last?.before.endedAt); XCTAssertNil(revisions.last?.after.endedAt)
+            // A running segment blocks reopening another one (and a second timer).
+            let blocked = try object(await timeRequest(app, context, .PATCH, "time/segments/" + firstId, ["endedAt": NSNull(), "reason": "Continue"], status: .conflict, extra: ["If-Match": "1"]))
+            XCTAssertNotNil(blocked["error"])
+            try await timeRequest(app, context, .POST, "time/timer/stop", ["clientEventId": UUID().uuidString])
+            // Voiding the later segment frees the earlier one; with a running timer the code is timer_already_running.
+            try await timeRequest(app, context, .DELETE, "time/segments/" + secondId + "?reason=Mistake", status: .noContent)
+            let running = try await timeRequest(app, context, .POST, "time/timer/start", ["clientEventId": UUID().uuidString])
+            let runningConflict = try object(await timeRequest(app, context, .PATCH, "time/segments/" + firstId, ["endedAt": NSNull(), "reason": "Continue"], status: .conflict, extra: ["If-Match": "1"]))
+            XCTAssertEqual((runningConflict["error"] as? [String: String])?["code"], "timer_already_running")
+            _ = running
+        }
+    }
     func testTimeTimerIdempotencyAndConcurrency() async throws {
         try await withApp { app, auth in
             let (context, _) = try await registered(auth, db: app.db)

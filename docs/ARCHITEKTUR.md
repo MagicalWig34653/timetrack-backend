@@ -137,7 +137,7 @@ Kalenderverbindung/-regel, Freigabe, Importcharge, Exportauftrag, Push-Abo und K
 Zeitpunkte UTC plus fachliche Zeitzone, Ganztagsplanung als lokale Datumswerte.
 Dauern als Ganzzahlen (z. B. Sekunden), keine Float-Stunden als maßgebliche Werte.
 Regelversion/Rundungsherkunft speichern; heutige Profiländerung bewertet Vergangenheit nicht still neu.
-Korrekturen versionieren, Rohereignisse erhalten. Mitternacht, Sommerzeit und Teilzeit berücksichtigen.
+Korrekturen versionieren, Rohereignisse erhalten. Wiedereröffnen (W2): `PATCH /time/segments/{id}` mit ausdrücklichem `endedAt: null` setzt nur den korrigierten Wert (Rohende bleibt), verlangt keinen laufenden Abschnitt und keinen späteren Abschnitt (409 `timer_already_running` / `segment_overlap`); die Revision trägt den Grund mit Präfix „Reopened: “. Gilt gleich für REST und MCP `correct_segment`. Mitternacht, Sommerzeit und Teilzeit berücksichtigen.
 Rechtshinweise anhand tatsächlicher Zeit und gewähltem Rechtsprofil, nicht gerundeter Bewertung.
 Betriebliche Gutschriften nicht als gesetzliche Regeln bezeichnen.
 Rundung nur an erstem Beginn/letztem Ende des fachlichen Arbeitstags; innere Pausen/Lücken exakt.

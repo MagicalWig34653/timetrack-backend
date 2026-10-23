@@ -3,6 +3,10 @@
 Format angelehnt an „Keep a Changelog“; Versionen nach SemVer (`0.x` = Alpha: Schnittstellen und Datenmodell können sich noch ändern).
 Die Einzelpakete (A1, B2, …) stehen in `docs/ARBEITSPLAN.md`.
 
+## Unveröffentlicht
+
+- **Letzten Timer fortsetzen (W2, Vertrag 0.27.0):** `PATCH /time/segments/{id}` mit `endedAt: null` öffnet einen beendeten Abschnitt wieder (nur wenn kein Timer läuft und kein späterer Abschnitt existiert; sonst 409 `timer_already_running` bzw. `segment_overlap`), auch über MCP `correct_segment`.
+
 ## 0.1.0 – 2026-10-19 (erster Release, Alpha)
 
 Erster nutzbarer Stand von Timetrack (Backend, PWA, Apple-Apps). API-Vertrag: `contracts/openapi.yaml` Version 0.22.0.

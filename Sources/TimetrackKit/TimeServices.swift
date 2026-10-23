@@ -164,7 +164,7 @@ struct SegmentService: Sendable {
         row.needsReview = false; row.clientEventId = eventId; row.running = value.endedAt == nil ? 1 : nil; row.revisions = 0
         try await row.create(on: scope.db); return try row.dto()
     }
-    func revise(_ row: SegmentRecord, value: EngineSegment, reason: String) async throws -> EngineSegment {
+    func revise(_ row: SegmentRecord, value: EngineSegment, reason: String, storedReason: String? = nil) async throws -> EngineSegment {
         try validateReason(reason); try await validate(value)
         let before = try row.dto()
         row.startedAt = value.startedAt; row.endedAt = value.endedAt; row.kind = value.kind.rawValue
@@ -173,7 +173,7 @@ struct SegmentService: Sendable {
         row.running = row.endedAt == nil && row.voidedAt == nil ? 1 : nil
         let after = try row.dto()
         let revision = RevisionRecord(); revision.accountId = scope.accountId; revision.segmentId = try row.requireID()
-        revision.before = before; revision.after = after; revision.reason = reason; revision.createdAt = Date()
+        revision.before = before; revision.after = after; revision.reason = storedReason ?? reason; revision.createdAt = Date()
         try await row.update(on: scope.db); try await revision.create(on: scope.db)
         return after
     }
@@ -183,11 +183,29 @@ struct SegmentService: Sendable {
         guard row.voidedAt == nil else { throw APIError(.conflict, "conflict") }
         var value = try row.dto()
         if let start = input.startedAt { value.startedAt = start }
+        let reopens = input.hasEnd && input.endedAt == nil && value.endedAt != nil
         if input.hasEnd { value.endedAt = input.endedAt }
         if input.hasPlace { value.placeId = input.placeId }
         if input.hasNote { value.note = input.note }
         if let kind = input.kind { value.kind = kind }
-        return try await revise(row, value: value, reason: input.reason)
+        if reopens { try validateReason(input.reason); try await requireReopenable(row) }
+        // Reopening is marked in the revision history by a fixed reason prefix (rawEndedAt stays untouched).
+        return try await revise(row, value: value, reason: input.reason, storedReason: reopens ? Self.reopenReasonPrefix + input.reason : nil)
+    }
+    static let reopenReasonPrefix = "Reopened: "
+    /// Reopening a finished segment (PATCH with explicit `endedAt: null`) needs no other running segment
+    /// (409 timer_already_running) and no other live segment starting at or after its original end
+    /// (409 segment_overlap), i.e. it must be the account's latest segment.
+    func requireReopenable(_ row: SegmentRecord) async throws {
+        guard let end = row.endedAt else { return }
+        let id = try row.requireID()
+        if try await SegmentRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).filter(\.$running == 1).filter(\.$id != id).first() != nil {
+            throw APIError(.conflict, "timer_already_running")
+        }
+        if try await SegmentRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).filter(\.$voidedAt == nil)
+            .filter(\.$id != id).filter(\.$startedAt >= end).first() != nil {
+            throw APIError(.conflict, "segment_overlap")
+        }
     }
     func void(_ id: UUID, reason: String) async throws {
         try validateReason(reason)

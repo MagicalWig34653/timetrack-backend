@@ -151,7 +151,7 @@ enum McpTools {
               McpSchema.object(["segmentId": McpSchema.uuid("Segment to correct"), "expectedVersion": McpSchema.integer("Version last read", minimum: 1),
                                 "reason": McpSchema.string("Why the change is made (kept in the revision history)", maxLength: 200),
                                 "startedAt": McpSchema.dateTime("New start"),
-                                "endedAt": McpSchema.nullable(McpSchema.dateTime("New end; null reopens the segment")),
+                                "endedAt": McpSchema.nullable(McpSchema.dateTime("New end; null reopens a finished segment (409 timer_already_running if another one runs, 409 segment_overlap if a later segment exists)")),
                                 "kind": McpSchema.string("New kind", enumeration: segmentKinds),
                                 "placeId": McpSchema.nullable(McpSchema.uuid("New place; null clears it")),
                                 "note": McpSchema.nullable(McpSchema.string("New note; null clears it", maxLength: 500))],

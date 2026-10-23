@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.26.0
+  version: 0.27.0
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -59,6 +59,8 @@ info:
     v0.24.0 (B6, ADR-0017 Nachtrag): `Absence.attachmentCount` (integer, additiv, immer vorhanden; gespeicherte, lesbare Anhänge, dieselbe Menge wie `GET /absences/{id}/attachments`); `GET /absences` mit optionalem Filter `hasAttachment=true|false` (anderer Wert → 400 bad_request); `GET /files/{id}?disposition=inline` liefert nur für image/png, image/jpeg, image/gif, image/webp, application/pdf und text/plain `Content-Disposition: inline` (mit nosniff und `Content-Security-Policy: sandbox; default-src 'none'`), alles andere bleibt attachment.
     --- B7 (v0.25.0, additiv) ---
     v0.25.0 (B7, ADR-0026): Vorlage für den Urlaubsantrag je Konto (Modul planning, privat, genau eine): GET /api/v1/vacation/request-form (`exists`, `fileName`, `sizeBytes`, `mapping`, `updatedAt`; ohne Vorlage `exists:false` mit Nullwerten), PUT .../file (Body application/pdf, höchstens 5 MB, Magic Number `%PDF-`, Header `X-File-Name` prozent-kodiert; 400 bad_request, 413 file_too_large, 415 unsupported_type; ersetzt die vorige Datei und behält die Zuordnung), PUT .../mapping (JSON-Objekt, undurchsichtig, höchstens 64 KB; 409 no_template ohne Vorlage, 413 mapping_too_large), GET .../file (PDF als attachment, nosniff; 404 ohne Vorlage), DELETE /api/v1/vacation/request-form (idempotent 204). Die Datei folgt den Speicherregeln (DB/S3/lokal), steckt im Kontoexport (`vacation-request-form.json` und `files/`) und wird mit dem Konto gelöscht. Neuer Fehlercode: no_template (409), mapping_too_large (413).
+    --- W2 (v0.27.0, additiv) ---
+    v0.27.0 (W2): PATCH /api/v1/time/segments/{id} mit ausdrücklichem `endedAt: null` öffnet einen beendeten Abschnitt wieder („letzten Timer fortsetzen“), nur wenn kein anderer Abschnitt läuft (409 timer_already_running) und kein anderer nicht stornierter Abschnitt am oder nach dem bisherigen Ende beginnt (409 segment_overlap). Quelle, Art, Ort und Notiz bleiben, rawEndedAt bleibt unverändert, die Revision trägt den Grund mit dem Präfix „Reopened: “. Fehlendes `endedAt` ändert das Ende weiterhin nicht. MCP `correct_segment` verhält sich gleich.
     --- W1 (v0.26.0, additiv) ---
     v0.26.0 (W1, ADR-0027): (A) Ein Abgangsereignis (`departure`) in POST /api/v1/automation/events beendet jetzt auch einen laufenden Timer, den keine Ankunft gestartet hat (manuell, Timer-Endpunkt, anderer Weg): Ortsmodus `direct` setzt das Ende auf `occurredAt` (Ergebnis `booked`), `suggest` legt einen Ende-Vorschlag an (`suggested`), `off` bleibt `recorded`. Ein an einen anderen Ort gebundener Timer bleibt unberührt (`ignored`); ohne laufenden Timer und ohne Ankunft ist das Ereignis ein harmloses `ignored` (bisher `needs_review`). Vorbeifahrt (Ankunft ohne Bestätigung) bucht nichts. (B) Auslöse-Links: GET /t/{token}/{action} (ohne Sitzung und Header; das 256-Bit-Token in der URL ist die einzige Berechtigung; `action` start, stop oder toggle; optional `at` (höchstens 2 h zurück), `place`, `format=text`); Antworten immer `Cache-Control: no-store`; unbekannte, widerrufene, abgelaufene Token und nicht erlaubte Aktionen sind ununterscheidbar 404; 429 bei zu vielen Anfragen je Link bzw. zu vielen Fehlversuchen je Client. Verwaltung: GET/POST /api/v1/me/trigger-links und DELETE /api/v1/me/trigger-links/{id} (Modul automation, Sitzung, CSRF; Klartext-Token und `path` nur in der POST-Antwort). Neue Tabelle `trigger_links` (Migration w1.create_trigger_links), Export `trigger-links.json` (ohne Token), Kontolöschung widerruft und entfernt die Links. Neuer Fehlercode: too_many_trigger_links (409).
     --- S1b (v0.23.0) ---
@@ -691,7 +693,7 @@ paths:
     patch:
       operationId: correctSegment
       summary: Zeitabschnitt korrigieren
-      description: Korrektur mit Pflichtgrund; If-Match muss die aktuelle version enthalten (sonst 412 stale_version). Rohzeiten bleiben erhalten, es entsteht eine Revision.
+      description: Korrektur mit Pflichtgrund; If-Match muss die aktuelle version enthalten (sonst 412 stale_version). Rohzeiten bleiben erhalten, es entsteht eine Revision. Ausdrückliches `endedAt` = null öffnet einen beendeten Abschnitt wieder (v0.27.0), dann 409 timer_already_running, wenn ein anderer Abschnitt läuft; 409 segment_overlap, wenn ein anderer Abschnitt am oder nach dem bisherigen Ende beginnt. Die Revision-Begründung erhält das Präfix „Reopened“.
       security: [ { session: [], csrf: [] } ]
       parameters:
         - { $ref: '#/components/parameters/Id' }
