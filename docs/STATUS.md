@@ -17,6 +17,10 @@ Zahlen unten sind die zuletzt vom Lead selbst gemessenen (Stand der Pakete P2/A8
 | GitHub (öffentlich) | Repos mit Workflows (W1), GitHub-Pages-Website aus `site/` (Pages-Lauf grün), Dependabot-Pull-Requests offen (Stand 17.10.: Backend 2, PWA 3, Apple 1) |
 | TestFlight | Archiv und Export lokal mit `scripts/testflight.sh` im Apple-Repo bestätigt; **Upload steht aus**, weil er auf die AASA-Auslieferung der Produktionsdomain wartet |
 
+## Paket W3 (stornierte Abschnitte, Statistik, 23.10.2026, Lead-Prüfung offen)
+
+Branch `worktree-agent-ac1cefa377b418f8e`: Liste, Wiederherstellen und endgültiges Löschen (einzeln und gesammelt mit `dryRun`) stornierter Zeitabschnitte, MCP nur Liste und Wiederherstellen; Statistikreihe `GET /time/statistics` (Tag/Woche/Monat) für Diagramme (Vertrag v0.28.0). PWA-/Apple-Oberflächen fehlen noch (`docs/handoffs/W3-cancelled-statistics.md`).
+
 ## Paket W1 (Abgang beendet fremde Timer, Auslöse-Links, 22.10.2026, Lead-Prüfung offen)
 
 Branch `worktree-agent-a96dfb882f965b00e`: (A) `departure` beendet jeden laufenden Abschnitt (Modus `direct`/`suggest`/`off` beachtet, Ereigniszeit rückdatiert); (B) Auslöse-Links `GET /t/{token}/{start|stop|toggle}` ohne Sitzung, Token nur als Hash, 404 ohne Orakel, Ratenbegrenzung, idempotent, `no-store`, Verwaltung `GET/POST/DELETE /me/trigger-links` (Vertrag v0.26.0, ADR-0027, Migration `w1.create_trigger_links`). **PWA-Verwaltungsansicht fehlt** (`docs/handoffs/W1.md`). Messwerte im Handoff.

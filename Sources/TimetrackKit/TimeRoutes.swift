@@ -70,8 +70,45 @@ func registerTimeRoutes(_ app: Application, auth: AuthService) {
         return try await run(req) { try timeResponse(await $0.segments.correct(key, input: input, version: version)) }
     }
     api.delete("time", "segments", ":id") { req async throws -> Response in
-        let key = try id(req); let reason: String = req.query["reason"] ?? ""
+        let key = try id(req)
+        // W3: ?permanent=true removes a CANCELLED segment for good (409 segment_not_cancelled for live ones).
+        if (try? req.query.get(Bool.self, at: "permanent")) == true {
+            return try await run(req) { try timeResponse(await $0.segments.purge(key)) }
+        }
+        let reason: String = req.query["reason"] ?? ""
         return try await run(req) { try await $0.segments.void(key, reason: reason); return Response(status: .noContent) }
+    }
+    // W3: cancelled segments (constant paths win over ":id"). Listing, restore and purge never touch live segments.
+    @Sendable func cancelledFilter(_ req: Request) throws -> CancelledFilter {
+        var filter = CancelledFilter()
+        if let text: String = req.query["from"] { guard let value = timeInstant(text) else { throw APIError.invalid }; filter.from = value }
+        if let text: String = req.query["to"] { guard let value = timeInstant(text) else { throw APIError.invalid }; filter.to = value }
+        if let from = filter.from, let to = filter.to, from >= to { throw APIError.invalid }
+        if let text: String = req.query["ids"] {
+            let parts = text.split(separator: ",", omittingEmptySubsequences: false).map { UUID(uuidString: String($0)) }
+            guard !parts.isEmpty, !parts.contains(where: { $0 == nil }) else { throw APIError.invalid }
+            filter.ids = parts.compactMap { $0 }
+        }
+        return filter
+    }
+    api.get("time", "segments", "cancelled") { req async throws -> Response in
+        let filter = try cancelledFilter(req)
+        let limit = (try? req.query.get(Int.self, at: "limit")) ?? 50, offset = (try? req.query.get(Int.self, at: "offset")) ?? 0
+        return try await runRead(req) { try timeResponse(await $0.segments.listCancelled(filter, limit: limit, offset: offset)) }
+    }
+    api.delete("time", "segments", "cancelled") { req async throws -> Response in
+        let filter = try cancelledFilter(req)
+        let all = (try? req.query.get(Bool.self, at: "all")) ?? false, dryRun = (try? req.query.get(Bool.self, at: "dryRun")) ?? false
+        // An unscoped purge needs the explicit all=true; otherwise a forgotten parameter would wipe everything.
+        guard all || filter.from != nil || filter.to != nil || filter.ids != nil else { throw APIError(.badRequest, "purge_scope_required") }
+        return try await run(req) { try timeResponse(await $0.segments.purgeCancelled(filter, dryRun: dryRun)) }
+    }
+    api.post("time", "segments", ":id", "restore") { req async throws -> Response in
+        struct Input: Decodable { var reason: String? }
+        let key = try id(req)
+        let input = req.body.data == nil ? Input() : try timeDecode(Input.self, request: req)
+        let version = req.headers.first(name: .ifMatch).flatMap { Int($0.trimmingCharacters(in: CharacterSet(charactersIn: "\""))) }
+        return try await run(req) { try timeResponse(await $0.segments.restore(key, reason: input.reason, version: version)) }
     }
     api.get("time", "timer") { req async throws -> Response in try await runRead(req) { try timeResponse(await $0.timer.current()?.dto()) } }
     for action in ["start", "stop"] {
@@ -98,6 +135,12 @@ func registerTimeRoutes(_ app: Application, auth: AuthService) {
     api.get("time", "account") { req async throws -> Response in
         let asOf = try req.query[String.self, at: "asOf"].map(LocalDate.init)
         return try await runRead(req) { try timeResponse(await $0.account.balance(asOf: asOf)) }
+    }
+    api.get("time", "statistics") { req async throws -> Response in
+        let from = try LocalDate(req.query[String.self, at: "from"] ?? ""), to = try LocalDate(req.query[String.self, at: "to"] ?? "")
+        guard let granularity = StatisticsGranularity(rawValue: req.query["granularity"] ?? "week"),
+              let basis = StatisticsBasis(rawValue: req.query["basis"] ?? "evaluated") else { throw APIError.invalid }
+        return try await runRead(req) { try timeResponse(await $0.statistics.series(from: from, to: to, granularity: granularity, basis: basis)) }
     }
     api.post("time", "account", "adjustments") { req async throws -> Response in
         let input = try timeDecode(AdjustmentInput.self, request: req)

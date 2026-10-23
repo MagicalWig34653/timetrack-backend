@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.27.0
+  version: 0.28.0
   description: |
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
@@ -60,6 +60,7 @@ info:
     --- B7 (v0.25.0, additiv) ---
     v0.25.0 (B7, ADR-0026): Vorlage für den Urlaubsantrag je Konto (Modul planning, privat, genau eine): GET /api/v1/vacation/request-form (`exists`, `fileName`, `sizeBytes`, `mapping`, `updatedAt`; ohne Vorlage `exists:false` mit Nullwerten), PUT .../file (Body application/pdf, höchstens 5 MB, Magic Number `%PDF-`, Header `X-File-Name` prozent-kodiert; 400 bad_request, 413 file_too_large, 415 unsupported_type; ersetzt die vorige Datei und behält die Zuordnung), PUT .../mapping (JSON-Objekt, undurchsichtig, höchstens 64 KB; 409 no_template ohne Vorlage, 413 mapping_too_large), GET .../file (PDF als attachment, nosniff; 404 ohne Vorlage), DELETE /api/v1/vacation/request-form (idempotent 204). Die Datei folgt den Speicherregeln (DB/S3/lokal), steckt im Kontoexport (`vacation-request-form.json` und `files/`) und wird mit dem Konto gelöscht. Neuer Fehlercode: no_template (409), mapping_too_large (413).
     --- W2 (v0.27.0, additiv) ---
+    v0.28.0 (W3): (a) Stornierte Abschnitte: GET /api/v1/time/segments/cancelled (seitenweise, from/to), POST /api/v1/time/segments/{id}/restore (409 segment_overlap/timer_already_running/segment_not_cancelled), DELETE /api/v1/time/segments/{id}?permanent=true (nur stornierte, 409 segment_not_cancelled) und DELETE /api/v1/time/segments/cancelled (Sammellöschung per from/to/ids/all, dryRun=true als Vorschau, 400 purge_scope_required); endgültiges Löschen entfernt auch Revisionen, Ende-Vorschläge und Timer-Ergebnisse, nicht über MCP. MCP: list_cancelled_segments und restore_segment. (b) GET /api/v1/time/statistics (Statistikreihe je Tag/Woche/Monat, basis evaluated|raw). Neue Fehlercodes: segment_not_cancelled (409), purge_scope_required (400).
     v0.27.0 (W2): PATCH /api/v1/time/segments/{id} mit ausdrücklichem `endedAt: null` öffnet einen beendeten Abschnitt wieder („letzten Timer fortsetzen“), nur wenn kein anderer Abschnitt läuft (409 timer_already_running) und kein anderer nicht stornierter Abschnitt am oder nach dem bisherigen Ende beginnt (409 segment_overlap). Quelle, Art, Ort und Notiz bleiben, rawEndedAt bleibt unverändert, die Revision trägt den Grund mit dem Präfix „Reopened: “. Fehlendes `endedAt` ändert das Ende weiterhin nicht. MCP `correct_segment` verhält sich gleich.
     --- W1 (v0.26.0, additiv) ---
     v0.26.0 (W1, ADR-0027): (A) Ein Abgangsereignis (`departure`) in POST /api/v1/automation/events beendet jetzt auch einen laufenden Timer, den keine Ankunft gestartet hat (manuell, Timer-Endpunkt, anderer Weg): Ortsmodus `direct` setzt das Ende auf `occurredAt` (Ergebnis `booked`), `suggest` legt einen Ende-Vorschlag an (`suggested`), `off` bleibt `recorded`. Ein an einen anderen Ort gebundener Timer bleibt unberührt (`ignored`); ohne laufenden Timer und ohne Ankunft ist das Ereignis ein harmloses `ignored` (bisher `needs_review`). Vorbeifahrt (Ankunft ohne Bestätigung) bucht nichts. (B) Auslöse-Links: GET /t/{token}/{action} (ohne Sitzung und Header; das 256-Bit-Token in der URL ist die einzige Berechtigung; `action` start, stop oder toggle; optional `at` (höchstens 2 h zurück), `place`, `format=text`); Antworten immer `Cache-Control: no-store`; unbekannte, widerrufene, abgelaufene Token und nicht erlaubte Aktionen sind ununterscheidbar 404; 429 bei zu vielen Anfragen je Link bzw. zu vielen Fehlversuchen je Client. Verwaltung: GET/POST /api/v1/me/trigger-links und DELETE /api/v1/me/trigger-links/{id} (Modul automation, Sitzung, CSRF; Klartext-Token und `path` nur in der POST-Antwort). Neue Tabelle `trigger_links` (Migration w1.create_trigger_links), Export `trigger-links.json` (ohne Token), Kontolöschung widerruft und entfernt die Links. Neuer Fehlercode: too_many_trigger_links (409).
@@ -703,12 +704,55 @@ paths:
     delete:
       operationId: voidSegment
       summary: Zeitabschnitt stornieren
-      description: Storniert das Segment (Soft-Delete mit Grund im Query `reason`); Rohdaten bleiben.
+      description: |
+        Ohne `permanent`: storniert das Segment (Soft-Delete mit Grund im Query `reason`); Rohdaten bleiben, Antwort 204.
+        Mit `permanent=true` (v0.28.0, W3): löscht ein bereits STORNIERTES Segment endgültig (inkl. Revisionen, Ende-Vorschlägen und gespeicherten Timer-Ergebnissen; `reason` entfällt), Antwort 200 mit PurgeSummary.
+        Ein nicht storniertes Segment → 409 segment_not_cancelled, ein unbekanntes oder fremdes → 404. Nicht über MCP verfügbar.
       security: [ { session: [], csrf: [] } ]
       parameters:
         - { $ref: '#/components/parameters/Id' }
-        - { name: reason, in: query, required: true, schema: { type: string, maxLength: 200 } }
-      responses: { '204': { description: storniert }, '404': { $ref: '#/components/responses/NotFound' } }
+        - { name: reason, in: query, schema: { type: string, maxLength: 200 }, description: Pflicht beim Stornieren (ohne permanent) }
+        - { name: permanent, in: query, schema: { type: boolean, default: false } }
+      responses: { '200': { description: endgültig gelöscht (nur mit permanent=true), content: { application/json: { schema: { $ref: '#/components/schemas/PurgeSummary' } } } }, '204': { description: storniert }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/v1/time/segments/cancelled:
+    get:
+      operationId: listCancelledSegments
+      summary: Stornierte Zeitabschnitte auflisten
+      description: Stornierte Segmente des Kontos, neuester Beginn zuerst, seitenweise. `from`/`to` begrenzen den Beginn des Segments ([from, to)).
+      security: [ { session: [] } ]
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/CancelledSegmentPage' } } } }, '400': { $ref: '#/components/responses/BadRequest' } }
+    delete:
+      operationId: purgeCancelledSegments
+      summary: Stornierte Zeitabschnitte endgültig löschen (Sammellöschung)
+      description: |
+        Löscht stornierte Segmente endgültig. Auswahl über `from`/`to` (Beginn), `ids` (kommagetrennt, höchstens 500) und/oder `all=true`; ohne jede Auswahl 400 purge_scope_required.
+        Nicht stornierte Segmente werden nie ausgewählt; nennt `ids` ein nicht storniertes Segment, scheitert die ganze Anfrage mit 409 segment_not_cancelled (es wird nichts gelöscht). Unbekannte ids werden ignoriert.
+        `dryRun=true` zählt nur (Vorschau), löscht nichts. Entfernt mit den Segmenten deren Revisionen, Ende-Vorschläge und Timer-Ergebnisse; Automations-Ereignisse behalten ihren Schlüssel, verlieren aber den Segmentbezug. Nicht über MCP verfügbar.
+      security: [ { session: [], csrf: [] } ]
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: ids, in: query, schema: { type: string }, description: Kommagetrennte Segment-IDs }
+        - { name: all, in: query, schema: { type: boolean, default: false } }
+        - { name: dryRun, in: query, schema: { type: boolean, default: false } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/PurgeSummary' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/v1/time/segments/{id}/restore:
+    post:
+      operationId: restoreSegment
+      summary: Stornierten Zeitabschnitt wiederherstellen
+      description: |
+        Hebt die Stornierung auf (v0.28.0, W3), nur wenn sie sicher ist: 409 segment_overlap bei Überschneidung mit einem nicht stornierten Segment, 409 timer_already_running, wenn der stornierte Abschnitt ein laufender Timer war und ein anderer läuft, 409 segment_not_cancelled bei einem nicht stornierten Segment. Optionales If-Match (version) → 412 stale_version. Es entsteht eine Revision mit dem Präfix „Restored: “.
+      security: [ { session: [], csrf: [] } ]
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: If-Match, in: header, schema: { type: string } }
+      requestBody: { required: false, content: { application/json: { schema: { type: object, properties: { reason: { type: string, maxLength: 190 } } } } } }
+      responses: { '200': { description: wiederhergestellt, content: { application/json: { schema: { $ref: '#/components/schemas/Segment' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' }, '412': { description: veraltete Version, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } } }
   /api/v1/time/timer:
     get:
       operationId: currentTimer
@@ -751,6 +795,21 @@ paths:
       security: [ { session: [] } ]
       parameters: [ { $ref: '#/components/parameters/IsoWeek' } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/TimeWeek' } } } }, '400': { $ref: '#/components/responses/BadRequest' } }
+  /api/v1/time/statistics:
+    get:
+      operationId: getTimeStatistics
+      summary: Statistikreihe für Diagramme
+      description: |
+        Nur lesend (v0.28.0, W3). Gruppiert die Tagesbewertung (dieselben Werte wie /time/days und /time/weeks) je Tag, ISO-Woche oder Monat: Soll, Ist, Differenz, Überstunden, kumulierter Zeitkontostand, Zeit je Art (Arbeit/Schule/Fahrt), Abwesenheitstage und Pausen.
+        `basis=evaluated` (Standard) folgt den Kontoregeln (Rundung, feste Pausen); `basis=raw` entfernt nur die Rundung von erstem Beginn/letztem Ende (Gutschriften, feste Pausen und Markierungen bleiben). Der kumulierte Zeitkontostand ist immer der offizielle (bewertete) Stand von GET /time/account.
+        Differenz/Überstunden/Unterzeit zählen nur Tage bis heute; Soll gesamt und bis heute getrennt. Randbuckets enthalten nur Tage innerhalb von from..to. Höchstens 1100 Tage (sonst 400 range_too_large). Rechtsprofile und Bewertungsregeln bleiben unberührt.
+      security: [ { session: [] } ]
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+        - { name: granularity, in: query, schema: { type: string, enum: [day, week, month], default: week } }
+        - { name: basis, in: query, schema: { type: string, enum: [evaluated, raw], default: evaluated } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/TimeStatistics' } } } }, '400': { $ref: '#/components/responses/BadRequest' } }
   /api/v1/time/days/{date}:
     get:
       operationId: getDayEvaluation
@@ -1985,6 +2044,94 @@ components:
         voided: { type: boolean }
         needsReview: { type: boolean }
         revisions: { type: integer, description: Anzahl Korrekturen }
+    CancelledSegment:
+      type: object
+      required: [segment, cancelledAt]
+      properties:
+        segment: { $ref: '#/components/schemas/Segment' }
+        cancelledAt: { type: string, format: date-time }
+        cancelReason: { type: [string, 'null'] }
+    CancelledSegmentPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/CancelledSegment' } }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+    PurgeSummary:
+      type: object
+      description: 'Anzahl der entfernten (bei dryRun zu entfernenden) Datensätze. Einzige Spur einer endgültigen Löschung; es bleibt kein Grabstein.'
+      required: [dryRun, segments, revisions, suggestions, timerEvents, automationEvents]
+      properties:
+        dryRun: { type: boolean }
+        segments: { type: integer }
+        revisions: { type: integer }
+        suggestions: { type: integer }
+        timerEvents: { type: integer }
+        automationEvents: { type: integer, description: Ereignisse, deren Segmentbezug entfernt wurde (Zeilen bleiben erhalten) }
+    TimeStatistics:
+      type: object
+      required: [from, to, granularity, basis, timezone, buckets, totals]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        granularity: { type: string, enum: [day, week, month] }
+        basis: { type: string, enum: [evaluated, raw] }
+        timezone: { type: string }
+        accountStart: { type: [string, 'null'], format: date }
+        openingBalanceSeconds: { type: [integer, 'null'], description: Zeitkontostand am Ende des Vortags von `from` (Basislinie); null vor Kontobeginn }
+        buckets: { type: array, items: { $ref: '#/components/schemas/StatisticsBucket' } }
+        totals:
+          type: object
+          required: [targetSeconds, targetToDateSeconds, actualSeconds, creditSeconds, deltaSeconds, overtimeSeconds, undertimeSeconds, breakSeconds, breakDeductionSeconds, kindSeconds, absenceDays]
+          properties:
+            targetSeconds: { type: integer }
+            targetToDateSeconds: { type: integer }
+            actualSeconds: { type: integer }
+            creditSeconds: { type: integer }
+            deltaSeconds: { type: integer }
+            overtimeSeconds: { type: integer }
+            undertimeSeconds: { type: integer }
+            breakSeconds: { type: integer }
+            breakDeductionSeconds: { type: integer }
+            kindSeconds: { $ref: '#/components/schemas/StatisticsKinds' }
+            absenceDays: { type: number }
+    StatisticsKinds:
+      type: object
+      required: [work, school, travel]
+      properties: { work: { type: integer }, school: { type: integer }, travel: { type: integer } }
+    StatisticsBucket:
+      type: object
+      required: [label, from, to, days, targetSeconds, targetToDateSeconds, actualSeconds, creditSeconds, evaluatedWorkSeconds, rawWorkSeconds, roundingSeconds, deltaSeconds, overtimeSeconds, undertimeSeconds, kindSeconds, absences, absenceDays, breakSeconds, breakDeductionSeconds, workDays, provisional]
+      properties:
+        label: { type: string, description: 'Tag 2026-10-12, ISO-Woche 2026-W42 oder Monat 2026-10' }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        days: { type: integer }
+        targetSeconds: { type: integer, description: Soll aller Tage des Buckets }
+        targetToDateSeconds: { type: integer, description: Soll der Tage bis heute }
+        actualSeconds: { type: integer, description: Ist nach basis (ohne Gutschrift) }
+        creditSeconds: { type: integer }
+        evaluatedWorkSeconds: { type: integer }
+        rawWorkSeconds: { type: integer, description: Rohzeit vor festen Pausen und Rundung }
+        roundingSeconds: { type: integer, description: Summe der Rundungsanpassungen (Beginn/Ende) }
+        deltaSeconds: { type: integer, description: Differenz = Ist + Gutschrift - Soll, nur Tage bis heute }
+        overtimeSeconds: { type: integer }
+        undertimeSeconds: { type: integer }
+        balanceSeconds: { type: [integer, 'null'], description: Kumulierter Zeitkontostand zum Stand balanceAsOf (offiziell, bewertet); null vor Kontobeginn }
+        balanceAsOf: { type: [string, 'null'], format: date }
+        kindSeconds: { $ref: '#/components/schemas/StatisticsKinds' }
+        absences:
+          type: object
+          description: Tage je Markierung (Urlaub halbe Tage als 0.5)
+          required: [vacation, sick, excused, holiday, school]
+          properties: { vacation: { type: number }, sick: { type: number }, excused: { type: number }, holiday: { type: number }, school: { type: number } }
+        absenceDays: { type: number, description: Urlaub + krank + entschuldigt (ohne Feiertage und Schule) }
+        breakSeconds: { type: integer, description: Tatsächliche Lücken zwischen Abschnitten (keine erfundenen Pausen) }
+        breakDeductionSeconds: { type: integer, description: Abgezogene feste Pausen des Arbeitsmodells }
+        workDays: { type: integer }
+        provisional: { type: boolean }
     DayEvaluation:
       type: object
       required: [date, targetSeconds, rawWorkSeconds, breakDeductionSeconds, startAdjustSeconds, endAdjustSeconds, evaluatedWorkSeconds, creditSeconds, deltaSeconds, provisional, segmentIds, breakHints]

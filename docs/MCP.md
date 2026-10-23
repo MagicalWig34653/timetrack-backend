@@ -40,8 +40,8 @@ Token nur im Header übertragen, nie in URLs oder Logs.
 
 | Scope | Tools |
 | --- | --- |
-| `time:read` | `get_day`, `list_days` (höchstens 31 Tage), `get_time_account`, `list_segments` (höchstens 31 Tage), `get_current_timer` |
-| `time:write` | `start_timer`, `stop_timer`, `create_segment`, `correct_segment` |
+| `time:read` | `get_day`, `list_days` (höchstens 31 Tage), `get_time_account`, `list_segments` (höchstens 31 Tage), `list_cancelled_segments`, `get_current_timer` |
+| `time:write` | `start_timer`, `stop_timer`, `create_segment`, `correct_segment`, `restore_segment` |
 | `schedule:read` | `list_absences`, `get_vacation_balance`, `list_holidays`, `list_plan_days`, `view_shared` |
 | `schedule:write` | `create_absence` (Status nur `planned`/`requested`), `set_plan_day` |
 | `reports:read` | `get_report_week`, `get_report_week_text`, `list_learning_fields` |

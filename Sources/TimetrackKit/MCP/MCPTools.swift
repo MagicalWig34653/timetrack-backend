@@ -115,6 +115,17 @@ enum McpTools {
             let all = try await ctx.time.segments.all().filter { $0.startedAt >= start && $0.startedAt < end && (voided || !$0.voided) }
             return ["segments": try McpJSON.encoding(Array(all.prefix(500))), "truncated": .bool(all.count > 500)]
         },
+        read("list_cancelled_segments", "List cancelled time segments", "time:read",
+             "Lists cancelled (voided) time segments with their cancel reason, newest start first, optionally limited to segments starting in [from, to). At most 100 per call; use offset to page. "
+             + "Permanent deletion of cancelled segments is deliberately not available through MCP.",
+             McpSchema.object(["from": McpSchema.dateTime("Range start, inclusive (optional)"), "to": McpSchema.dateTime("Range end, exclusive (optional)"),
+                               "limit": McpSchema.integer("Page size, default 50", minimum: 1, maximum: 100),
+                               "offset": McpSchema.integer("Rows to skip, default 0", minimum: 0)])) { ctx, args in
+            var filter = CancelledFilter()
+            if args["from"] != nil { filter.from = try instant(args, "from") }
+            if args["to"] != nil { filter.to = try instant(args, "to") }
+            return try McpJSON.encoding(await ctx.time.segments.listCancelled(filter, limit: min(args["limit"]?.int ?? 50, 100), offset: args["offset"]?.int ?? 0))
+        },
         read("get_current_timer", "Get running timer", "time:read",
              "Returns the currently running timer segment, or null when no timer runs.", McpSchema.object()) { ctx, _ in
             ["timer": try McpJSON.encoding(await ctx.time.timer.current()?.dto())]
@@ -159,6 +170,17 @@ enum McpTools {
             guard let id = args["segmentId"]?.string.flatMap(UUID.init(uuidString:)) else { throw APIError.invalid }
             let input = try decodeArguments(SegmentCorrection.self, args, dropping: ["segmentId", "expectedVersion"])
             return try McpJSON.encoding(await ctx.time.segments.correct(id, input: input, version: args["expectedVersion"]?.int))
+        },
+
+        write("restore_segment", "Restore cancelled time segment", "time:write",
+              "Un-cancels a cancelled segment (reversible: it can be cancelled again). Fails with segment_not_cancelled if it is live, segment_overlap if it overlaps a live segment, "
+              + "timer_already_running if it was a running timer and another one runs. A revision with the reason is recorded." + optimisticNote,
+              idempotent: false,
+              McpSchema.object(["segmentId": McpSchema.uuid("Cancelled segment to restore"), "expectedVersion": McpSchema.integer("Version last read", minimum: 1),
+                                "reason": McpSchema.string("Why it is restored (kept in the revision history)", maxLength: 190)],
+                               required: ["segmentId", "expectedVersion"])) { ctx, args in
+            guard let id = args["segmentId"]?.string.flatMap(UUID.init(uuidString:)) else { throw APIError.invalid }
+            return try McpJSON.encoding(await ctx.time.segments.restore(id, reason: args["reason"]?.string, version: args["expectedVersion"]?.int))
         },
 
         // schedule:read

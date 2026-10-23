@@ -13,8 +13,8 @@ struct TestMcpAuthenticator: McpAuthenticator {
 private let readScopes: Set<String> = ["time:read", "schedule:read", "reports:read", "documents:read"]
 private let allScopes: Set<String> = readScopes.union(["time:write", "schedule:write", "reports:write"])
 private let adrToolNames: Set<String> = [
-    "get_day", "list_days", "get_time_account", "list_segments", "get_current_timer",
-    "start_timer", "stop_timer", "create_segment", "correct_segment",
+    "get_day", "list_days", "get_time_account", "list_segments", "list_cancelled_segments", "get_current_timer",
+    "start_timer", "stop_timer", "create_segment", "correct_segment", "restore_segment",
     "list_absences", "get_vacation_balance", "list_holidays", "list_plan_days", "view_shared",
     "create_absence", "set_plan_day", "get_report_week", "get_report_week_text", "list_learning_fields",
     "create_report_entry", "update_report_entry", "list_absence_attachments",
@@ -158,18 +158,19 @@ extension AuthTests {
             let result = try await unwrapA(try await mcpRPC(app, token, "tools/list")["result"] as? [String: Any])
             return Set((result["tools"] as? [[String: Any]] ?? []).compactMap { $0["name"] as? String })
         }
-        try await eq(try await names("T"), ["get_day", "list_days", "get_time_account", "list_segments", "get_current_timer"])
+        try await eq(try await names("T"), ["get_day", "list_days", "get_time_account", "list_segments", "list_cancelled_segments", "get_current_timer"])
         let readOnly = try await names("RO")
-        XCTAssertEqual(readOnly.count, 14)
-        for write in ["start_timer", "stop_timer", "create_segment", "correct_segment", "create_absence", "set_plan_day", "create_report_entry", "update_report_entry"] {
+        XCTAssertEqual(readOnly.count, 15)
+        for write in ["start_timer", "stop_timer", "create_segment", "correct_segment", "restore_segment", "create_absence", "set_plan_day", "create_report_entry", "update_report_entry"] {
             XCTAssertFalse(readOnly.contains(write))
         }
-        try await eq(try await names("A").count, 22)
+        try await eq(try await names("A").count, 24)
         // A read-only credential can neither write nor change anything.
         let calls: [(String, [String: Any])] = [
             ("start_timer", ["clientEventId": UUID().uuidString]), ("stop_timer", [:]),
             ("create_segment", ["kind": "work", "startedAt": "2026-10-12T06:07:00Z", "endedAt": "2026-10-12T10:00:00Z"]),
             ("correct_segment", ["segmentId": UUID().uuidString, "expectedVersion": 1, "reason": "x"]),
+            ("restore_segment", ["segmentId": UUID().uuidString, "expectedVersion": 1]),
             ("create_absence", ["kind": "vacation", "startDate": "2026-10-19", "endDate": "2026-10-19", "status": "planned"]),
             ("set_plan_day", ["date": "2026-10-19", "mode": "home"]),
             ("create_report_entry", ["date": "2026-10-12", "learningField": "X", "durationSeconds": 60]),

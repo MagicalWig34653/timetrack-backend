@@ -22,6 +22,8 @@ enum TimeMessages {
         "plan_break_invalid": "Die geplante Pause muss zwischen 0 und 600 Minuten liegen und setzt Beginn und Ende voraus.",
         "invalid_week": "Die Kalenderwoche ist ungültig (Beispiel: 2026-W44).",
         "week_day_invalid": "Die Tage der Woche sind ungültig: je Datum höchstens ein Eintrag, alle innerhalb der Woche.",
+        "segment_not_cancelled": "Dieser Abschnitt ist nicht storniert. Nur stornierte Abschnitte können wiederhergestellt oder endgültig gelöscht werden.",
+        "purge_scope_required": "Bitte gib einen Zeitraum oder Abschnitte an (oder bestätige das Löschen aller stornierten Abschnitte ausdrücklich).",
         "suggestion_resolved": "Dieser Vorschlag wurde bereits bearbeitet.",
     ]
 }

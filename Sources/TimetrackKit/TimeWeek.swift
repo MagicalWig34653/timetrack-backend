@@ -114,7 +114,7 @@ struct TimeWeekService: Sendable {
                      summary: summary(days, before: before, after: after, calendar: calendar))
     }
 
-    private func dto(_ day: DayEvaluationResult, model: EngineWorkModel?, absences: [EngineAbsence], plan: PlanDayRecord?,
+    func dto(_ day: DayEvaluationResult, model: EngineWorkModel?, absences: [EngineAbsence], plan: PlanDayRecord?,
                      today: LocalDate, now: Date) -> TimeWeekDayDTO {
         var travel = 0, school = 0, gaps = 0
         var previousEnd: Date?

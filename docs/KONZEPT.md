@@ -77,7 +77,7 @@ Ein bloßer Server-Timer ohne weitere Standortinformation beweist keinen Aufenth
 Fehlendes Verlassen-Signal nicht als Anwesenheitsnachweis werten. Mit Shortcuts auf echten Geräten
 erproben; unklare Fälle als Vorschlag behandeln. Rundung und technische Erkennung des Verlassens trennen.
 
-Umsetzungsstand: **umgesetzt** (ADR-0004 mit Zusatz C7; W2: beendeten letzten Abschnitt wieder öffnen, „Timer fortsetzen“) – Timer, manuelle Segmente mit Revisionen, idempotenter Timer,
+Umsetzungsstand: **umgesetzt** (ADR-0004 mit Zusatz C7; W3: stornierte Abschnitte einsehen, wiederherstellen und endgültig löschen, Statistikreihe für Diagramme; W2: beendeten letzten Abschnitt wieder öffnen, „Timer fortsetzen“) – Timer, manuelle Segmente mit Revisionen, idempotenter Timer,
 Rundung nur an den äußersten Tagesgrenzen, Roh-/korrigierte/bewertete Zeit getrennt, Nachtschicht gehört zum Tag des Beginns,
 Automatik per Gerätetoken je Ort `direct`/`suggest`/`off` mit Vorbeifahrtschutz (Standard 300 s Bestätigung, Rückdatierung auf
 Ankunft). **Nicht auf Echtgeräten geprüft**: Shortcuts mit echter Standortauslösung. Ein globaler Schalter für die Automatik ist

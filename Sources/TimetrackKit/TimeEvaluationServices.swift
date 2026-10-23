@@ -85,10 +85,7 @@ struct AccountService: Sendable {
         let today = LocalDate.local(now, calendar: calendar)
         let end = min(asOf ?? today, today)
         let opening = adjustments.first { $0.kind == "opening" }
-        let segments = snapshot.segments.filter { !$0.voided }
-        let firstSegmentDate = segments.first.map { LocalDate.local($0.startedAt, calendar: calendar) }
-        let start = try opening.map { try LocalDate($0.date) } ?? models.first?.validFrom ?? firstSegmentDate ?? adjustments.map { try LocalDate($0.date) }.min()
-        guard let start else { return .init(asOf: end, accountStart: nil, balanceSeconds: 0, openingSeconds: 0, adjustmentSeconds: 0, provisional: false) }
+        guard let start = try accountStart(snapshot: snapshot, adjustments: adjustments, calendar: calendar) else { return .init(asOf: end, accountStart: nil, balanceSeconds: 0, openingSeconds: 0, adjustmentSeconds: 0, provisional: false) }
         let prepared = snapshot.prepared()
         var evaluations: [DayEvaluationResult] = []; var date = start
         while date <= end { evaluations.append(try prepared.evaluate(date, now: now)); date = date.addingDays(1) }
@@ -105,6 +102,13 @@ struct AccountService: Sendable {
         _ = try sum([opening?.seconds ?? 0, correctionTotal, evaluationTotal])
         return try TimeEngine.accountBalance(accountStart: start, asOf: end, today: today, openingSeconds: opening?.seconds ?? 0,
             evaluations: evaluations, adjustments: corrections)
+    }
+    /// First day of the time account: the opening balance date, else the first work model, else the first live segment,
+    /// else the earliest correction. Shared by the balance and the statistics series.
+    func accountStart(snapshot: TimeEvaluationSnapshot, adjustments: [AdjustmentRecord], calendar: Calendar) throws -> LocalDate? {
+        let firstSegmentDate = snapshot.segments.first { !$0.voided }.map { LocalDate.local($0.startedAt, calendar: calendar) }
+        let opening = adjustments.first { $0.kind == "opening" }
+        return try opening.map { try LocalDate($0.date) } ?? snapshot.models.first?.validFrom ?? firstSegmentDate ?? adjustments.map { try LocalDate($0.date) }.min()
     }
     func adjust(_ input: AdjustmentInput) async throws -> TimeAccountResult {
         try validateReason(input.reason)
