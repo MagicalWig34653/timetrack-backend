@@ -4,7 +4,8 @@ import Vapor
 
 /// Anything that can send the fixed diagnostic test message (ADR-0022). `SMTPMailSender` is the production implementation.
 protocol MailTestSender: Sendable {
-    func sendTest(subject: String, body: String, to address: String) async throws
+    var brand: MailBrand { get }
+    func sendTest(_ mail: RenderedMail, to address: String) async throws
 }
 extension SMTPMailSender: MailTestSender {}
 
@@ -25,6 +26,11 @@ enum MailDiagnosis {
             for item in keys { try await RateLimitEvent(key: item.key, occurredAt: now).create(on: tx) }
             return true
         }
+    }
+
+    static func mail(by account: Account, at date: Date, brand: MailBrand) -> RenderedMail {
+        MailTemplates.test(text: body(by: account, at: date, baseURL: brand.baseURL ?? URL(string: "http://localhost")!),
+                           triggeredBy: account.displayName, at: date, brand: brand, subject: subject)
     }
 
     static func body(by account: Account, at date: Date, baseURL: URL) -> String {
@@ -108,7 +114,7 @@ func registerMailRoutes(_ app: Application, auth: AuthService) {
         let started = ContinuousClock.now
         let now = Date()
         do {
-            try await sender.sendTest(subject: MailDiagnosis.subject, body: MailDiagnosis.body(by: context.account, at: now, baseURL: auth.configuration.publicBaseURL), to: recipient)
+            try await sender.sendTest(MailDiagnosis.mail(by: context.account, at: now, brand: sender.brand), to: recipient)
         } catch SMTPError.failed(let kind) {
             throw MailDiagnosis.apiError(kind)
         } catch { throw MailDiagnosis.apiError(.other) }
