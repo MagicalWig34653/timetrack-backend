@@ -49,7 +49,8 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
     if config.autoMigrate && !app.environment.arguments.contains("migrate") {
         try await app.autoMigrate()
     }
-    let sender = try mailSender ?? config.smtp.map { try SMTPMailSender(configuration: $0, group: app.eventLoopGroup) }
+    let sender = try mailSender ?? config.smtp.map { try SMTPMailSender(configuration: $0, group: app.eventLoopGroup,
+        brand: MailBrand(productName: config.webAuthnRPName, operatorName: $0.fromName, baseURL: config.publicBaseURL)) }
     app.trustedProxies = config.trustedProxies
     if let warning = config.trustedProxies.startupWarning { app.logger.warning("\(warning)") }
     let service = AuthService(configuration: config, mailSender: sender)

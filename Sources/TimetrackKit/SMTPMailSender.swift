@@ -21,17 +21,18 @@ public struct SMTPMailSender: MailSender {
     private let tlsContext: NIOSSLContext
     private let text: RecoveryMailText
     private let timeout: TimeAmount
+    let brand: MailBrand
 
-    public init(configuration: SMTPConfiguration, group: any EventLoopGroup) throws {
+    public init(configuration: SMTPConfiguration, group: any EventLoopGroup, brand: MailBrand = MailBrand()) throws {
         var tls = TLSConfiguration.makeClientConfiguration()
         tls.minimumTLSVersion = .tlsv12
-        try self.init(configuration: configuration, group: group, tlsConfiguration: tls)
+        try self.init(configuration: configuration, group: group, tlsConfiguration: tls, brand: brand)
     }
 
     // Internal trust configuration permits local certificate fixtures without weakening production verification.
     init(configuration: SMTPConfiguration, group: any EventLoopGroup,
-         tlsConfiguration: TLSConfiguration, timeout: TimeAmount = .seconds(30)) throws {
-        self.configuration = configuration; self.group = group; self.timeout = timeout
+         tlsConfiguration: TLSConfiguration, timeout: TimeAmount = .seconds(30), brand: MailBrand = MailBrand()) throws {
+        self.configuration = configuration; self.group = group; self.timeout = timeout; self.brand = brand
         tlsContext = try NIOSSLContext(configuration: tlsConfiguration)
         guard let url = Bundle.module.url(forResource: "RecoveryMail.de", withExtension: "json") else { throw SMTPError.invalidMessage }
         text = try JSONDecoder().decode(RecoveryMailText.self, from: Data(contentsOf: url))
@@ -43,8 +44,8 @@ public struct SMTPMailSender: MailSender {
     }
 
     /// Sends the fixed test message of the mail diagnosis (ADR-0022); the failure class is the only detail that leaves.
-    func sendTest(subject: String, body: String, to address: String) async throws {
-        let message = try Self.message(configuration: configuration, address: address, subject: subject, body: body)
+    func sendTest(_ mail: RenderedMail, to address: String) async throws {
+        let message = try Self.message(configuration: configuration, address: address, subject: mail.subject, body: mail.text, html: mail.html)
         try await deliver(message, to: address)
     }
 
@@ -83,8 +84,8 @@ public struct SMTPMailSender: MailSender {
     }
 
     func makeMessage(code: String, address: String) throws -> String {
-        try Self.message(configuration: configuration, address: address, subject: text.subject,
-                         body: text.body.replacingOccurrences(of: "{code}", with: code))
+        let mail = MailTemplates.verificationCode(code, text: text, brand: brand)
+        return try Self.message(configuration: configuration, address: address, subject: mail.subject, body: mail.text, html: mail.html)
     }
 
     static func encodedHeader(_ value: String) -> String {
@@ -99,18 +100,36 @@ public struct SMTPMailSender: MailSender {
         return words.joined(separator: "\r\n ")
     }
 
-    static func message(configuration: SMTPConfiguration, address: String, subject: String, body: String) throws -> String {
+    /// Builds the SMTP DATA payload. Without `html` the message is a single quoted-printable text/plain part;
+    /// with `html` it is multipart/alternative (text first, HTML last, as RFC 2046 prefers the last part).
+    static func message(configuration: SMTPConfiguration, address: String, subject: String, body: String, html: String? = nil) throws -> String {
         guard SMTPConfiguration.validAddress(address), !subject.utf8.contains(13), !subject.utf8.contains(10) else { throw SMTPError.invalidMessage }
         let from = configuration.fromName.map { encodedHeader($0) + " " } ?? ""
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX"); formatter.timeZone = TimeZone(secondsFromGMT: 0)
         formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss Z"
-        let headers = ["From: \(from)<\(configuration.from)>", "To: <\(address)>",
+        var headers = ["From: \(from)<\(configuration.from)>", "To: <\(address)>",
             "Subject: \(encodedHeader(subject))", "Date: \(formatter.string(from: Date()))",
             "Message-ID: <\(UUID().uuidString)@\(configuration.from.split(separator: "@")[1])>",
-            "MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: quoted-printable"]
+            "MIME-Version: 1.0"]
+        let content: String
+        if let html {
+            let boundary = "=_timetrack_" + UUID().uuidString.replacingOccurrences(of: "-", with: "")
+            headers.append("Content-Type: multipart/alternative; boundary=\"\(boundary)\"")
+            let part = { (type: String, value: String) in
+                "--\(boundary)\r\nContent-Type: \(type); charset=UTF-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n\(quotedPrintable(value))\r\n"
+            }
+            content = part("text/plain", body) + part("text/html", html) + "--\(boundary)--"
+        } else {
+            headers += ["Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: quoted-printable"]
+            content = quotedPrintable(body)
+        }
+        return dotStuff(headers.joined(separator: "\r\n") + "\r\n\r\n" + content) + "\r\n.\r\n"
+    }
+
+    static func quotedPrintable(_ body: String) -> String {
         let normalized = body.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
-        let encoded = normalized.components(separatedBy: "\n").map { line in
+        return normalized.components(separatedBy: "\n").map { line in
             var output = "", length = 0
             for byte in line.utf8 {
                 let token = (33...126).contains(byte) && byte != 61 ? String(UnicodeScalar(byte)) : String(format: "=%02X", byte)
@@ -119,7 +138,6 @@ public struct SMTPMailSender: MailSender {
             }
             return output
         }.joined(separator: "\r\n")
-        return dotStuff(headers.joined(separator: "\r\n") + "\r\n\r\n" + encoded) + "\r\n.\r\n"
     }
 
     static func dotStuff(_ value: String) -> String {

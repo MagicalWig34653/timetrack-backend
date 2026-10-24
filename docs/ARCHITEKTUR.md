@@ -246,6 +246,25 @@ https://developer.apple.com/foundation-models-framework/
 - **Kein blockierendes Rechnen im Request-Pfad** über Sekunden: es blockiert Event-Loop, Pool und `/ready` (Swarm-Healthcheck: 3 s). Lesende Routen laufen ohne `auth_lock`; schreibende Routen weiter damit (ADR-0017).
 - **Verbindungen:** MariaDB-Pool mit Keep-Alive-Ping (45 s), `/ready` wiederholt einmal.
 
+## 7b. E-Mail-Vorlagen (Paket M1-Mail)
+
+Alle ausgehenden Mails laufen über `SMTPMailSender` und sind `multipart/alternative`: zuerst der unveränderte Klartext (Rückfallebene,
+Quelle `Resources/RecoveryMail.de.json` bzw. `MailDiagnosis.body`), zuletzt der HTML-Teil (beide quoted-printable, UTF-8). Betreffzeilen bleiben unverändert.
+Aktuell gibt es zwei Mails: den Bestätigungscode (E-Mail-Wiederherstellung, E-Mail-Änderung, Verifizierung; ein Code, zehn Minuten) und die
+Testnachricht der Mail-Diagnose (ADR-0022). Einladungen, Magic-Links, Passwort-Reset, Benachrichtigungen und Berichtsmails werden heute **nicht** per Mail versendet
+(Einladungen sind Links, die Admins weitergeben; Erinnerungen laufen per Web Push), daher gibt es dafür keine Vorlage.
+
+`Sources/TimetrackKit/Mail/MailTemplates.swift` enthält das gemeinsame Layout: tabellenbasiert, nur Inline-CSS plus ein `<style>`-Block für Dunkelmodus
+(`prefers-color-scheme`, `color-scheme`-Meta, `[data-ogsc]` für Outlook.com) und schmale Bildschirme; keine Bilder, Skripte, externen Dateien oder Tracking.
+Bausteine (`MailBlock`): Absatz, Code-Block (Monospace, groß, markierbar), Button (mit Klartext-Link darunter), Fakten-Tabelle; dazu Kopf mit Produktname,
+Sicherheitshinweis und Fußzeile. **Jeder** eingesetzte Wert wird mit `MailTemplates.escape` maskiert; Button-URLs müssen absolute http(s)-URLs sein (`safeURL`),
+Links entstehen nur aus `PUBLIC_BASE_URL`.
+
+Anpassen: Marke und Fußzeile kommen aus der Konfiguration (`MailBrand`): Produktname `WEBAUTHN_RP_NAME`, Betreibername `SMTP_FROM_NAME`, Instanz `PUBLIC_BASE_URL`. Texte der Code-Mail stehen
+in `RecoveryMail.de.json` (`{code}` als Platzhalter); Farben in `MailTemplates.Palette`. Eine neue Mail: `MailDocument` mit Blöcken bauen und
+`MailTemplates.html(_:brand:)` aufrufen, Klartext getrennt liefern, Test in `MailTemplateTests` ergänzen.
+Vorschau: `scripts/mail-preview.sh [Ordner]` schreibt alle Mails als `.html`/`.txt`; mit `MAIL_PREVIEW_SHOTS=1` und `PLAYWRIGHT_DIR` zusätzlich PNGs (hell, dunkel, schmal).
+
 ## 8. Referenzen und Validierung
 
 - Fluent: https://docs.vapor.codes/fluent/overview/
