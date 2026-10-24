@@ -327,6 +327,76 @@ extension AuthTests {
         }
     }
 
+    /// Codex finding: a link-started timer has source "automation" but no open visit; a departure must still stop it.
+    func testDepartureStopsLinkStartedTimerButKeepsArrivalFlowsAndSeparation() async throws {
+        try await withApp { app, auth in
+            let (context, _) = try await registered(auth, db: app.db)
+            let other = try await second(app, auth, context)
+            let bearer = try await deviceBearer(app, context)
+            let direct = try resourceID(await timeRequest(app, context, .POST, "places", placeBody(), status: .created))
+            let free = try await createLink(app, context, label: "Free")
+            let foreign = try await openSegment(app, other, iso(-7000))
+            // Direct: link start, then departure stops it backdated to the event time. The other account is untouched.
+            let started = try await trigger(app, "/t/" + free.token + "/start?at=" + iso(-6600))
+            let linkSegment = try XCTUnwrap(object(started)["segmentId"] as? String)
+            let stopAt = iso(-3000)
+            let stopped = try await event(app, bearer, direct, "departure", stopAt)
+            XCTAssertEqual(stopped["result"] as? String, "booked")
+            XCTAssertEqual(stopped["segmentId"] as? String, linkSegment.uppercased())
+            let linkEnd = try await endedAt(app, context, linkSegment); XCTAssertEqual(linkEnd, stopAt)
+            let foreignEnd = try await endedAt(app, other, foreign); XCTAssertNil(foreignEnd)
+        }
+    }
+    func testDepartureOnLinkStartedTimerSuggestOffAndOtherPlace() async throws {
+        try await withApp { app, auth in
+            let (context, _) = try await registered(auth, db: app.db)
+            let bearer = try await deviceBearer(app, context)
+            let suggest = try resourceID(await timeRequest(app, context, .POST, "places", placeBody("suggest"), status: .created))
+            let off = try resourceID(await timeRequest(app, context, .POST, "places", placeBody("off"), status: .created))
+            let school = try resourceID(await timeRequest(app, context, .POST, "places", placeBody(), status: .created))
+            let office = try resourceID(await timeRequest(app, context, .POST, "places", placeBody(), status: .created))
+            let free = try await createLink(app, context, label: "Free")
+            let bound = try await createLink(app, context, label: "School", place: school)
+            let started = try await trigger(app, "/t/" + free.token + "/start?at=" + iso(-6600))
+            let segment = try XCTUnwrap(object(started)["segmentId"] as? String)
+            let proposal = try await event(app, bearer, suggest, "departure", iso(-3000))
+            XCTAssertEqual(proposal["result"] as? String, "suggested")
+            XCTAssertNotNil(proposal["suggestionId"] as? String)
+            let stillOpen = try await endedAt(app, context, segment); XCTAssertNil(stillOpen)
+            let offResult = try await event(app, bearer, off, "departure", iso(-2900))
+            XCTAssertEqual(offResult["result"] as? String, "recorded")
+            let afterOff = try await endedAt(app, context, segment); XCTAssertNil(afterOff)
+            // A timer bound to another place stays running.
+            let stopAt = iso(-2000)
+            _ = try await trigger(app, "/t/" + free.token + "/stop?at=" + stopAt)
+            _ = try await trigger(app, "/t/" + bound.token + "/start?at=" + iso(-1500))
+            let ignored = try await event(app, bearer, office, "departure", iso(-1000))
+            XCTAssertEqual(ignored["result"] as? String, "ignored")
+        }
+    }
+    func testDepartureArrivalStartedAndManualTimersUnchanged() async throws {
+        try await withApp { app, auth in
+            let (context, _) = try await registered(auth, db: app.db)
+            let bearer = try await deviceBearer(app, context)
+            let office = try resourceID(await timeRequest(app, context, .POST, "places", placeBody(), status: .created))
+            // Arrival-started: confirmed visit owns the segment and ends at the departure.
+            _ = try await event(app, bearer, office, "arrival", "2026-10-13T06:00:00Z")
+            let booked = try await event(app, bearer, office, "presence_confirmed", "2026-10-13T06:06:00Z")
+            let owned = try XCTUnwrap(booked["segmentId"] as? String)
+            let ended = try await event(app, bearer, office, "departure", "2026-10-13T10:00:00Z")
+            XCTAssertEqual(ended["result"] as? String, "booked")
+            let end = try await endedAt(app, context, owned); XCTAssertEqual(end, "2026-10-13T10:00:00Z")
+            // A later visit with an unresolved automation timer of the earlier visit still only yields an end suggestion.
+            let second = try await event(app, bearer, office, "presence_confirmed", "2026-10-13T11:00:00Z")
+            XCTAssertNotEqual(second["result"] as? String, "booked")
+            _ = try await event(app, bearer, office, "arrival", "2026-10-14T06:00:00Z")
+            let manual = try await openSegment(app, context, "2026-10-14T06:30:00Z")
+            let viaManual = try await event(app, bearer, office, "departure", "2026-10-14T09:00:00Z")
+            XCTAssertEqual(viaManual["result"] as? String, "ignored")
+            let manualEnd = try await endedAt(app, context, manual); XCTAssertNil(manualEnd)
+        }
+    }
+
     func testTriggerLinkModuleDisabledAndScrubber() async throws {
         try await withApp { app, auth in
             let (context, _) = try await registered(auth, db: app.db)

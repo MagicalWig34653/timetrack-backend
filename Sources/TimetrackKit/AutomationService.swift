@@ -99,14 +99,23 @@ struct AutomationService: Sendable {
                     }
                 } else { result.result = arrival == nil ? "needs_review" : "ignored" }
             case "departure":
-                if let running = try await scope.timer.current(), running.source == "automation",
-                   confirmed?.result.segmentId != running.id {
+                let running = try await scope.timer.current()
+                // A running segment is unrelated to this device's visit when no arrival was recorded, or when the visit is already
+                // closed and the segment started after it (trigger link, manual start). Only then does W1 apply to it.
+                let closedAt = visit.last { ["departure", "cancel"].contains($0.type) }?.occurredAt
+                var unrelated = false
+                if let running {
+                    if arrival == nil { unrelated = true }
+                    else if closed, let closedAt, closedAt < running.startedAt { unrelated = true }
+                }
+                if let running, running.source == "automation", !unrelated, confirmed?.result.segmentId != running.id {
                     // No confirmation in this visit owns the unresolved running segment.
                     let suggestion = try await missingDeparture(running, proposedEnd: input.occurredAt)
                     result = .init(result: "suggested", segmentId: running.id, suggestionId: suggestion.id)
-                } else if arrival == nil, let running = try await scope.timer.current() {
-                    // W1: a departure without any recorded arrival also stops a timer that was started manually (or by another
-                    // means), provided it is not bound to a different place. Mode "direct" stops it at the event time, "suggest" proposes it.
+                } else if unrelated, let running {
+                    // W1: a departure without an open visit also stops a timer that was started manually, by a trigger link or by
+                    // other means, provided it is not bound to a different place. Mode "direct" stops it at the event time
+                    // (backdated), "suggest" proposes it.
                     if let bound = running.placeId, bound != input.placeId { result.result = "ignored" }
                     else { result = try await stopRunning(running, at: input.occurredAt, placeId: input.placeId, mode: place.automationMode) }
                 } else if arrival == nil {

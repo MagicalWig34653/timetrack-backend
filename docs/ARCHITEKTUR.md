@@ -169,6 +169,21 @@ Ereignistypen `arrival`, `presence_confirmed`, `departure`, `cancel`. Erprobung 
 
 **W1 (ADR-0027)**: Ein `departure` beendet jeden laufenden Abschnitt, auch manuell gestartete (Modus `direct`: Ende = Ereigniszeit, `suggest`: Ende-Vorschlag, `off`: nur festgehalten); ein an einen anderen Ort gebundener Abschnitt bleibt, Vorbeifahrt bucht nichts, ohne laufenden Timer ist der Abgang ein harmloses `ignored`. Die Regeln liegen in `AutomationService` (`stopRunning`).
 
+Entscheidungstabelle `departure` (laufender Abschnitt `R`, Besuch = letzte `arrival` dieses Geräts und Orts):
+
+| Lage | Ergebnis |
+|---|---|
+| Kein Besuch (keine `arrival`) oder Besuch bereits beendet und `R` danach gestartet (Auslöse-Link, manuell, Timer-Endpunkt, Quelle egal), `R` ohne oder mit diesem Ort | `direct`: beendet `R` zur Ereigniszeit (rückdatiert); `suggest`: Ende-Vorschlag; `off`: nur festgehalten |
+| Wie oben, `R` an anderen Ort gebunden | `ignored`, `R` läuft weiter |
+| Wie oben, kein `R` | `ignored` |
+| Offener Besuch, `R` aus Automation, aber nicht durch eine Bestätigung dieses Besuchs entstanden (z. B. Rest eines früheren Besuchs) | Ende-Vorschlag „fehlender Abgang“, `R` bleibt offen |
+| Offener Besuch, bestätigt, `R` gehört zum Besuch | `direct`: Ende zur Ereigniszeit; `suggest`: Vorschlag wird auf die Ereigniszeit gesetzt/Ende-Vorschlag |
+| Offener Besuch, nicht bestätigt (Vorbeifahrt) | `ignored`, es wird nichts gebucht |
+| Besuch bereits beendet (doppelter `departure`) | `needs_review` |
+| Zeit älter als das jüngste Ereignis oder Ereigniszeit nicht nach Start von `R` | `needs_review` |
+
+Die Sonderbehandlung „Automation-Abschnitt ohne Bestätigung → nur Vorschlag“ gilt nur für einen wirklich offenen Besuch; ein per Auslöse-Link gestarteter Abschnitt (Quelle `automation`) wird wie ein manueller behandelt.
+
 **Auslöse-Links (W1, ADR-0027)**: `GET /t/{token}/{start|stop|toggle}` ohne Sitzung für Werkzeuge, die nur einen einfachen GET senden können. Das Token (256 Bit, nur als SHA-256-Hash gespeichert, einmalig bei der Erstellung sichtbar) in der URL ist die einzige Berechtigung. Je Link: Bezeichnung, erlaubte Aktionen, optionaler Ort, Ablauf, Widerruf, „zuletzt benutzt“; Verwaltung per Sitzung unter `/api/v1/me/trigger-links` (Modul `automation`, nicht per MCP). Unbekannte, widerrufene und abgelaufene Token sowie nicht erlaubte Aktionen antworten ununterscheidbar mit 404; Ratenbegrenzung je Link und je Client; `Cache-Control: no-store`; Aktionen sind idempotent (Start bei laufendem Timer und Stopp ohne Timer ändern nichts, `toggle` mit 10-s-Wiederholungsschutz, HEAD und Prefetch lösen nichts aus); `?at=` höchstens 2 Stunden zurück. Es gelten dieselben Ortsmodi und Kontenrechte wie bei der Automation; Daten: Tabelle `trigger_links`, Kontoexport ohne Token, Löschung mit dem Konto.
 
 *Sicherheitshinweis zu GET mit Geheimnis in der URL:* Die URL gelangt in Browserverlauf, Lesezeichen, Synchronisation, Protokolle von Proxys/Zielgeräten und Screenshots; jeder, der sie kennt, kann Zeiten beginnen und beenden (nicht lesen, ändern oder löschen). Daher: ein Link je Zweck mit nur den nötigen Aktionen (und wenn möglich Ort und Ablauf), den Link nicht teilen oder in Chats einfügen, bei Verdacht oder Gerätewechsel sofort widerrufen, Proxy-Zugriffsprotokolle für `/t/` schwärzen (`docs/installation/proxy.md`). Wo ein Header gesetzt werden kann, ist das Gerätetoken mit `POST /automation/events` vorzuziehen. Das Backend protokolliert keine Anfragepfade und schwärzt `/t/<token>` zusätzlich im Konsolenlog.
