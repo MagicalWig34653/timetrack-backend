@@ -41,6 +41,8 @@ Schulregel mit Schwelle und Gutschrift (Standard 4 × 45 min, 7:42), Fahrtzeiten
 Anfangsstand und datierten Korrekturen, Feiertage für alle 16 Bundesländer. **Teilweise**: `arbzg-adult-de` und
 `jarbschg-minor-de` (R2, ADR-0028) im Backend-Worktree; fachliche Prüfung und Client-Anzeige offen. Geführtes Onboarding (Ausbildungsstichtag u. Ä.) **umgesetzt als PWA-Assistent** (P1, ADR-0019; Lead-Prüfung offen): Arbeitsmodell, Pausenfenster, Schule, Urlaub (Stichtagsbestand statt anteiligem Anspruch), Module, Zusammenfassung; Vorschläge werden erst nach Bestätigung gespeichert.
 
+X3: Anfangsstand und Korrekturen sind mit Grund, Betrag und Erstellungszeit abrufbar und einzeln löschbar. Nach dem Löschen gilt der neu berechnete Saldo; ein gelöschter Anfangsstand kann neu angelegt werden. Die Markierung `needsReview` eines Zeitabschnitts wird bei einer Ende-Korrektur, bei Annahme oder Ablehnung seines Ende-Vorschlags oder durch ausdrückliche Quittierung entfernt. Jede Änderung am Abschnitt wird als Revision festgehalten.
+
 Vorschlag: Wochen-Soll mit Verteilung auf Arbeitstage oder explizite Tages-Sollwerte, klare
 Vorrangregel. Bei reinem Wochen-Soll braucht die Abwesenheitsbewertung eine definierte Tagesbasis.
 Änderungen ab Stichtag, rückwirkende Neubewertung ausdrücklich wählen. Keine doppelte Gutschrift

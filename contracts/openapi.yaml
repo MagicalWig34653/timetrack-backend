@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.29.0
+  version: 0.30.0
   description: |
     v0.29.0 (R2): Rechtsprofile, Berufsschulstunden und informative Warnungen; keine Rechtsberatung.
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
@@ -61,6 +61,7 @@ info:
     --- B7 (v0.25.0, additiv) ---
     v0.25.0 (B7, ADR-0026): Vorlage für den Urlaubsantrag je Konto (Modul planning, privat, genau eine): GET /api/v1/vacation/request-form (`exists`, `fileName`, `sizeBytes`, `mapping`, `updatedAt`; ohne Vorlage `exists:false` mit Nullwerten), PUT .../file (Body application/pdf, höchstens 5 MB, Magic Number `%PDF-`, Header `X-File-Name` prozent-kodiert; 400 bad_request, 413 file_too_large, 415 unsupported_type; ersetzt die vorige Datei und behält die Zuordnung), PUT .../mapping (JSON-Objekt, undurchsichtig, höchstens 64 KB; 409 no_template ohne Vorlage, 413 mapping_too_large), GET .../file (PDF als attachment, nosniff; 404 ohne Vorlage), DELETE /api/v1/vacation/request-form (idempotent 204). Die Datei folgt den Speicherregeln (DB/S3/lokal), steckt im Kontoexport (`vacation-request-form.json` und `files/`) und wird mit dem Konto gelöscht. Neuer Fehlercode: no_template (409), mapping_too_large (413).
     --- W2 (v0.27.0, additiv) ---
+    v0.30.0 (X3): Segmentkorrektur mit neuem/geändertem Ende oder `needsReview:false` sowie Entscheidung über einen Ende-Vorschlag löschen die Prüfmarkierung mit Revision. GET /api/v1/time/account/adjustments listet eigene Anpassungen seitenweise mit ID, Art, Datum, Betrag in Sekunden, Grund und Erstellungszeit; DELETE /api/v1/time/account/adjustments/{id} entfernt eine eigene Anpassung und liefert den neu berechneten Saldo. MCP `list_time_adjustments` liest dieselben Daten.
     v0.28.0 (W3): (a) Stornierte Abschnitte: GET /api/v1/time/segments/cancelled (seitenweise, from/to), POST /api/v1/time/segments/{id}/restore (409 segment_overlap/timer_already_running/segment_not_cancelled), DELETE /api/v1/time/segments/{id}?permanent=true (nur stornierte, 409 segment_not_cancelled) und DELETE /api/v1/time/segments/cancelled (Sammellöschung per from/to/ids/all, dryRun=true als Vorschau, 400 purge_scope_required); endgültiges Löschen entfernt auch Revisionen, Ende-Vorschläge und Timer-Ergebnisse, nicht über MCP. MCP: list_cancelled_segments und restore_segment. (b) GET /api/v1/time/statistics (Statistikreihe je Tag/Woche/Monat, basis evaluated|raw). Neue Fehlercodes: segment_not_cancelled (409), purge_scope_required (400).
     v0.27.0 (W2): PATCH /api/v1/time/segments/{id} mit ausdrücklichem `endedAt: null` öffnet einen beendeten Abschnitt wieder („letzten Timer fortsetzen“), nur wenn kein anderer Abschnitt läuft (409 timer_already_running) und kein anderer nicht stornierter Abschnitt am oder nach dem bisherigen Ende beginnt (409 segment_overlap). Quelle, Art, Ort und Notiz bleiben, rawEndedAt bleibt unverändert, die Revision trägt den Grund mit dem Präfix „Reopened: “. Fehlendes `endedAt` ändert das Ende weiterhin nicht. MCP `correct_segment` verhält sich gleich.
     --- W1 (v0.26.0, additiv) ---
@@ -702,7 +703,7 @@ paths:
     patch:
       operationId: correctSegment
       summary: Zeitabschnitt korrigieren
-      description: Korrektur mit Pflichtgrund; If-Match muss die aktuelle version enthalten (sonst 412 stale_version). Rohzeiten bleiben erhalten, es entsteht eine Revision. Ausdrückliches `endedAt` = null öffnet einen beendeten Abschnitt wieder (v0.27.0), dann 409 timer_already_running, wenn ein anderer Abschnitt läuft; 409 segment_overlap, wenn ein anderer Abschnitt am oder nach dem bisherigen Ende beginnt. Die Revision-Begründung erhält das Präfix „Reopened“.
+      description: Korrektur mit Pflichtgrund; If-Match muss die aktuelle version enthalten (sonst 412 stale_version). Rohzeiten bleiben erhalten, es entsteht eine Revision. Ein neu gesetztes oder geändertes Ende sowie `needsReview=false` quittieren die Prüfung. `needsReview=true` ist ungültig. Ausdrückliches `endedAt` = null öffnet einen beendeten Abschnitt wieder (v0.27.0), dann 409 timer_already_running, wenn ein anderer Abschnitt läuft; 409 segment_overlap, wenn ein anderer Abschnitt am oder nach dem bisherigen Ende beginnt. Die Revision-Begründung erhält das Präfix „Reopened“.
       security: [ { session: [], csrf: [] } ]
       parameters:
         - { $ref: '#/components/parameters/Id' }
@@ -842,6 +843,13 @@ paths:
       parameters: [ { name: asOf, in: query, schema: { type: string, format: date } } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/TimeAccount' } } } } }
   /api/v1/time/account/adjustments:
+    get:
+      operationId: listAccountAdjustments
+      summary: Zeitkonto-Anpassungen auflisten
+      description: Anfangsstand und datierte Korrekturen des eigenen Kontos, nach Erstellungszeit absteigend. Bestandsdaten erhalten bei der Migration den Migrationszeitpunkt als createdAt.
+      security: [ { session: [] } ]
+      parameters: [ { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }, { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 100000, default: 0 } } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/AdjustmentPage' } } } } }
     post:
       operationId: createAccountAdjustment
       summary: Zeitkonto-Korrektur anlegen
@@ -849,6 +857,14 @@ paths:
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [kind, date, seconds, reason], properties: { kind: { type: string, enum: [opening, correction] }, date: { type: string, format: date }, seconds: { type: integer }, reason: { type: string, maxLength: 200 } } } } } }
       responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/TimeAccount' } } } }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/v1/time/account/adjustments/{id}:
+    delete:
+      operationId: deleteAccountAdjustment
+      summary: Eigene Zeitkonto-Anpassung löschen
+      description: Entfernt die Anpassung einschließlich Anfangsstand und berechnet das Zeitkonto neu. Ein Audit-Eintrag enthält nur die Anpassungs-ID, keine Begründung oder Zeitwerte. Unbekannte oder fremde ID ergibt 404.
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '200': { description: neuer Zeitkontostand, content: { application/json: { schema: { $ref: '#/components/schemas/TimeAccount' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/v1/time/suggestions:
     get:
       operationId: listSuggestions
@@ -859,7 +875,7 @@ paths:
     post:
       operationId: acceptSuggestion
       summary: Zeitvorschlag übernehmen
-      description: Erzeugt aus dem Vorschlag ein Segment bzw. beendet das offene (Zeiten optional überschreibbar). Einmalig; zweites Mal → 409.
+      description: Erzeugt aus dem Vorschlag ein Segment bzw. beendet das offene (Zeiten optional überschreibbar). Bei einem Ende-Vorschlag wird needsReview entfernt und eine Segmentrevision angelegt. Einmalig; zweites Mal → 409.
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       requestBody: { content: { application/json: { schema: { type: object, properties: { startedAt: { type: string, format: date-time }, endedAt: { type: string, format: date-time } } } } } }
@@ -868,6 +884,7 @@ paths:
     post:
       operationId: rejectSuggestion
       summary: Zeitvorschlag ablehnen
+      description: Bei einem Ende-Vorschlag wird needsReview des zugehörigen Abschnitts entfernt und eine Revision angelegt.
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '204': { description: verworfen }, '404': { $ref: '#/components/responses/NotFound' } }
@@ -2053,6 +2070,25 @@ components:
         placeId: { type: [string, 'null'], format: uuid }
         note: { type: [string, 'null'], maxLength: 500 }
         reason: { type: string, minLength: 1, maxLength: 200 }
+        needsReview: { type: boolean, enum: [false], description: 'Explizite Quittierung; true ist ungültig.' }
+    Adjustment:
+      type: object
+      required: [id, kind, date, seconds, reason, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [opening, correction] }
+        date: { type: string, format: date }
+        seconds: { type: integer, description: 'Vorzeichenbehafteter Betrag in Sekunden.' }
+        reason: { type: string }
+        createdAt: { type: string, format: date-time }
+    AdjustmentPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Adjustment' } }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
     Segment:
       type: object
       required: [id, kind, startedAt, endedAt, rawStartedAt, rawEndedAt, source, version, voided, needsReview]

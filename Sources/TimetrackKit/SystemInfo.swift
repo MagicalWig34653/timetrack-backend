@@ -3,7 +3,7 @@ import Fluent
 import SQLKit
 
 /// Version of contracts/openapi.yaml (`info.version`). A test compares this constant with the contract.
-let apiContractVersion = "0.29.0"
+let apiContractVersion = "0.30.0"
 
 /// Build metadata baked into the container image (Dockerfile build args -> ENV, ADR-0023). Local builds without
 /// the build args report "dev" / "unknown".

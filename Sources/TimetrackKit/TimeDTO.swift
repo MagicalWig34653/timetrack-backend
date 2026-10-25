@@ -75,10 +75,11 @@ struct SegmentCorrection: Decodable, Sendable {
     var placeId: UUID?
     var note: String?
     var reason: String
+    var needsReview: Bool?
     var hasEnd: Bool
     var hasPlace: Bool
     var hasNote: Bool
-    enum CodingKeys: String, CodingKey { case startedAt, endedAt, kind, placeId, note, reason }
+    enum CodingKeys: String, CodingKey { case startedAt, endedAt, kind, placeId, note, reason, needsReview }
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         startedAt = try c.decodeIfPresent(Date.self, forKey: .startedAt)
@@ -87,6 +88,7 @@ struct SegmentCorrection: Decodable, Sendable {
         placeId = try c.decodeIfPresent(UUID.self, forKey: .placeId)
         note = try c.decodeIfPresent(String.self, forKey: .note)
         reason = try c.decode(String.self, forKey: .reason)
+        needsReview = try c.decodeIfPresent(Bool.self, forKey: .needsReview)
         hasEnd = c.contains(.endedAt); hasPlace = c.contains(.placeId); hasNote = c.contains(.note)
     }
 }
@@ -107,6 +109,12 @@ struct DayInput: Decodable, Sendable {
     }
 }
 struct AdjustmentInput: Content { var kind: String; var date: LocalDate; var seconds: Int; var reason: String }
+struct AdjustmentDTO: Content {
+    var id: UUID; var kind: String; var date: String; var seconds: Int; var reason: String; var createdAt: Date
+}
+struct AdjustmentPage: Content {
+    var items: [AdjustmentDTO]; var total: Int; var limit: Int; var offset: Int
+}
 struct SuggestionDTO: Content {
     var id: UUID
     var type: String

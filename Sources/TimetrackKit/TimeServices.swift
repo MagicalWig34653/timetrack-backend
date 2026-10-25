@@ -188,6 +188,11 @@ struct SegmentService: Sendable {
         if let start = input.startedAt { value.startedAt = start }
         let reopens = input.hasEnd && input.endedAt == nil && value.endedAt != nil
         if input.hasEnd { value.endedAt = input.endedAt }
+        if input.hasEnd, input.endedAt != nil, input.endedAt != row.endedAt { value.needsReview = false }
+        if let needsReview = input.needsReview {
+            guard !needsReview else { throw APIError.invalid }
+            value.needsReview = false
+        }
         if input.hasPlace { value.placeId = input.placeId }
         if input.hasNote { value.note = input.note }
         if let kind = input.kind { value.kind = kind }

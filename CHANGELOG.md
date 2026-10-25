@@ -6,6 +6,7 @@ Die Einzelpakete (A1, B2, …) stehen in `docs/ARBEITSPLAN.md`.
 ## Unveröffentlicht
 
 - **Jugendrechtsprofil (R2, Vertrag 0.29.0):** `jarbschg-minor-de` neben `arbzg-adult-de`, Profilwahl je datiertem Arbeitsmodell, Berufsschulstunden und 8-/40-Stunden-Gutschrift, Pausen-, Ruhezeit- und Grenzhinweise; `GET /legal-profiles`, Migration und additive Tages-/Wochen-/Statistikfelder. Hinweise sind informativ und keine Rechtsberatung.
+- **Client-Lücken X3 (Vertrag 0.30.0):** `needsReview` endet nach Ende-Korrektur oder Entscheidung über einen Ende-Vorschlag; ausdrückliche Quittierung per `PATCH` möglich. Zeitkonto-Anpassungen sind seitenweise lesbar und einzeln löschbar; der Saldo wird neu berechnet. MCP kann die Anpassungen lesen.
 - **Stornierte Abschnitte und Statistik (W3, Vertrag 0.28.0):** Übersicht (`GET /time/segments/cancelled`), Wiederherstellen (`POST /time/segments/{id}/restore`) und endgültiges Löschen stornierter Abschnitte (einzeln `DELETE …?permanent=true`, gesammelt `DELETE /time/segments/cancelled` mit `dryRun`); MCP nur Liste und Wiederherstellen. Neue Statistikreihe für Diagramme `GET /time/statistics` (Tag/Woche/Monat; Soll, Ist, Differenz, Zeitkonto, Arten, Abwesenheiten, Pausen).
 - **Letzten Timer fortsetzen (W2, Vertrag 0.27.0):** `PATCH /time/segments/{id}` mit `endedAt: null` öffnet einen beendeten Abschnitt wieder (nur wenn kein Timer läuft und kein späterer Abschnitt existiert; sonst 409 `timer_already_running` bzw. `segment_overlap`), auch über MCP `correct_segment`.
 

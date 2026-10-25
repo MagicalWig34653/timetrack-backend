@@ -107,7 +107,7 @@ extension AuthTests {
         let createdToken = try await credentials.createToken(.init(name: "Test", scopes: Array(McpScopes.known), expiresInDays: 1), a, on: app.db)
         let token = try XCTUnwrap(createdToken.token)
         let before = try await mcpRPC(app, token, "tools/list")
-        XCTAssertEqual(((before["result"] as? [String: Any])?["tools"] as? [Any])?.count, 24)
+        XCTAssertEqual(((before["result"] as? [String: Any])?["tools"] as? [Any])?.count, 25)
         for (key, tool) in [("reports", "get_report_week"), ("planning", "list_absences"), ("transfer", "list_absence_attachments")] {
             try await setModules(app, a, [key: false])
             let list = try await mcpRPC(app, token, "tools/list")

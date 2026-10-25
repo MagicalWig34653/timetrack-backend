@@ -84,7 +84,21 @@ final class AdjustmentRecord: Model, @unchecked Sendable {
     @Field(key: "seconds") var seconds: Int
     @Field(key: "reason") var reason: String
     @OptionalField(key: "opening") var opening: Int?
+    @OptionalField(key: "created_at") var createdAt: Date?
     init() {}
+}
+
+struct AddAdjustmentCreatedAt: AsyncMigration {
+    let name = "x3.add_adjustment_created_at"
+    func prepare(on db: any Database) async throws {
+        try await db.schema(AdjustmentRecord.schema).field("created_at", .datetime).update()
+        let legacy = try await AdjustmentRecord.query(on: db).all()
+        let migratedAt = Date()
+        for row in legacy { row.createdAt = migratedAt; try await row.update(on: db) }
+    }
+    func revert(on db: any Database) async throws {
+        try await db.schema(AdjustmentRecord.schema).deleteField("created_at").update()
+    }
 }
 
 final class SuggestionRecord: Model, @unchecked Sendable {
