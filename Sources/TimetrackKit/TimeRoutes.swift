@@ -16,6 +16,9 @@ func registerTimeRoutes(_ app: Application, auth: AuthService) {
         catch is TimeEngineError { throw APIError.invalid }
     }
     api.get("work-models") { req async throws -> Response in try await runRead(req) { try timeResponse(await $0.models.list()) } }
+    api.get("legal-profiles") { req async throws -> Response in
+        try await runRead(req) { _ in try timeResponse(LegalWorkProfile.all) }
+    }
     api.post("work-models") { req async throws -> Response in
         let input = try timeDecode(WorkModelDTO.self, request: req)
         return try await run(req) { try timeResponse(await $0.models.create(input), status: .created) }

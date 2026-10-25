@@ -143,6 +143,8 @@ Korrekturen versionieren, Rohereignisse erhalten. Wiedereröffnen (W2): `PATCH /
 
 **Statistikreihe (W3):** `GET /time/statistics?from&to&granularity=day|week|month&basis=evaluated|raw` (höchstens 1100 Tage) gruppiert die vorhandene Tagesbewertung; es gibt keine neue Bewertungslogik. Je Bucket: Soll (gesamt und bis heute), Ist, Gutschrift, Differenz, Über-/Unterzeit, kumuliertes Zeitkonto (immer der offizielle bewertete Stand wie `GET /time/account`), Zeit je Art (Arbeit/Schule/Fahrt), Abwesenheitstage, tatsächliche Pausen und abgezogene feste Pausen. `basis=raw` entfernt nur die Rundung von erstem Beginn/letztem Ende. Rechtsprofile bleiben unberührt.
 Rechtshinweise anhand tatsächlicher Zeit und gewähltem Rechtsprofil, nicht gerundeter Bewertung.
+R2 (ADR-0028): `legalProfileId` je datiertem Arbeitsmodell, Profilkatalog über `GET /legal-profiles`;
+`schoolLessonCount` je Tag. Pausen-, Grenz-, Ruhezeit- und Schulhinweise entstehen im gemeinsamen Bewertungsweg.
 Betriebliche Gutschriften nicht als gesetzliche Regeln bezeichnen.
 Rundung nur an erstem Beginn/letztem Ende des fachlichen Arbeitstags; innere Pausen/Lücken exakt.
 Summe der Arbeitsabschnitte plus äußere Rundungsdifferenzen, nicht pauschal Tagesrahmen minus

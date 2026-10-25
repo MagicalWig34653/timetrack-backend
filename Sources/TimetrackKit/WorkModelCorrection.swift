@@ -39,6 +39,7 @@ extension WorkModelService {
                 "roundingMinutes": String(value.roundingMinutes ?? 15),
                 "schoolFullDayThresholdSeconds": String(value.schoolFullDayThresholdSeconds ?? 10800),
                 "schoolCreditSeconds": value.schoolCreditSeconds.map(String.init) ?? "",
+                "legalProfileId": value.legalProfileId ?? LegalWorkProfile.adult.id,
                 "dayBoundaryMinutes": String(value.dayBoundaryMinutes ?? 0), "fixedBreaks": breaks]
         }
         let a = normalized(old), b = normalized(new)
@@ -54,6 +55,7 @@ extension WorkModelService {
         let next = others.first { $0.validFrom > current.validFrom }
         var corrected = input
         corrected.id = id; corrected.createdAt = current.createdAt; corrected.version = (current.version ?? 1) + 1
+        corrected.legalProfileId = corrected.legalProfileId ?? current.legalProfileId ?? LegalWorkProfile.adult.id
         var changed: [WorkModelDTO] = []; var previousValidTo: LocalDate?
         if let previous {
             guard corrected.validFrom > previous.validFrom else { throw APIError(.conflict, "model_overlap") }
@@ -80,6 +82,7 @@ extension WorkModelService {
         for value in plan.changed {
             let row = try await record(value.id!)
             row.validFrom = value.validFrom.description; row.validTo = value.validTo?.description; row.payload = value
+            row.legalProfileId = value.legalProfileId ?? LegalWorkProfile.adult.id
             try await row.update(on: scope.db)
         }
         try await AccountAuditRecord(action: "work_model.updated", actor: scope.accountId, target: id).create(on: scope.db)

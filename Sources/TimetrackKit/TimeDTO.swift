@@ -17,6 +17,7 @@ struct WorkModelDTO: Content {
     var schoolCreditSeconds: Int?
     var dayBoundaryMinutes: Int?
     var fixedBreaks: [BreakInput]?
+    var legalProfileId: String?
     /// Correction counter (M1); absent on versions created before it, which count as 1. Ignored on input.
     var version: Int?
     struct BreakInput: Content { var start: String; var end: String }
@@ -36,7 +37,8 @@ struct WorkModelDTO: Content {
             dailyTargetSeconds: targets, travelCountsAsWork: travelCountsAsWork ?? true, roundingEnabled: roundingEnabled ?? true,
             roundingMinutes: roundingMinutes ?? 15, schoolFullDayThresholdSeconds: schoolFullDayThresholdSeconds ?? 10800,
             schoolCreditSeconds: schoolCreditSeconds, dayBoundaryMinutes: dayBoundaryMinutes ?? 0,
-            fixedBreaks: (fixedBreaks ?? []).map { try FixedBreak(start: time($0.start), end: time($0.end)) })
+            fixedBreaks: (fixedBreaks ?? []).map { try FixedBreak(start: time($0.start), end: time($0.end)) },
+            legalProfileId: legalProfileId ?? LegalWorkProfile.adult.id)
         try value.validate()
         return value
     }
@@ -91,15 +93,17 @@ struct SegmentCorrection: Decodable, Sendable {
 struct TimerInput: Content { var clientEventId: UUID; var kind: EngineSegmentKind?; var placeId: UUID? }
 struct DayInput: Decodable, Sendable {
     var mark: DayMarkKind?; var creditSeconds: Int?; var skipFixedBreaks: Bool?; var note: String?
-    var hasCredit: Bool; var hasNote: Bool
-    enum CodingKeys: String, CodingKey { case mark, creditSeconds, skipFixedBreaks, note }
+    var schoolLessonCount: Int?
+    var hasCredit: Bool; var hasNote: Bool; var hasSchoolLessonCount: Bool
+    enum CodingKeys: String, CodingKey { case mark, creditSeconds, skipFixedBreaks, note, schoolLessonCount }
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         mark = try c.decodeIfPresent(DayMarkKind.self, forKey: .mark)
         creditSeconds = try c.decodeIfPresent(Int.self, forKey: .creditSeconds)
         skipFixedBreaks = try c.decodeIfPresent(Bool.self, forKey: .skipFixedBreaks)
         note = try c.decodeIfPresent(String.self, forKey: .note)
-        hasCredit = c.contains(.creditSeconds); hasNote = c.contains(.note)
+        schoolLessonCount = try c.decodeIfPresent(Int.self, forKey: .schoolLessonCount)
+        hasCredit = c.contains(.creditSeconds); hasNote = c.contains(.note); hasSchoolLessonCount = c.contains(.schoolLessonCount)
     }
 }
 struct AdjustmentInput: Content { var kind: String; var date: LocalDate; var seconds: Int; var reason: String }

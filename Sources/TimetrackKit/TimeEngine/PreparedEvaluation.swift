@@ -128,13 +128,45 @@ final class PreparedEvaluation {
         return gapByZone[zone]?[date] ?? []
     }
 
-    func evaluate(_ date: LocalDate, now: Date) throws -> DayEvaluationResult {
+    private func blockWeek(for date: LocalDate, model: EngineWorkModel) throws -> Bool {
+        guard let schoolRule = LegalWorkProfile.profile(model.legalProfileId)?.school else { return false }
+        let monday = date.addingDays(1 - date.isoWeekday)
+        var lessonCount = 0, schoolDays = 0
+        for offset in 0..<7 {
+            let day = monday.addingDays(offset)
+            guard let selected = try timeline.model(for: day), selected.legalProfileId == model.legalProfileId else { continue }
+            let key = Key(model: selected.id, date: day)
+            if assigned[key, default: []].contains(where: { $0.kind == .school }) {
+                schoolDays += 1
+                lessonCount += snapshot.preferences[day.description]?.schoolLessonCount ?? 0
+            }
+        }
+        return schoolDays >= schoolRule.blockWeekDays && lessonCount >= schoolRule.blockWeekLessons
+    }
+
+    private func baseEvaluation(_ date: LocalDate, now: Date) throws -> (DayEvaluationResult, EngineWorkModel) {
         let selectedModel = try timeline.model(for: date)
-        // A model gap has no contractual target or rounding rules. Keep actual time visible.
         let zone = snapshot.models.last(where: { $0.validFrom <= date })?.timezone ?? snapshot.models.first?.timezone ?? "Europe/Berlin"
         let model = selectedModel ?? EngineWorkModel(validFrom: date, validTo: date, timezone: zone,
             weeklyTargetSeconds: 0, workdays: [], roundingEnabled: false, schoolFullDayThresholdSeconds: Int.max)
-        let (preferences, markSource) = try effective(date, explicit: snapshot.preferences[date.description] ?? DayPreferences())
+        var (preferences, markSource) = try effective(date, explicit: snapshot.preferences[date.description] ?? DayPreferences())
+        if selectedModel != nil {
+            preferences.schoolBlockWeek = try blockWeek(for: date, model: model)
+            if let rule = LegalWorkProfile.profile(model.legalProfileId)?.school, !preferences.schoolBlockWeek {
+                let monday = date.addingDays(1 - date.isoWeekday)
+                var earlierFullDays = 0
+                var earlier = monday
+                while earlier < date {
+                    if let earlierModel = try timeline.model(for: earlier), earlierModel.legalProfileId == model.legalProfileId,
+                       assigned[Key(model: earlierModel.id, date: earlier), default: []].contains(where: { $0.kind == .school }),
+                       (snapshot.preferences[earlier.description]?.schoolLessonCount ?? 0) >= rule.fullDayLessons {
+                        earlierFullDays += 1
+                    }
+                    earlier = earlier.addingDays(1)
+                }
+                preferences.schoolFullDayAllowed = earlierFullDays < rule.fullDaysPerWeek
+            }
+        }
         let segments = try segments(on: date, selected: selectedModel, zone: zone)
         let result = try TimeEngine.evaluateAssignedDay(date: date, model: model, segments: segments, preferences: preferences, now: now)
         var evaluation = DayEvaluationResult(date: result.date, modelId: selectedModel?.id, mark: result.mark,
@@ -145,6 +177,34 @@ final class PreparedEvaluation {
             provisional: date == LocalDate.local(now, calendar: model.calendar) || result.provisional,
             segmentIds: result.segmentIds, segments: result.segments, markCreditSeconds: result.markCreditSeconds, note: result.note, breakHints: result.breakHints)
         evaluation.markSource = markSource; evaluation.targetOverrideSeconds = preferences.targetOverrideSeconds
+        evaluation.legalProfileId = result.legalProfileId; evaluation.legalWarnings = result.legalWarnings
+        evaluation.schoolLessonCount = result.schoolLessonCount
+        return (evaluation, model)
+    }
+
+    func evaluate(_ date: LocalDate, now: Date) throws -> DayEvaluationResult {
+        var (evaluation, model) = try baseEvaluation(date, now: now)
+        guard let profile = LegalWorkProfile.profile(model.legalProfileId) else { return evaluation }
+        if let minimum = profile.minimumRestSeconds,
+           let first = evaluation.segments.map(\.startedAt).min(),
+           let previous = try baseEvaluation(date.addingDays(-1), now: now).0.segments.compactMap(\.endedAt).max(),
+           first.timeIntervalSince(previous) < Double(minimum) {
+            evaluation.legalWarnings.append(.init(.restPeriod))
+        }
+        if profile.maxWeeklySeconds != nil || profile.maxWorkdaysPerWeek != nil {
+            let monday = date.addingDays(1 - date.isoWeekday)
+            var seconds = 0, workdays = 0
+            for offset in 0..<7 {
+                let day = monday.addingDays(offset)
+                let (item, selected) = try baseEvaluation(day, now: now)
+                guard selected.legalProfileId == model.legalProfileId else { continue }
+                let counted = item.creditSeconds > 0 ? item.creditSeconds : item.rawWorkSeconds
+                seconds += counted
+                if counted > 0 { workdays += 1 }
+            }
+            if let maximum = profile.maxWeeklySeconds, seconds > maximum { evaluation.legalWarnings.append(.init(.weeklyLimit)) }
+            if let maximum = profile.maxWorkdaysPerWeek, workdays > maximum { evaluation.legalWarnings.append(.init(.fiveDayWeek)) }
+        }
         return evaluation
     }
 }

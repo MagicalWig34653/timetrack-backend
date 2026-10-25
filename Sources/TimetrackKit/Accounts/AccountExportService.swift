@@ -81,12 +81,13 @@ struct AccountExportService: Sendable {
         let sources = try await ReportSourceRecord.query(on: db).filter(\.$accountId == id).all()
         try table("report-sources", sources.map { ["isoYear": .number(Double($0.isoYear)), "isoWeek": .number(Double($0.isoWeek)), "date": Self.opt($0.date), "note": Self.opt($0.note), "fileId": Self.uuid($0.fileId)] })
         let models = try await WorkModelRecord.query(on: db).filter(\.$accountId == id).sort(\.$validFrom).all()
-        try table("work-models", try models.map { ["id": .string($0.id?.uuidString ?? ""), "validFrom": .string($0.validFrom), "validTo": Self.opt($0.validTo), "model": try Self.value($0.payload)] })
+        try table("work-models", try models.map { ["id": .string($0.id?.uuidString ?? ""), "validFrom": .string($0.validFrom), "validTo": Self.opt($0.validTo), "model": try Self.value($0.versioned)] })
         let places = try await PlaceRecord.query(on: db).filter(\.$accountId == id).all()
         try table("places", try places.map { ["id": .string($0.id?.uuidString ?? ""), "place": try Self.value($0.payload)] })
         let days = try await DayPreferenceRecord.query(on: db).filter(\.$accountId == id).sort(\.$date).all()
         try table("day-preferences", days.map { ["date": .string($0.date), "mark": .string($0.mark), "creditSeconds": $0.creditSeconds.map { .number(Double($0)) } ?? .null,
-                                                  "skipFixedBreaks": .bool($0.skipFixedBreaks), "note": Self.opt($0.note)] })
+                                                  "skipFixedBreaks": .bool($0.skipFixedBreaks), "note": Self.opt($0.note),
+                                                  "schoolLessonCount": $0.schoolLessonCount.map { .number(Double($0)) } ?? .null] })
         let adjustments = try await AdjustmentRecord.query(on: db).filter(\.$accountId == id).sort(\.$date).all()
         try table("balance-adjustments", adjustments.map { ["kind": .string($0.kind), "date": .string($0.date), "seconds": .number(Double($0.seconds)), "reason": .string($0.reason), "opening": $0.opening.map { .number(Double($0)) } ?? .null] })
         let vacation = try await VacationSettingsRecord.query(on: db).filter(\.$accountId == id).all()

@@ -149,19 +149,21 @@ public struct EngineWorkModel: Equatable, Sendable {
     public var schoolCreditSeconds: Int?
     public var dayBoundaryMinutes: Int
     public var fixedBreaks: [FixedBreak]
+    public var legalProfileId: String
 
     public init(id: UUID = UUID(), validFrom: LocalDate, validTo: LocalDate? = nil,
                 timezone: String = "Europe/Berlin", weeklyTargetSeconds: Int, workdays: Set<Int>,
                 dailyTargetSeconds: [Int: Int] = [:], travelCountsAsWork: Bool = true,
                 roundingEnabled: Bool = true, roundingMinutes: Int = 15,
                 schoolFullDayThresholdSeconds: Int = 10_800, schoolCreditSeconds: Int? = nil,
-                dayBoundaryMinutes: Int = 0, fixedBreaks: [FixedBreak] = []) {
+                dayBoundaryMinutes: Int = 0, fixedBreaks: [FixedBreak] = [],
+                legalProfileId: String = LegalWorkProfile.adult.id) {
         self.id = id; self.validFrom = validFrom; self.validTo = validTo; self.timezone = timezone
         self.weeklyTargetSeconds = weeklyTargetSeconds; self.workdays = workdays
         self.dailyTargetSeconds = dailyTargetSeconds; self.travelCountsAsWork = travelCountsAsWork
         self.roundingEnabled = roundingEnabled; self.roundingMinutes = roundingMinutes
         self.schoolFullDayThresholdSeconds = schoolFullDayThresholdSeconds; self.schoolCreditSeconds = schoolCreditSeconds
-        self.dayBoundaryMinutes = dayBoundaryMinutes; self.fixedBreaks = fixedBreaks
+        self.dayBoundaryMinutes = dayBoundaryMinutes; self.fixedBreaks = fixedBreaks; self.legalProfileId = legalProfileId
     }
 
     public func validate() throws {
@@ -170,7 +172,8 @@ public struct EngineWorkModel: Equatable, Sendable {
               dailyTargetSeconds.allSatisfy({ (1...7).contains($0.key) && $0.value >= 0 }),
               (1...60).contains(roundingMinutes), (0...719).contains(dayBoundaryMinutes),
               schoolFullDayThresholdSeconds >= 0, schoolCreditSeconds.map({ $0 >= 0 }) ?? true,
-              validTo.map({ $0 >= validFrom }) ?? true else { throw TimeEngineError.invalidModel }
+              validTo.map({ $0 >= validFrom }) ?? true,
+              LegalWorkProfile.profile(legalProfileId) != nil else { throw TimeEngineError.invalidModel }
     }
     var calendar: Calendar {
         var value = Calendar(identifier: .gregorian)
@@ -237,10 +240,16 @@ public struct DayPreferences: Equatable, Sendable {
     public var skipFixedBreaks: Bool
     public var note: String?
     public var targetOverrideSeconds: Int?
+    public var schoolLessonCount: Int?
+    public var schoolBlockWeek: Bool
+    public var schoolFullDayAllowed: Bool
     public init(mark: DayMarkKind = .none, creditSeconds: Int? = nil, skipFixedBreaks: Bool = false, note: String? = nil,
-                targetOverrideSeconds: Int? = nil) {
+                targetOverrideSeconds: Int? = nil, schoolLessonCount: Int? = nil, schoolBlockWeek: Bool = false,
+                schoolFullDayAllowed: Bool = true) {
         self.mark = mark; self.creditSeconds = creditSeconds; self.skipFixedBreaks = skipFixedBreaks; self.note = note
         self.targetOverrideSeconds = targetOverrideSeconds
+        self.schoolLessonCount = schoolLessonCount; self.schoolBlockWeek = schoolBlockWeek
+        self.schoolFullDayAllowed = schoolFullDayAllowed
     }
 }
 public struct BreakHint: Equatable, Codable, Sendable {
@@ -249,6 +258,8 @@ public struct BreakHint: Equatable, Codable, Sendable {
         case breakMissing45 = "break_missing_45"
         case breakPartTooShort = "break_part_too_short"
         case workOver6hWithoutBreak = "work_over_6h_without_break"
+        case workOver4h30WithoutBreak = "work_over_4h30_without_break"
+        case breakMissing60 = "break_missing_60"
     }
     public let code: Code
     public init(code: Code) { self.code = code }
@@ -276,6 +287,9 @@ public struct DayEvaluationResult: Equatable, Encodable, Sendable {
     public let markCreditSeconds: Int?
     public let note: String?
     public let breakHints: [BreakHint]
+    public var legalProfileId: String = LegalWorkProfile.adult.id
+    public var legalWarnings: [LegalWarning] = []
+    public var schoolLessonCount: Int? = nil
     /// Set by the persistence layer when absences or holidays shape the day; the pure engine leaves the defaults.
     public var markSource: DayMarkSource = .none
     public var targetOverrideSeconds: Int? = nil
@@ -293,13 +307,15 @@ public struct DayEvaluationResult: Equatable, Encodable, Sendable {
         try c.encode(provisional, forKey: .provisional); try c.encode(segmentIds, forKey: .segmentIds)
         try c.encode(segments, forKey: .segments); try c.encode(markCreditSeconds, forKey: .markCreditSeconds)
         try c.encode(note, forKey: .note); try c.encode(breakHints, forKey: .breakHints)
+        try c.encode(legalProfileId, forKey: .legalProfileId); try c.encode(legalWarnings, forKey: .legalWarnings)
+        try c.encode(schoolLessonCount, forKey: .schoolLessonCount)
         try c.encode(markSource, forKey: .markSource); try c.encode(targetOverrideSeconds, forKey: .targetOverrideSeconds)
     }
     private enum CodingKeys: String, CodingKey {
         case date, modelId, mark, skipFixedBreaks, targetSeconds, rawWorkSeconds, breakDeductionSeconds
         case startAdjustSeconds, endAdjustSeconds, evaluatedWorkSeconds, creditSeconds, deltaSeconds
         case evaluatedStart, evaluatedEnd, provisional, segmentIds, segments, markCreditSeconds, note, breakHints
-        case markSource, targetOverrideSeconds
+        case markSource, targetOverrideSeconds, legalProfileId, legalWarnings, schoolLessonCount
     }
 }
 

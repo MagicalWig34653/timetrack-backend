@@ -26,13 +26,16 @@ struct DayService: Sendable {
     /// absences by date); without one the complete history is loaded (account balance, exports of long ranges).
     func snapshot(window: ClosedRange<LocalDate>? = nil, includeSegments: Bool = true) async throws -> TimeEvaluationSnapshot {
         let models = try await scope.models.list().map { try $0.engine() }
-        let segments = includeSegments ? try await scope.segments.all(window: window) : []
+        // Legal weekly and rest warnings need the complete surrounding week and preceding day.
+        let expanded = window.map { $0.lowerBound.addingDays(-7)...$0.upperBound.addingDays(7) }
+        let segments = includeSegments ? try await scope.segments.all(window: expanded) : []
         let query = DayPreferenceRecord.query(on: scope.db).filter(\.$accountId == scope.accountId)
-        if let window { query.filter(\.$date >= window.lowerBound.description).filter(\.$date <= window.upperBound.description) }
+        if let expanded { query.filter(\.$date >= expanded.lowerBound.description).filter(\.$date <= expanded.upperBound.description) }
         let rows = try await query.all()
         let preferences = Dictionary(uniqueKeysWithValues: rows.map { row in
             (row.date, DayPreferences(mark: DayMarkKind(rawValue: row.mark) ?? .none,
-                creditSeconds: row.creditSeconds, skipFixedBreaks: row.skipFixedBreaks, note: row.note))
+                creditSeconds: row.creditSeconds, skipFixedBreaks: row.skipFixedBreaks, note: row.note,
+                schoolLessonCount: row.schoolLessonCount))
         })
         guard try await scope.modules.enabled(.planning, account: scope.accountId, on: scope.db) else {
             return .init(models: models, segments: segments, preferences: preferences, planningEnabled: false)
@@ -55,7 +58,9 @@ struct DayService: Sendable {
         }
     }
     func set(_ date: LocalDate, input: DayInput) async throws -> DayEvaluationResult {
-        guard input.creditSeconds.map({ (0...86_400).contains($0) }) ?? true, input.note?.fitsColumn(200) ?? true else { throw APIError.invalid }
+        guard input.creditSeconds.map({ (0...86_400).contains($0) }) ?? true,
+              input.schoolLessonCount.map({ (0...20).contains($0) }) ?? true,
+              input.note?.fitsColumn(200) ?? true else { throw APIError.invalid }
         let existing = try await preference(date)
         let row = existing ?? DayPreferenceRecord()
         if existing == nil { row.accountId = scope.accountId; row.date = date.description; row.mark = "none"; row.skipFixedBreaks = false }
@@ -63,6 +68,7 @@ struct DayService: Sendable {
         if let skip = input.skipFixedBreaks { row.skipFixedBreaks = skip }
         if input.hasCredit { row.creditSeconds = input.creditSeconds }
         if input.hasNote { row.note = input.note }
+        if input.hasSchoolLessonCount { row.schoolLessonCount = input.schoolLessonCount }
         if row.mark == "none" { row.creditSeconds = nil }
         try await row.save(on: scope.db)
         return try await evaluate(date)

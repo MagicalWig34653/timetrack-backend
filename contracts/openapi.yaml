@@ -1,8 +1,9 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.28.0
+  version: 0.29.0
   description: |
+    v0.29.0 (R2): Rechtsprofile, Berufsschulstunden und informative Warnungen; keine Rechtsberatung.
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
     PWA (L1). Änderungen nur koordiniert durch den Lead (siehe docs/ARBEITSPLAN.md).
     Annahmen (ADR-0003): Basispfad /api/v1; Sitzung per HttpOnly-Cookie `tt_session`;
@@ -607,6 +608,13 @@ paths:
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/WorkModelInput' } } } }
       responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/WorkModel' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/v1/legal-profiles:
+    get:
+      operationId: listLegalProfiles
+      summary: Rechtsprofile auflisten
+      description: Informative Regeln und Quellen; keine Rechtsberatung. Das Arbeitsmodell wählt ein Profil ab validFrom.
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/LegalProfile' } } } } } }
   /api/v1/work-models/{id}:
     get:
       operationId: getWorkModel
@@ -823,7 +831,7 @@ paths:
       description: Tagesmarkierung und/oder Überspringen fester Pausen setzen (leere Markierung `none` entfernt sie).
       security: [ { session: [], csrf: [] } ]
       parameters: [ { name: date, in: path, required: true, schema: { type: string, format: date } } ]
-      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { mark: { $ref: '#/components/schemas/DayMarkKind' }, creditSeconds: { type: [integer, 'null'], minimum: 0 }, skipFixedBreaks: { type: boolean }, note: { type: [string, 'null'], maxLength: 200 } } } } } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { mark: { $ref: '#/components/schemas/DayMarkKind' }, creditSeconds: { type: [integer, 'null'], minimum: 0 }, skipFixedBreaks: { type: boolean }, note: { type: [string, 'null'], maxLength: 200 }, schoolLessonCount: { type: [integer, 'null'], minimum: 0, maximum: 20, description: 'Unterrichtsstunden zu mindestens 45 Minuten; für JArbSchG-Gutschrift ausdrücklich eintragen' } } } } } }
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/DayEvaluation' } } } } }
   /api/v1/time/account:
     get:
@@ -1955,6 +1963,23 @@ components:
           properties: { token: { type: string } }
     SegmentKind: { type: string, enum: [work, travel, school] }
     DayMarkKind: { type: string, enum: [none, holiday, vacation, sick, excused, school_credit] }
+    LegalProfile:
+      type: object
+      required: [id, name, breakRules, minimumBreakPartSeconds, maximumContinuousSeconds, restrictedWeekdays, sources, informationalOnly]
+      properties:
+        id: { type: string, enum: [arbzg-adult-de, jarbschg-minor-de] }
+        name: { type: string }
+        maxDailySeconds: { type: [integer, 'null'] }
+        maxWeeklySeconds: { type: [integer, 'null'] }
+        maxWorkdaysPerWeek: { type: [integer, 'null'] }
+        breakRules: { type: array, items: { type: object, required: [afterSeconds, requiredSeconds], properties: { afterSeconds: { type: integer }, requiredSeconds: { type: integer } } } }
+        minimumBreakPartSeconds: { type: integer }
+        maximumContinuousSeconds: { type: integer }
+        minimumRestSeconds: { type: [integer, 'null'] }
+        restrictedWeekdays: { type: array, items: { type: integer } }
+        school: { type: [object, 'null'], properties: { fullDayLessons: { type: integer }, fullDaysPerWeek: { type: integer }, fullDayCreditSeconds: { type: integer }, blockWeekLessons: { type: integer }, blockWeekDays: { type: integer }, blockWeekCreditSeconds: { type: integer }, noWorkBeforeMinutes: { type: integer } } }
+        sources: { type: array, items: { type: string, format: uri } }
+        informationalOnly: { type: boolean, const: true }
     WorkModelInput:
       type: object
       required: [validFrom, weeklyTargetSeconds, workdays]
@@ -1972,11 +1997,12 @@ components:
         schoolCreditSeconds: { type: [integer, 'null'], description: null = Tages-Soll }
         dayBoundaryMinutes: { type: integer, minimum: 0, maximum: 719, default: 0 }
         fixedBreaks: { type: array, items: { type: object, required: [start, end], properties: { start: { type: string, pattern: '^[0-2][0-9]:[0-5][0-9]$' }, end: { type: string, pattern: '^[0-2][0-9]:[0-5][0-9]$' } } } }
+        legalProfileId: { type: string, enum: [arbzg-adult-de, jarbschg-minor-de], default: arbzg-adult-de, description: 'Gilt ab validFrom; für bestehende Modelle bleibt arbzg-adult-de aktiv.' }
     WorkModel:
       allOf:
         - $ref: '#/components/schemas/WorkModelInput'
         - type: object
-          required: [id, createdAt]
+          required: [id, createdAt, legalProfileId]
           properties: { id: { type: string, format: uuid }, createdAt: { type: string, format: date-time }, version: { type: integer, minimum: 1, description: 'Korrekturzähler (M1); ältere Versionen ohne Wert zählen als 1' } }
     WorkModelPreview:
       type: object
@@ -2084,7 +2110,7 @@ components:
         buckets: { type: array, items: { $ref: '#/components/schemas/StatisticsBucket' } }
         totals:
           type: object
-          required: [targetSeconds, targetToDateSeconds, actualSeconds, creditSeconds, deltaSeconds, overtimeSeconds, undertimeSeconds, breakSeconds, breakDeductionSeconds, kindSeconds, absenceDays]
+          required: [targetSeconds, targetToDateSeconds, actualSeconds, creditSeconds, deltaSeconds, overtimeSeconds, undertimeSeconds, breakSeconds, breakDeductionSeconds, kindSeconds, absenceDays, legalWarningDays, breakHintDays]
           properties:
             targetSeconds: { type: integer }
             targetToDateSeconds: { type: integer }
@@ -2097,18 +2123,22 @@ components:
             breakDeductionSeconds: { type: integer }
             kindSeconds: { $ref: '#/components/schemas/StatisticsKinds' }
             absenceDays: { type: number }
+            legalWarningDays: { type: integer }
+            breakHintDays: { type: integer }
     StatisticsKinds:
       type: object
       required: [work, school, travel]
       properties: { work: { type: integer }, school: { type: integer }, travel: { type: integer } }
     StatisticsBucket:
       type: object
-      required: [label, from, to, days, targetSeconds, targetToDateSeconds, actualSeconds, creditSeconds, evaluatedWorkSeconds, rawWorkSeconds, roundingSeconds, deltaSeconds, overtimeSeconds, undertimeSeconds, kindSeconds, absences, absenceDays, breakSeconds, breakDeductionSeconds, workDays, provisional]
+      required: [label, from, to, days, targetSeconds, targetToDateSeconds, actualSeconds, creditSeconds, evaluatedWorkSeconds, rawWorkSeconds, roundingSeconds, deltaSeconds, overtimeSeconds, undertimeSeconds, kindSeconds, absences, absenceDays, breakSeconds, breakDeductionSeconds, workDays, provisional, legalWarningDays, breakHintDays]
       properties:
         label: { type: string, description: 'Tag 2026-10-12, ISO-Woche 2026-W42 oder Monat 2026-10' }
         from: { type: string, format: date }
         to: { type: string, format: date }
         days: { type: integer }
+        legalWarningDays: { type: integer, description: Tage mit Rechtsprofil-Hinweis }
+        breakHintDays: { type: integer, description: Tage mit Pausenhinweis }
         targetSeconds: { type: integer, description: Soll aller Tage des Buckets }
         targetToDateSeconds: { type: integer, description: Soll der Tage bis heute }
         actualSeconds: { type: integer, description: Ist nach basis (ohne Gutschrift) }
@@ -2134,7 +2164,7 @@ components:
         provisional: { type: boolean }
     DayEvaluation:
       type: object
-      required: [date, targetSeconds, rawWorkSeconds, breakDeductionSeconds, startAdjustSeconds, endAdjustSeconds, evaluatedWorkSeconds, creditSeconds, deltaSeconds, provisional, segmentIds, breakHints]
+      required: [date, targetSeconds, rawWorkSeconds, breakDeductionSeconds, startAdjustSeconds, endAdjustSeconds, evaluatedWorkSeconds, creditSeconds, deltaSeconds, provisional, segmentIds, breakHints, legalProfileId, legalWarnings, schoolLessonCount]
       properties:
         date: { type: string, format: date }
         modelId: { type: [string, 'null'], format: uuid }
@@ -2157,7 +2187,10 @@ components:
         markSource: { type: string, enum: [none, explicit, absence, holiday], description: Herkunft der wirksamen Markierung (explicit = manuell gesetzt) }
         targetOverrideSeconds: { type: [integer, 'null'], description: 'abweichendes Soll, z. B. halber Urlaubstag' }
         note: { type: [string, 'null'] }
-        breakHints: { type: array, items: { type: object, required: [code], properties: { code: { type: string, enum: [break_missing_30, break_missing_45, break_part_too_short, work_over_6h_without_break] } } } }
+        breakHints: { type: array, items: { type: object, required: [code], properties: { code: { type: string, enum: [break_missing_30, break_missing_45, break_missing_60, break_part_too_short, work_over_6h_without_break, work_over_4h30_without_break] } } } }
+        legalProfileId: { type: string, enum: [arbzg-adult-de, jarbschg-minor-de] }
+        legalWarnings: { type: array, items: { type: object, required: [code], properties: { code: { type: string, enum: [daily_limit, weekly_limit, five_day_week, rest_period, weekend_work, work_after_full_school_day, work_before_school] } } } }
+        schoolLessonCount: { type: [integer, 'null'], description: 'erfasste Unterrichtsstunden zu mindestens 45 Minuten; null wenn nicht angegeben' }
     TimeAccount:
       type: object
       required: [asOf, balanceSeconds, openingSeconds, adjustmentSeconds, provisional]
@@ -2385,7 +2418,7 @@ components:
           properties: { targetSeconds: { type: integer }, plannedSeconds: { type: integer }, differenceSeconds: { type: integer, description: plannedSeconds − targetSeconds } }
     TimeWeekDay:
       type: object
-      required: [date, weekday, mark, markSource, targetSeconds, plannedSeconds, planMode, workSeconds, creditSeconds, rawWorkSeconds, breakSeconds, breakDeductionSeconds, travelSeconds, schoolSeconds, balanceSeconds, firstStart, lastEnd, segmentsCount, absences, provisional, isToday, isFuture]
+      required: [date, weekday, mark, markSource, targetSeconds, plannedSeconds, planMode, workSeconds, creditSeconds, rawWorkSeconds, breakSeconds, breakDeductionSeconds, travelSeconds, schoolSeconds, balanceSeconds, firstStart, lastEnd, segmentsCount, absences, provisional, isToday, isFuture, legalProfileId, breakHints, legalWarnings, schoolLessonCount]
       properties:
         date: { type: string, format: date }
         weekday: { type: integer, minimum: 1, maximum: 7 }
@@ -2411,6 +2444,10 @@ components:
         provisional: { type: boolean }
         isToday: { type: boolean }
         isFuture: { type: boolean }
+        legalProfileId: { type: string, enum: [arbzg-adult-de, jarbschg-minor-de] }
+        breakHints: { $ref: '#/components/schemas/DayEvaluation/properties/breakHints' }
+        legalWarnings: { $ref: '#/components/schemas/DayEvaluation/properties/legalWarnings' }
+        schoolLessonCount: { type: [integer, 'null'] }
     TimeWeek:
       type: object
       required: [week, from, to, days, summary]

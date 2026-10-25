@@ -74,6 +74,7 @@ Abnahme:
 - Nur äußerste Tagesgrenzen runden. Beispiel: 08:07–12:00 und 13:00–16:02 ergeben
   6:55 tatsächliche Arbeit und 7:15 bewertet; die einstündige Pause bleibt unverändert.
 - Berufsschule unter der Schwelle füllt nicht still zum vollen Tag auf; manuelle Ergänzung möglich.
+- R2: Jugendprofil mit JArbSchG-Hinweisen und Unterrichtsstundenzahl im Backend-Worktree umgesetzt (ADR-0028); fachliche Prüfung und Client-Oberflächen offen.
 - Wiederholte/verspätete Shortcuts und PWA-Rennen erzeugen keine zweite aktive Buchung.
 - Vorbeifahrt verworfen oder zur Prüfung gestellt, nicht allein per Timer gebucht.
 - Sommerzeit, Mitternacht, Berufsschulschwelle und vereinbarte Rundungsgrenzen getestet.

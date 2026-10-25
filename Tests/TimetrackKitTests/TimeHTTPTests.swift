@@ -66,6 +66,30 @@ extension AuthTests {
             try await timeRequest(app, context, .PATCH, "work-models/" + modelId, ["validTo": "2026-10-31"])
         }
     }
+
+    func testLegalProfileSelectionAndSchoolLessons() async throws {
+        try await withApp { app, auth in
+            let (context, _) = try await registered(auth, db: app.db)
+            let catalogue = try await timeRequest(app, context, .GET, "legal-profiles")
+            let profiles = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(catalogue.body.readableBytesView)) as? [[String: Any]])
+            XCTAssertEqual(Set(profiles.compactMap { $0["id"] as? String }), ["arbzg-adult-de", "jarbschg-minor-de"])
+            let adult = try object(await timeRequest(app, context, .POST, "work-models", modelBody("2026-10-01"), status: .created))
+            XCTAssertEqual(adult["legalProfileId"] as? String, "arbzg-adult-de")
+            var minor = modelBody("2026-10-12")
+            minor["legalProfileId"] = "jarbschg-minor-de"
+            let selected = try object(await timeRequest(app, context, .POST, "work-models", minor, status: .created))
+            XCTAssertEqual(selected["legalProfileId"] as? String, "jarbschg-minor-de")
+            try await timeRequest(app, context, .POST, "time/segments", [
+                "kind": "school", "startedAt": "2026-10-12T06:00:00Z", "endedAt": "2026-10-12T11:00:00Z"
+            ], status: .created)
+            let day = try object(await timeRequest(app, context, .PUT, "time/days/2026-10-12", ["schoolLessonCount": 6]))
+            XCTAssertEqual(day["creditSeconds"] as? Int, 28_800)
+            XCTAssertEqual(day["legalProfileId"] as? String, "jarbschg-minor-de")
+            XCTAssertEqual(day["schoolLessonCount"] as? Int, 6)
+            let previous = try object(await timeRequest(app, context, .GET, "time/days/2026-10-11"))
+            XCTAssertEqual(previous["legalProfileId"] as? String, "arbzg-adult-de")
+        }
+    }
     func testTimeCorrectionOverlapAndVoiding() async throws {
         try await withApp { app, auth in
             let (context, _) = try await registered(auth, db: app.db)

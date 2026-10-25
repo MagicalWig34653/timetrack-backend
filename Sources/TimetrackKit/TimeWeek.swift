@@ -23,6 +23,10 @@ struct TimeWeekDayDTO: Encodable, Sendable {
     var firstStart: Date?; var lastEnd: Date?
     var segmentsCount: Int
     var absences: [Absence]
+    var legalProfileId: String
+    var breakHints: [BreakHint]
+    var legalWarnings: [LegalWarning]
+    var schoolLessonCount: Int?
     var provisional: Bool; var isToday: Bool; var isFuture: Bool
     func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -37,11 +41,14 @@ struct TimeWeekDayDTO: Encodable, Sendable {
         try c.encode(lastEnd, forKey: .lastEnd); try c.encode(segmentsCount, forKey: .segmentsCount)
         try c.encode(absences, forKey: .absences); try c.encode(provisional, forKey: .provisional)
         try c.encode(isToday, forKey: .isToday); try c.encode(isFuture, forKey: .isFuture)
+        try c.encode(legalProfileId, forKey: .legalProfileId)
+        try c.encode(breakHints, forKey: .breakHints); try c.encode(legalWarnings, forKey: .legalWarnings)
+        try c.encode(schoolLessonCount, forKey: .schoolLessonCount)
     }
     enum CodingKeys: String, CodingKey {
         case date, weekday, mark, markSource, targetSeconds, plannedSeconds, planMode, workSeconds, creditSeconds, rawWorkSeconds
         case breakSeconds, breakDeductionSeconds, travelSeconds, schoolSeconds, balanceSeconds, firstStart, lastEnd
-        case segmentsCount, absences, provisional, isToday, isFuture
+        case segmentsCount, absences, provisional, isToday, isFuture, legalProfileId, breakHints, legalWarnings, schoolLessonCount
     }
 }
 
@@ -149,7 +156,9 @@ struct TimeWeekService: Sendable {
                      workSeconds: day.evaluatedWorkSeconds, creditSeconds: day.creditSeconds, rawWorkSeconds: day.rawWorkSeconds,
                      breakSeconds: gaps, breakDeductionSeconds: day.breakDeductionSeconds, travelSeconds: travel, schoolSeconds: school,
                      balanceSeconds: isFuture ? nil : day.deltaSeconds, firstStart: day.evaluatedStart, lastEnd: day.evaluatedEnd,
-                     segmentsCount: day.segments.count, absences: dayAbsences, provisional: day.provisional,
+                     segmentsCount: day.segments.count, absences: dayAbsences, legalProfileId: day.legalProfileId,
+                     breakHints: day.breakHints, legalWarnings: day.legalWarnings, schoolLessonCount: day.schoolLessonCount,
+                     provisional: day.provisional,
                      isToday: day.date == today, isFuture: isFuture)
     }
 

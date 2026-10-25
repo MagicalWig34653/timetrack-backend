@@ -1,5 +1,7 @@
 # Aktueller Projektstand
 
+**R2 (Jugendrechtsprofil, 24.10.2026, Worktree `worktree-agent-a540a8eec2a90d179`):** Backend-Implementierung für `jarbschg-minor-de`, Modellhistorie, Berufsschulstunden, Hinweise und Vertrag v0.29.0 im Worktree. Migration `r2.add_legal_work_profile`; bestehende Modelle bleiben bei `arbzg-adult-de`. Swift-Build erfolgreich. Gezielte R2-/Vertragstests: 8 bestanden; breiter Zeit-/Vertragslauf: 34 Tests, 33 bestanden, 1 optionaler Test übersprungen. Vollständiger Testlauf nicht grün: bestehende HTTP-/SMTP-Tests können in der Sandbox keine lokalen Sockets binden (`Operation not permitted`); der Lauf wurde nach mehreren solchen Fehlern beendet. Commit deshalb offen. PWA-/Apple-Anzeige und fachliche Rechtsprüfung offen (Handoff R2).
+
 **Release v0.1.0 (19.10.2026):** Tags `v0.1.0` in Backend, PWA und Apple-Repo; Docker-Image `ghcr.io/magicalwig34653/timetrack-backend:0.1.0` (mit PWA 0.1.0), GitHub-Release (kein Pre-Release) mit Quellarchiv und Vertrag 0.22.0; TestFlight Version 0.1.0 Build 7. Nächste Schritte: Roadmap in `docs/ARBEITSPLAN.md` (S1-Rest, N1, LA1, E1, AI1, R2, Q1, M2).
 
 
@@ -106,7 +108,7 @@ Signierung: bezahltes Apple Developer Program, Team im Apple-Repo hinterlegt; As
 - Frühere Beobachtung: zwei C19-Push-Tests waren lastempfindlich; B5 machte sie deterministisch (20/20 stabil), Lead-Prüfung der Ursache nur teilweise.
 
 **Fachlich und Daten**
-- IHK-Berichtsheft-Ausgabeformat (Standardprofil angenommen, ADR-0008); Rechtsprofile für Jugendliche fehlen (nur `arbzg-adult-de`).
+- IHK-Berichtsheft-Ausgabeformat (Standardprofil angenommen, ADR-0008); Jugendprofil R2 im Backend-Worktree, Client-Anzeige und fachliche Prüfung offen.
 - XLSX/PDF-Exporte nicht in Excel/LibreOffice/Viewer geöffnet; Import mit 20 000 Zeilen und Blobs nahe 64 MiB auf MariaDB nicht gemessen; S3 nur gegen S3Mock/In-Process-Fake; S3-Kontolöschung nicht gegen S3Mock getestet; sehr große Konto-Exporte ungeprüft.
 - Access-Token-Ablauf (1 h) zeitgesteuert nicht getestet.
 - Vertrag: 189 Redocly-Lint-Fehler (überwiegend fehlende `summary`), Request-Schemas nicht abgeglichen.
@@ -131,7 +133,7 @@ Swift 6.4 (Xcode 27), Node 26.5/npm 11.17, Docker 29.5.2 (Colima arm64), Compose
 2. **TestFlight-Upload** (iOS und macOS) ausführen, sobald die Produktions-AASA erreichbar ist; Build-Nummer vor jedem Upload erhöhen (`scripts/testflight.sh`, Apple-Repo).
 3. **Echtgerätetests**: Passkey in PWA und Apps, Shortcuts, Push, Widgets/Komplikation/Live Activity, WatchConnectivity, ChatGPT-/Claude-Connector (`MCP.md`).
 4. **CI reparieren**: Linux-Testkompilierung (`FoundationXML`), „Dependency graph“ aktivieren, Apple-Runner mit Xcode 27 oder Apple-CI auf manuell/lokal beschränken; Dependabot-Pull-Requests sichten (große Sprünge wie TypeScript 7 oder Redocly 2 nicht blind mergen).
-5. **Produktpunkte**: IHK-Berichtsheft-Format klären (Beispiel vom Betreiber), Rechtsprofile für Jugendliche, Standortautomatik auf iOS, KI-Entwurfs-Worker, Kalenderbrücke, Selbstständigenfunktionen, visuelle Prüfung des nativen Mac-Clients.
+5. **Produktpunkte**: IHK-Berichtsheft-Format klären (Beispiel vom Betreiber), R2-Jugendprofil nach vollständigem Testlauf integrieren und fachlich prüfen, Standortautomatik auf iOS, KI-Entwurfs-Worker, Kalenderbrücke, Selbstständigenfunktionen, visuelle Prüfung des nativen Mac-Clients.
 6. **Qualität**: Codex-Reviews für B1–B5/P1/P2/A2 nachholen (Kontingent prüfen); Lizenz-Release-Prüfung (BoringSSL); Vertrag: `summary` je Operation ergänzen.
 
 ## Roadmap
