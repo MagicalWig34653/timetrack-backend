@@ -5,6 +5,7 @@ Die Einzelpakete (A1, B2, …) stehen in `docs/ARBEITSPLAN.md`.
 
 ## Unveröffentlicht
 
+- **Korrekturen Jugendprofil und Zeitkonto (X4, Vertrag 0.30.1):** Arbeit an einem vollen Berufsschultag wird auch vor Schulbeginn gewarnt; Feiertags-Ausfall zählt in die gesetzliche Wochensumme (§ 4 Abs. 4 JArbSchG); Kontostart berücksichtigt nach Löschen des Eröffnungssaldos frühere Anpassungen.
 - **Jugendrechtsprofil (R2, Vertrag 0.29.0):** `jarbschg-minor-de` neben `arbzg-adult-de`, Profilwahl je datiertem Arbeitsmodell, Berufsschulstunden und 8-/40-Stunden-Gutschrift, Pausen-, Ruhezeit- und Grenzhinweise; `GET /legal-profiles`, Migration und additive Tages-/Wochen-/Statistikfelder. Hinweise sind informativ und keine Rechtsberatung.
 - **Client-Lücken X3 (Vertrag 0.30.0):** `needsReview` endet nach Ende-Korrektur oder Entscheidung über einen Ende-Vorschlag; ausdrückliche Quittierung per `PATCH` möglich. Zeitkonto-Anpassungen sind seitenweise lesbar und einzeln löschbar; der Saldo wird neu berechnet. MCP kann die Anpassungen lesen.
 - **Stornierte Abschnitte und Statistik (W3, Vertrag 0.28.0):** Übersicht (`GET /time/segments/cancelled`), Wiederherstellen (`POST /time/segments/{id}/restore`) und endgültiges Löschen stornierter Abschnitte (einzeln `DELETE …?permanent=true`, gesammelt `DELETE /time/segments/cancelled` mit `dryRun`); MCP nur Liste und Wiederherstellen. Neue Statistikreihe für Diagramme `GET /time/statistics` (Tag/Woche/Monat; Soll, Ist, Differenz, Zeitkonto, Arten, Abwesenheiten, Pausen).

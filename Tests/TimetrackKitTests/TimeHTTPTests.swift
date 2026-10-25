@@ -125,6 +125,27 @@ extension AuthTests {
         }
     }
 
+    func testDeletingOpeningBalanceKeepsEarlierAdjustmentsInAccount() async throws {
+        try await withApp { app, auth in
+            let (owner, _) = try await registered(auth, db: app.db)
+            try await timeRequest(app, owner, .POST, "work-models", modelBody("2026-10-01"), status: .created)
+            try await timeRequest(app, owner, .POST, "time/account/adjustments",
+                ["kind": "opening", "date": "2026-09-20", "seconds": 1000, "reason": "Opening"], status: .created)
+            try await timeRequest(app, owner, .POST, "time/account/adjustments",
+                ["kind": "correction", "date": "2026-09-25", "seconds": 200, "reason": "Early correction"], status: .created)
+            let before = try object(await timeRequest(app, owner, .GET, "time/account?asOf=2026-09-30"))
+            XCTAssertEqual(before["balanceSeconds"] as? Int, 1200)
+            let page = try object(await timeRequest(app, owner, .GET, "time/account/adjustments"))
+            let opening = try XCTUnwrap((page["items"] as? [[String: Any]])?.first { ($0["kind"] as? String) == "opening" }?["id"] as? String)
+            let after = try object(await timeRequest(app, owner, .DELETE, "time/account/adjustments/" + opening))
+            XCTAssertEqual(after["accountStart"] as? String, "2026-09-25")
+            XCTAssertEqual(after["adjustmentSeconds"] as? Int, 200)
+            XCTAssertEqual(after["openingSeconds"] as? Int, 0)
+            let early = try object(await timeRequest(app, owner, .GET, "time/account?asOf=2026-09-30"))
+            XCTAssertEqual(early["balanceSeconds"] as? Int, 200)
+        }
+    }
+
     func testSegmentReviewClearsWithEndCorrectionAndAcknowledgement() async throws {
         try await withApp { app, auth in
             let (owner, _) = try await registered(auth, db: app.db)

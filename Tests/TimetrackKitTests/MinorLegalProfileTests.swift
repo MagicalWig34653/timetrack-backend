@@ -37,6 +37,37 @@ final class MinorLegalProfileTests: XCTestCase {
             .legalWarnings.contains(.init(.restPeriod)))
     }
 
+    func testHolidayLossCountsTowardsWeeklyLimit() throws {
+        let holiday = CustomCalendarDay(startDate: try date("2026-10-14"), endDate: try date("2026-10-14"), name: "Holiday")
+        let days = ["2026-10-12", "2026-10-13", "2026-10-15", "2026-10-16"]
+        // 4 x 8h15 = 33h worked plus the 8h Soll lost on Wednesday = 41h.
+        let snapshot = TimeEvaluationSnapshot(models: [try model()], segments: days.map { segment($0, "08:00", "16:15") },
+                                              preferences: [:], customDays: [holiday])
+        let now = instant("2026-10-20", "12:00")
+        let friday = try snapshot.evaluate(date("2026-10-16"), now: now)
+        XCTAssertTrue(friday.legalWarnings.contains(.init(.weeklyLimit)))
+        XCTAssertFalse(friday.legalWarnings.contains(.init(.fiveDayWeek)))
+        let shorter = TimeEvaluationSnapshot(models: [try model()], segments: days.map { segment($0, "08:00", "16:00") },
+                                             preferences: [:], customDays: [holiday])
+        XCTAssertFalse(try shorter.evaluate(date("2026-10-16"), now: now).legalWarnings.contains(.init(.weeklyLimit)))
+        let without = TimeEvaluationSnapshot(models: [try model()], segments: days.map { segment($0, "08:00", "16:15") }, preferences: [:])
+        XCTAssertFalse(try without.evaluate(date("2026-10-16"), now: now).legalWarnings.contains(.init(.weeklyLimit)))
+    }
+
+    func testAnyWorkOnFullSchoolDayIsFlaggedAlsoBeforeSchool() throws {
+        let day = "2026-10-12"
+        let snapshot = TimeEvaluationSnapshot(models: [try model()], segments: [
+            segment(day, "09:00", "09:30"), segment(day, "10:00", "15:00", kind: .school)
+        ], preferences: [day: DayPreferences(schoolLessonCount: 6)])
+        let result = try snapshot.evaluate(date(day), now: instant("2026-10-20", "12:00"))
+        XCTAssertTrue(result.legalWarnings.contains(.init(.workAfterFullSchoolDay)))
+        let ordinary = TimeEvaluationSnapshot(models: [try model()], segments: [
+            segment(day, "09:00", "09:30"), segment(day, "10:00", "14:00", kind: .school)
+        ], preferences: [day: DayPreferences(schoolLessonCount: 5)])
+        let five = try ordinary.evaluate(date(day), now: instant("2026-10-20", "12:00"))
+        XCTAssertFalse(five.legalWarnings.contains(.init(.workAfterFullSchoolDay)))
+    }
+
     func testBlockSchoolWeekCreditsFortyHours() throws {
         let days = ["2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16"]
         let preferences = Dictionary(uniqueKeysWithValues: days.map { ($0, DayPreferences(schoolLessonCount: 5)) })

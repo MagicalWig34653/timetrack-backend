@@ -199,7 +199,11 @@ final class PreparedEvaluation {
                 let (item, selected) = try baseEvaluation(day, now: now)
                 guard selected.legalProfileId == model.legalProfileId else { continue }
                 let counted = item.creditSeconds > 0 ? item.creditSeconds : item.rawWorkSeconds
-                seconds += counted
+                // §4 Abs. 4 JArbSchG: time lost on a public holiday counts towards the weekly working time
+                // (the model's Soll of that day, or the worked time if higher); kept out of the workday count.
+                let holidayLoss = item.mark == .holiday && item.creditSeconds == 0
+                    ? TimeEngine.target(for: day, model: selected) : 0
+                seconds += max(counted, holidayLoss)
                 if counted > 0 { workdays += 1 }
             }
             if let maximum = profile.maxWeeklySeconds, seconds > maximum { evaluation.legalWarnings.append(.init(.weeklyLimit)) }

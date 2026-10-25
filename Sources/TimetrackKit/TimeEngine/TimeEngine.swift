@@ -137,10 +137,10 @@ public enum TimeEngine {
            selected.contains(where: { $0.kind != .school }) {
             result.legalWarnings.append(.init(.weekendWork))
         }
-        if statutorySchool && selected.contains(where: { segment in
-            guard segment.kind != .school, let firstSchool = selected.first(where: { $0.kind == .school }) else { return false }
-            return segment.startedAt >= firstSchool.startedAt
-        }) { result.legalWarnings.append(.init(.workAfterFullSchoolDay)) }
+        // §9 JArbSchG: on a full school day (more than five lessons) any other work is flagged, also before school.
+        if statutorySchool && selected.contains(where: { $0.kind != .school }) {
+            result.legalWarnings.append(.init(.workAfterFullSchoolDay))
+        }
         if let schoolRule = legalProfile.school, selected.contains(where: { $0.kind == .school }),
            selected.contains(where: { segment in
                segment.kind != .school && calendar.component(.hour, from: segment.startedAt) * 60

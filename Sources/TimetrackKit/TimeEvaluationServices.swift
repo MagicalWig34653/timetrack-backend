@@ -109,12 +109,18 @@ struct AccountService: Sendable {
         return try TimeEngine.accountBalance(accountStart: start, asOf: end, today: today, openingSeconds: opening?.seconds ?? 0,
             evaluations: evaluations, adjustments: corrections)
     }
-    /// First day of the time account: the opening balance date, else the first work model, else the first live segment,
-    /// else the earliest correction. Shared by the balance and the statistics series.
+    /// First day of the time account: the opening balance date, else the first work model or live segment, moved back to
+    /// the earliest stored adjustment if that lies earlier. Shared by the balance and the statistics series.
     func accountStart(snapshot: TimeEvaluationSnapshot, adjustments: [AdjustmentRecord], calendar: Calendar) throws -> LocalDate? {
         let firstSegmentDate = snapshot.segments.first { !$0.voided }.map { LocalDate.local($0.startedAt, calendar: calendar) }
         let opening = adjustments.first { $0.kind == "opening" }
-        return try opening.map { try LocalDate($0.date) } ?? snapshot.models.first?.validFrom ?? firstSegmentDate ?? adjustments.map { try LocalDate($0.date) }.min()
+        if let opening { return try LocalDate(opening.date) }
+        // Without an opening balance every stored adjustment must stay inside the account range, so the start is the
+        // earlier of the base start (first model, else first live segment) and the earliest adjustment. Days before
+        // the first model have Soll 0. Segments before the first model keep being ignored as before.
+        let base = snapshot.models.first?.validFrom ?? firstSegmentDate
+        let earliestAdjustment = try adjustments.map { try LocalDate($0.date) }.min()
+        return [base, earliestAdjustment].compactMap { $0 }.min()
     }
     func adjust(_ input: AdjustmentInput) async throws -> TimeAccountResult {
         try validateReason(input.reason)

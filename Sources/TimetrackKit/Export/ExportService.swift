@@ -74,7 +74,7 @@ struct ExportService: Sendable {
         let legalLabels: [LegalWarning.Code: String] = [
             .dailyLimit: "Tagesgrenze überschritten", .weeklyLimit: "Wochengrenze überschritten",
             .fiveDayWeek: "Fünf-Tage-Woche überschritten", .restPeriod: "Ruhezeit unterschritten",
-            .weekendWork: "Wochenendarbeit prüfen", .workAfterFullSchoolDay: "Arbeit nach vollem Berufsschultag",
+            .weekendWork: "Wochenendarbeit prüfen", .workAfterFullSchoolDay: "Arbeit an vollem Berufsschultag",
             .workBeforeSchool: "Arbeit vor 9 Uhr am Berufsschultag"
         ]
         for warning in day.legalWarnings { if let label = legalLabels[warning.code] { parts.append("Hinweis: " + label) } }
