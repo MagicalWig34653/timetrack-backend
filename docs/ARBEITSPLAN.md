@@ -278,6 +278,8 @@ Zusammenarbeit durch Dritte (Pull Requests, Issues) ist über die GitHub-Vorlage
 
 ## Roadmap nach Release v0.1.0 (Nutzerentscheidungen 17.10.2026)
 
+**X3 (24.10.2026, eigener Worktree):** Backend-Lücken für Clients: Prüfmarkierung an Segmenten abschließen, Zeitkonto-Anpassungen lesen/löschen, Vertrag 0.29.0 und Client-Aufrufe in `docs/handoffs/X3-backend.md`. Bearbeitung in `worktree-agent-ad51edf6202fb6b47`; Lead-Integration offen.
+
 **Betrieb des Nutzers:** Produktion läuft als Cluster aus **2 Replikaten** hinter einem Reverse Proxy mit **Sticky Sessions**. Die Ratenbegrenzung und Sitzungen liegen in der Datenbank (kein Sticky-Zwang für die Korrektheit); `TRUSTED_PROXY_CIDRS` muss das Netz der Proxy-Verbindungen enthalten.
 
 **Reihenfolge und Umfang** (Kernfunktionen aus `KONZEPT.md`, außer IHK-Format und Selbstständigenfunktionen, die zurückgestellt sind):

@@ -117,8 +117,29 @@ struct AccountService: Sendable {
             throw APIError(.conflict, "conflict")
         }
         let row = AdjustmentRecord(); row.accountId = scope.accountId; row.kind = input.kind; row.date = input.date.description
-        row.seconds = input.seconds; row.reason = input.reason; row.opening = input.kind == "opening" ? 1 : nil
+        row.seconds = input.seconds; row.reason = input.reason; row.opening = input.kind == "opening" ? 1 : nil; row.createdAt = Date()
         try await row.create(on: scope.db)
+        return try await balance()
+    }
+    func listAdjustments(limit: Int, offset: Int) async throws -> AdjustmentPage {
+        guard (1...100).contains(limit), (0...100_000).contains(offset) else { throw APIError.invalid }
+        let query = AdjustmentRecord.query(on: scope.db).filter(\.$accountId == scope.accountId)
+        let total = try await query.count()
+        let rows = try await AdjustmentRecord.query(on: scope.db).filter(\.$accountId == scope.accountId)
+            .sort(\.$createdAt, .descending).sort(\.$id, .descending).range(offset..<(offset + limit)).all()
+        let items = try rows.map { row in
+            guard let createdAt = row.createdAt else { throw APIError.invalid }
+            return try AdjustmentDTO(id: row.requireID(), kind: row.kind, date: row.date, seconds: row.seconds,
+                                     reason: row.reason, createdAt: createdAt)
+        }
+        return .init(items: items, total: total, limit: limit, offset: offset)
+    }
+    func deleteAdjustment(_ id: UUID) async throws -> TimeAccountResult {
+        guard let row = try await AdjustmentRecord.query(on: scope.db).filter(\.$accountId == scope.accountId)
+            .filter(\.$id == id).first() else { throw APIError.missing }
+        try await row.delete(on: scope.db)
+        try await AccountAuditRecord(action: "time_adjustment.deleted", actor: scope.accountId,
+                                     target: scope.accountId, detail: id.uuidString).create(on: scope.db)
         return try await balance()
     }
 }
@@ -147,7 +168,7 @@ struct SuggestionService: Sendable {
             let segment = try await scope.segments.record(segmentId)
             guard segment.endedAt == nil, segment.voidedAt == nil,
                   let end = input.endedAt ?? suggestion.proposedEndedAt else { throw APIError(.conflict, "suggestion_resolved") }
-            var next = try segment.dto(); next.endedAt = end
+            var next = try segment.dto(); next.endedAt = end; next.needsReview = false
             if let start = input.startedAt { next.startedAt = start }
             value = try await scope.segments.revise(segment, value: next, reason: "End suggestion accepted")
         } else {
@@ -162,6 +183,13 @@ struct SuggestionService: Sendable {
     func reject(_ id: UUID) async throws {
         let row = try await record(id)
         guard row.resolvedAt == nil else { throw APIError(.conflict, "suggestion_resolved") }
+        if row.payload.type == "end", let segmentId = row.payload.segmentId {
+            let segment = try await scope.segments.record(segmentId)
+            if segment.needsReview, segment.voidedAt == nil {
+                var next = try segment.dto(); next.needsReview = false
+                _ = try await scope.segments.revise(segment, value: next, reason: "End suggestion rejected")
+            }
+        }
         row.resolvedAt = Date(); try await row.update(on: scope.db)
     }
 }

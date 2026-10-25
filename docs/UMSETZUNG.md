@@ -64,7 +64,7 @@ echter SMTP mit TLS/AUTH. Eine Suchfunktion existiert nicht, daher entfällt das
 
 ## 2. Zeittracking
 
-Arbeitsmodelle, Tageszeitleiste, HO/Büro/Fahrt/Pausen, Automatik, Rundung, Konto und Korrekturen.
+Arbeitsmodelle, Tageszeitleiste, HO/Büro/Fahrt/Pausen, Automatik, Rundung, Konto und Korrekturen. X3 ergänzt Prüfquittierung mit Revisionen sowie paginierte Zeitkonto-Anpassungen und deren Löschung; genaue Client-Aufrufe in `handoffs/X3-backend.md`.
 
 Abnahme:
 

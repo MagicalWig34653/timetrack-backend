@@ -88,7 +88,7 @@ struct AccountExportService: Sendable {
         try table("day-preferences", days.map { ["date": .string($0.date), "mark": .string($0.mark), "creditSeconds": $0.creditSeconds.map { .number(Double($0)) } ?? .null,
                                                   "skipFixedBreaks": .bool($0.skipFixedBreaks), "note": Self.opt($0.note)] })
         let adjustments = try await AdjustmentRecord.query(on: db).filter(\.$accountId == id).sort(\.$date).all()
-        try table("balance-adjustments", adjustments.map { ["kind": .string($0.kind), "date": .string($0.date), "seconds": .number(Double($0.seconds)), "reason": .string($0.reason), "opening": $0.opening.map { .number(Double($0)) } ?? .null] })
+        try table("balance-adjustments", adjustments.map { ["id": .string(try $0.requireID().uuidString), "kind": .string($0.kind), "date": .string($0.date), "seconds": .number(Double($0.seconds)), "reason": .string($0.reason), "createdAt": Self.iso($0.createdAt), "opening": $0.opening.map { .number(Double($0)) } ?? .null] })
         let vacation = try await VacationSettingsRecord.query(on: db).filter(\.$accountId == id).all()
         try table("vacation-settings", vacation.map { ["region": .string($0.region), "annualEntitlementHalfDays": .number(Double($0.annualEntitlementHalfDays)),
                                                          "carryOver": .object($0.carryOver.mapValues { .number(Double($0)) }), "carryOverExpiry": Self.opt($0.carryOverExpiry)] })

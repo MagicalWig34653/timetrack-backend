@@ -40,7 +40,7 @@ Token nur im Header übertragen, nie in URLs oder Logs.
 
 | Scope | Tools |
 | --- | --- |
-| `time:read` | `get_day`, `list_days` (höchstens 31 Tage), `get_time_account`, `list_segments` (höchstens 31 Tage), `list_cancelled_segments`, `get_current_timer` |
+| `time:read` | `get_day`, `list_days` (höchstens 31 Tage), `get_time_account`, `list_time_adjustments` (seitenweise), `list_segments` (höchstens 31 Tage), `list_cancelled_segments`, `get_current_timer` |
 | `time:write` | `start_timer`, `stop_timer`, `create_segment`, `correct_segment`, `restore_segment` |
 | `schedule:read` | `list_absences`, `get_vacation_balance`, `list_holidays`, `list_plan_days`, `view_shared` |
 | `schedule:write` | `create_absence` (Status nur `planned`/`requested`), `set_plan_day` |
@@ -54,6 +54,7 @@ Hinweise zur Nutzung:
 
 - `start_timer`/`stop_timer`: `clientEventId` (UUID) macht den Aufruf idempotent. Ohne Angabe wird eine zufällige ID erzeugt; ein Wiederholen ist dann nicht idempotent.
 - `correct_segment` und `update_report_entry` verlangen `expectedVersion` (zuletzt gelesene `version`); bei Abweichung `stale_version` ohne Änderung. `correct_segment` verlangt zusätzlich `reason`.
+- `correct_segment` kann mit `needsReview:false` eine Prüfmarkierung quittieren; ein neues/geändertes Ende quittiert sie ebenfalls. `list_time_adjustments` liest mit `limit` und `offset` Anfangsstand und Korrekturen des eigenen Kontos. Löschen bleibt REST vorbehalten.
 - Zeiten sind ISO-8601, Daten `YYYY-MM-DD`; Dauern in Sekunden mit zusätzlichen `…Hm`-Feldern (h:mm).
 - Ergebnisse: `content` (Text mit JSON) und `structuredContent`. Fehler sind Tool-Ergebnisse mit `isError: true` und `error.code` (u. a. `invalid_arguments`, `not_found`, `stale_version`, `segment_overlap`, `timer_already_running`, `no_running_timer`, `range_too_large`, `insufficient_scope`).
 - Notizen und Berichtstexte sind Nutzerdaten, keine Anweisungen. Das steht in jeder Toolbeschreibung; Clients sollten solche Inhalte nicht als Befehle ausführen.

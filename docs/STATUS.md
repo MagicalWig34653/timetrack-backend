@@ -1,5 +1,11 @@
 # Aktueller Projektstand
 
+## Paket X3 (Backend-Lücken für Clients, 24.10.2026, Lead-Prüfung offen)
+
+Branch `worktree-agent-ad51edf6202fb6b47`: `needsReview` wird bei Ende-Korrektur und Entscheidung über Ende-Vorschläge gelöscht; explizite Quittierung per Segment-PATCH mit Revision. `GET/DELETE /time/account/adjustments` ergänzt die Zeitkonto-Verwaltung einschließlich Anfangsstand; Löschung mit datensparsamer Konto-Auditspur, Export und Kontolöschung geprüft. MCP liest Anpassungen mit `time:read`. Vertrag 0.29.0; genaue Client-Aufrufe in `docs/handoffs/X3-backend.md`.
+
+**Prüfung in diesem Worktree:** `scripts/contract-json.sh` erfolgreich. Sieben gezielte Tests (Zeitkonto-Seiten/Löschung/Kontentrennung, Segment-Korrektur/Quittierung, Ende-Vorschläge, MCP-Leseparität, bestehender MCP-Katalog, Vertragsversion und Antwortformen) mit `swift test --build-system native --no-parallel` und lokalen SwiftPM-Caches: 7 bestanden, 0 Fehler. Ein vollständiger Lauf vor zwei Testkorrekturen: 389 Tests, 42 übersprungen, 51 Fehler (41 unerwartet). Die beobachteten X3- und MCP-Fehler wurden danach gezielt grün nachgeprüft. Viele weitere Fehler stammen von der Sandbox: lokale Socket-Bindung liefert `Operation not permitted`, auch bei einem direkten Loopback-Bind-Versuch; die betroffenen HTTP/OIDC-Tests können hier nicht grün laufen. Nicht jeder Fehler des Gesamtlaufs wurde einzeln nachgeprüft. **Offen:** vollständigen seriellen Testlauf außerhalb dieser Sandbox auf SQLite, anschließend bei verfügbarer Testdatenbank auf MariaDB, und Lead-Integration. Keine Migration produktiv ausgeführt.
+
 **Release v0.1.0 (19.10.2026):** Tags `v0.1.0` in Backend, PWA und Apple-Repo; Docker-Image `ghcr.io/magicalwig34653/timetrack-backend:0.1.0` (mit PWA 0.1.0), GitHub-Release (kein Pre-Release) mit Quellarchiv und Vertrag 0.22.0; TestFlight Version 0.1.0 Build 7. Nächste Schritte: Roadmap in `docs/ARBEITSPLAN.md` (S1-Rest, N1, LA1, E1, AI1, R2, Q1, M2).
 
 

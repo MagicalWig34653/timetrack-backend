@@ -146,6 +146,23 @@ func registerTimeRoutes(_ app: Application, auth: AuthService) {
         let input = try timeDecode(AdjustmentInput.self, request: req)
         return try await run(req) { try timeResponse(await $0.account.adjust(input), status: .created) }
     }
+    api.get("time", "account", "adjustments") { req async throws -> Response in
+        let limit: Int
+        if let raw: String = req.query["limit"] {
+            guard let parsed = Int(raw) else { throw APIError.invalid }
+            limit = parsed
+        } else { limit = 50 }
+        let offset: Int
+        if let raw: String = req.query["offset"] {
+            guard let parsed = Int(raw) else { throw APIError.invalid }
+            offset = parsed
+        } else { offset = 0 }
+        return try await runRead(req) { try timeResponse(await $0.account.listAdjustments(limit: limit, offset: offset)) }
+    }
+    api.delete("time", "account", "adjustments", ":id") { req async throws -> Response in
+        let key = try id(req)
+        return try await run(req) { try timeResponse(await $0.account.deleteAdjustment(key)) }
+    }
     api.get("time", "suggestions") { req async throws -> Response in try await run(req) { try timeResponse(await $0.suggestions.list()) } }
     api.post("time", "suggestions", ":id", "accept") { req async throws -> Response in
         let key = try id(req)

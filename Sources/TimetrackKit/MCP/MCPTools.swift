@@ -104,6 +104,13 @@ enum McpTools {
              McpSchema.object(["asOf": McpSchema.date("Evaluate the balance up to and including this day; default today")])) { ctx, args in
             try McpJSON.encoding(await ctx.time.account.balance(asOf: args["asOf"]?.string.map(LocalDate.init)))
         },
+        read("list_time_adjustments", "List time account adjustments", "time:read",
+             "Lists the account's opening balance and dated corrections, newest first, with pagination.",
+             McpSchema.object(["limit": McpSchema.integer("Page size (1 to 100; default 50)", minimum: 1),
+                               "offset": McpSchema.integer("Number of entries to skip (default 0)", minimum: 0)])) { ctx, args in
+            try McpJSON.encoding(await ctx.time.account.listAdjustments(limit: args["limit"]?.int ?? 50,
+                                                                       offset: args["offset"]?.int ?? 0))
+        },
         read("list_segments", "List time segments", "time:read",
              "Lists recorded time segments that start within [from, to). The range may span at most 31 days; at most 500 segments are returned.",
              McpSchema.object(["from": McpSchema.dateTime("Range start, inclusive"), "to": McpSchema.dateTime("Range end, exclusive"),
@@ -164,6 +171,7 @@ enum McpTools {
                                 "startedAt": McpSchema.dateTime("New start"),
                                 "endedAt": McpSchema.nullable(McpSchema.dateTime("New end; null reopens a finished segment (409 timer_already_running if another one runs, 409 segment_overlap if a later segment exists)")),
                                 "kind": McpSchema.string("New kind", enumeration: segmentKinds),
+                                "needsReview": McpSchema.boolean("Set false to acknowledge review"),
                                 "placeId": McpSchema.nullable(McpSchema.uuid("New place; null clears it")),
                                 "note": McpSchema.nullable(McpSchema.string("New note; null clears it", maxLength: 500))],
                                required: ["segmentId", "expectedVersion", "reason"])) { ctx, args in
