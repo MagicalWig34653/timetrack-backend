@@ -12,6 +12,8 @@ final class VacationSettingsRecord: Model, @unchecked Sendable {
     @Field(key: "annual_entitlement_half_days") var annualEntitlementHalfDays: Int
     @Field(key: "carry_over") var carryOver: [String: Int]
     @OptionalField(key: "carry_over_expiry") var carryOverExpiry: String?
+    /// N4: company-day rules; nil until the account configures any.
+    @OptionalField(key: "company_days") var companyDays: [CompanyDayRule]?
     init() {}
 }
 
@@ -96,6 +98,16 @@ final class ShareRecord: Model, @unchecked Sendable {
     @OptionalField(key: "active") var active: Int?
     init() {}
     var scopes: ShareScopesDTO { .init(plan: scopePlan, actual: scopeActual, vacation: scopeVacation) }
+}
+
+struct AddCompanyDays: AsyncMigration {
+    let name = "n4.add_company_days"
+    func prepare(on db: any Database) async throws {
+        try await db.schema("vacation_settings").field("company_days", .json).update()
+    }
+    func revert(on db: any Database) async throws {
+        try await db.schema("vacation_settings").deleteField("company_days").update()
+    }
 }
 
 enum StageThreeSchema {

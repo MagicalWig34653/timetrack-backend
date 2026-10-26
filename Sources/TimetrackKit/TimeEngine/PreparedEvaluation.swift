@@ -94,7 +94,7 @@ final class PreparedEvaluation {
     private func builtInCalendar(year: Int) -> [CustomCalendarDay] {
         if let cached = holidayDays[year] { return cached }
         // Years outside the built-in catalogue simply have no built-in holidays.
-        let days = ((try? HolidayCalendar.holidays(year: year, region: snapshot.region)) ?? []) + snapshot.customDays
+        let days = ((try? HolidayCalendar.calendar(year: year, region: snapshot.region, companyDays: snapshot.companyDays)) ?? []) + snapshot.customDays
         holidayDays[year] = days
         return days
     }
@@ -104,6 +104,15 @@ final class PreparedEvaluation {
     func holidayName(on date: LocalDate) -> String? {
         guard snapshot.planningEnabled else { return nil }
         return builtInCalendar(year: date.year).first { $0.kind == .holiday && $0.startDate <= date && date <= $0.endDate }?.name
+    }
+
+    /// Treatment of a company day (ADR-0029) on `date`: `full` or `half`; nil for ordinary days and statutory holidays.
+    func companyDayTreatment(on date: LocalDate) -> CompanyDayTreatment? {
+        guard snapshot.planningEnabled else { return nil }
+        let days = builtInCalendar(year: date.year)
+        if HolidayCalendar.isHalfCompanyDay(date, days: days) { return .half }
+        return days.first { $0.companyTreatment == .full && $0.startDate <= date && date <= $0.endDate }
+            .flatMap { _ in HolidayCalendar.isHoliday(date, days: days) ? CompanyDayTreatment.full : nil }
     }
 
     /// Precedence (ADR-0005, contract v0.3.2): explicit mark > holiday on a model workday > approved/taken absence.

@@ -32,7 +32,8 @@ struct VacationService: Sendable {
     func settings() async throws -> VacationSettingsDTO {
         guard let row = try await settingsRecord() else { return Self.defaultSettings }
         return .init(configured: true, region: row.region, annualEntitlementHalfDays: row.annualEntitlementHalfDays,
-                     carryOverByYear: row.carryOver, carryOverExpiry: row.carryOverExpiry)
+                     carryOverByYear: row.carryOver, carryOverExpiry: row.carryOverExpiry,
+                     companyDays: CompanyDayRules.listed(row.companyDays ?? []))
     }
     func engineSettings(_ dto: VacationSettingsDTO) throws -> VacationSettings {
         var carry: [Int: Int] = [:]
@@ -41,7 +42,8 @@ struct VacationService: Sendable {
             carry[year] = value
         }
         return VacationSettings(region: dto.region, annualEntitlementHalfDays: dto.annualEntitlementHalfDays,
-                                carryOverByYear: carry, carryOverExpiry: dto.carryOverExpiry)
+                                carryOverByYear: carry, carryOverExpiry: dto.carryOverExpiry,
+                                companyDays: dto.companyDays ?? [])
     }
     func save(_ input: VacationSettingsDTO) async throws -> VacationSettingsDTO {
         guard HolidayCalendar.supportedRegions.contains(input.region), (0...VacationLimits.maxHalfDays).contains(input.annualEntitlementHalfDays) else { throw APIError.invalid }
@@ -52,7 +54,13 @@ struct VacationService: Sendable {
             // Validated against a non-leap year so that the expiry exists in every year.
             guard expiry.count == 5, (try? LocalDate("2023-" + expiry)) != nil else { throw APIError.invalid }
         }
+        var companyDays: [CompanyDayRule]?
+        if let rules = input.companyDays {
+            guard let valid = CompanyDayRules.validated(rules) else { throw APIError.invalid }
+            companyDays = valid
+        }
         let row = try await settingsRecord() ?? VacationSettingsRecord()
+        if let companyDays { row.companyDays = companyDays }
         row.accountId = scope.accountId; row.region = input.region
         row.annualEntitlementHalfDays = input.annualEntitlementHalfDays
         row.carryOver = input.carryOverByYear ?? [:]; row.carryOverExpiry = input.carryOverExpiry
@@ -152,9 +160,10 @@ struct AbsenceCounter: Sendable {
     let models: [EngineWorkModel]
     let region: String
     let custom: [CustomCalendarDay]
+    var companyDays: [CompanyDayRule] = []
     func count(_ absence: EngineAbsence) throws -> Int {
         guard absence.kind == .vacation, absence.status.isActive else { return 0 }
-        let builtin = try (absence.startDate.year...absence.endDate.year).flatMap { try HolidayCalendar.holidays(year: $0, region: region) }
+        let builtin = try (absence.startDate.year...absence.endDate.year).flatMap { try HolidayCalendar.calendar(year: $0, region: region, companyDays: companyDays) }
         // Days outside every work model (e.g. after a training ended) count 0 instead of failing.
         return try VacationEngine.countedHalfDays(for: absence, models: models, calendarDays: builtin + custom, lenient: true)
     }
@@ -165,8 +174,9 @@ struct AbsenceCounter: Sendable {
 struct AbsenceService: Sendable {
     let scope: TimeServices
     func counter() async throws -> AbsenceCounter {
-        .init(models: try await scope.models.list().map { try $0.engine() }, region: try await scope.vacation.settings().region,
-              custom: try await scope.vacation.customDays())
+        let settings = try await scope.vacation.settings()
+        return .init(models: try await scope.models.list().map { try $0.engine() }, region: settings.region,
+                     custom: try await scope.vacation.customDays(), companyDays: settings.companyDays ?? [])
     }
     func record(_ id: UUID) async throws -> AbsenceRecord {
         guard let row = try await AbsenceRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).filter(\.$id == id).first() else { throw APIError.missing }
@@ -254,12 +264,12 @@ struct CalendarService: Sendable {
     let scope: TimeServices
     func holidays(year: Int, region: String?) async throws -> [CalendarDayDTO] {
         guard (1990...2100).contains(year) else { throw APIError.invalid }
-        let configured = try await scope.vacation.settings().region
-        let region = region ?? configured
+        let settings = try await scope.vacation.settings()
+        let region = region ?? settings.region
         guard HolidayCalendar.supportedRegions.contains(region) else { throw APIError.invalid }
-        let builtin = try HolidayCalendar.holidays(year: year, region: region)
+        let builtin = try HolidayCalendar.calendar(year: year, region: region, companyDays: settings.companyDays ?? [])
         let custom = try await scope.vacation.customDays().filter { $0.startDate.year <= year && $0.endDate.year >= year }
-        return (builtin + custom).map { .init(id: $0.id, startDate: $0.startDate, endDate: $0.endDate, name: $0.name, kind: $0.kind, source: $0.source) }
+        return (builtin + custom).map { .init(id: $0.id, startDate: $0.startDate, endDate: $0.endDate, name: $0.name, kind: $0.kind, source: $0.source, companyTreatment: $0.companyTreatment) }
             .sorted { $0.startDate == $1.startDate ? $0.name < $1.name : $0.startDate < $1.startDate }
     }
     func createCustom(_ input: CustomDayInput) async throws -> CalendarDayDTO {
@@ -270,7 +280,7 @@ struct CalendarService: Sendable {
         row.startDate = input.startDate.description; row.endDate = input.endDate.description; row.name = name
         try await row.create(on: scope.db)
         let day = try row.engine()
-        return .init(id: day.id, startDate: day.startDate, endDate: day.endDate, name: day.name, kind: day.kind, source: .custom)
+        return .init(id: day.id, startDate: day.startDate, endDate: day.endDate, name: day.name, kind: day.kind, source: .custom, companyTreatment: nil)
     }
     func deleteCustom(_ id: UUID) async throws {
         guard let row = try await CustomCalendarDayRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).filter(\.$id == id).first() else { throw APIError.missing }

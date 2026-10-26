@@ -9,6 +9,7 @@ struct TimeEvaluationSnapshot: Sendable {
     var customDays: [CustomCalendarDay] = []
     var planningEnabled = true
     var region = "DE-ST"
+    var companyDays: [CompanyDayRule] = []
     /// Index the snapshot once (segment assignment, holiday calendars, validations) before evaluating many days.
     func prepared() -> PreparedEvaluation { PreparedEvaluation(self) }
     func evaluate(_ date: LocalDate, now: Date) throws -> DayEvaluationResult {
@@ -40,9 +41,10 @@ struct DayService: Sendable {
         guard try await scope.modules.enabled(.planning, account: scope.accountId, on: scope.db) else {
             return .init(models: models, segments: segments, preferences: preferences, planningEnabled: false)
         }
+        let settings = try await scope.vacation.settings()
         return .init(models: models, segments: segments, preferences: preferences,
                      absences: try await scope.vacation.engineAbsences(window: window), customDays: try await scope.vacation.customDays(),
-                     region: try await scope.vacation.settings().region)
+                     region: settings.region, companyDays: settings.companyDays ?? [])
     }
     func evaluate(_ date: LocalDate, now: Date = Date()) async throws -> DayEvaluationResult {
         try await snapshot(window: date...date).evaluate(date, now: now)

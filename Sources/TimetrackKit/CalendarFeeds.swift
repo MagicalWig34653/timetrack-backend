@@ -229,14 +229,14 @@ enum CalendarFeedBuilder {
 
         if planning, options.contains("holidays") {
             var days: [CustomCalendarDay] = []
-            for year in from.year...to.year { days += (try? HolidayCalendar.holidays(year: year, region: snapshot.region)) ?? [] }
+            for year in from.year...to.year { days += (try? HolidayCalendar.calendar(year: year, region: snapshot.region, companyDays: snapshot.companyDays)) ?? [] }
             days += snapshot.customDays
             for day in days where day.startDate <= to && day.endDate >= from {
                 let school = day.kind == .schoolHoliday
                 let key = day.id?.uuidString.lowercased() ?? Secrets.hash(day.name).prefix(10).lowercased()
                 events.append(.init(uid: "holiday-\(day.startDate)-\(key)@\(host)", start: day.startDate, end: day.endDate,
-                                    summary: school ? "Schulferien: " + day.name : day.name, description: nil,
-                                    category: school ? "Schulferien" : "Feiertag", transparent: true, status: "CONFIRMED", stamp: feed.createdAt))
+                                    summary: school ? "Schulferien: " + day.name : day.companyTreatment == .half ? day.name + " (halber Tag)" : day.name, description: nil,
+                                    category: school ? "Schulferien" : day.companyTreatment != nil ? "Betriebsfrei" : "Feiertag", transparent: true, status: "CONFIRMED", stamp: feed.createdAt))
             }
         }
 

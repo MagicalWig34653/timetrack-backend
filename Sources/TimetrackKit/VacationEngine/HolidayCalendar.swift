@@ -82,7 +82,28 @@ public enum HolidayCalendar {
     static func validate(_ days: [CustomCalendarDay]) throws {
         guard days.allSatisfy({ $0.startDate <= $0.endDate }) else { throw VacationEngineError.invalidRange }
     }
+    /// A day that behaves like a public holiday: statutory, custom, or a company day treated as `full`.
     static func isHoliday(_ date: LocalDate, days: [CustomCalendarDay]) -> Bool {
-        days.contains { $0.kind == .holiday && $0.startDate <= date && date <= $0.endDate }
+        days.contains { $0.kind == .holiday && $0.companyTreatment != .half && $0.startDate <= date && date <= $0.endDate }
+    }
+    /// A company day treated as `half` that is not also a (full) holiday.
+    static func isHalfCompanyDay(_ date: LocalDate, days: [CustomCalendarDay]) -> Bool {
+        !isHoliday(date, days: days)
+            && days.contains { $0.companyTreatment == .half && $0.startDate <= date && date <= $0.endDate }
+    }
+
+    /// Statutory holidays of the region plus the configured company days of the year. A company day on a date that already
+    /// has a statutory holiday is dropped (the holiday wins).
+    public static func calendar(year: Int, region: String = "DE-ST", companyDays: [CompanyDayRule] = []) throws -> [CustomCalendarDay] {
+        let builtin = try holidays(year: year, region: region)
+        guard companyDays.contains(where: { $0.treatment != .none }) else { return builtin }
+        var result = builtin
+        for rule in companyDays where rule.treatment != .none {
+            guard let date = try? LocalDate(year: year, month: rule.month, day: rule.day),
+                  !builtin.contains(where: { $0.startDate <= date && date <= $0.endDate }) else { continue }
+            result.append(CustomCalendarDay(startDate: date, endDate: date, name: rule.displayName, kind: .holiday,
+                                            source: .builtin, companyTreatment: rule.treatment))
+        }
+        return result
     }
 }

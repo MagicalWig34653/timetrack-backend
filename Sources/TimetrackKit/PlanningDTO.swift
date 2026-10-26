@@ -7,13 +7,38 @@ struct VacationSettingsDTO: Codable, Sendable {
     var annualEntitlementHalfDays: Int
     var carryOverByYear: [String: Int]?
     var carryOverExpiry: String?
+    /// N4 (ADR-0029). Absent on PUT keeps the stored rules; the response always lists at least 24.12. and 31.12.
+    var companyDays: [CompanyDayRule]?
     func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(CompanyDayRules.listed(companyDays ?? []), forKey: .companyDays)
         try c.encodeIfPresent(configured, forKey: .configured)
         try c.encode(region, forKey: .region); try c.encode(annualEntitlementHalfDays, forKey: .annualEntitlementHalfDays)
         try c.encode(carryOverByYear ?? [:], forKey: .carryOverByYear); try c.encode(carryOverExpiry, forKey: .carryOverExpiry)
     }
-    enum CodingKeys: String, CodingKey { case configured, region, annualEntitlementHalfDays, carryOverByYear, carryOverExpiry }
+    enum CodingKeys: String, CodingKey { case configured, region, annualEntitlementHalfDays, carryOverByYear, carryOverExpiry, companyDays }
+}
+enum CompanyDayRules {
+    static let maxRules = 12
+    /// Stored rules plus the suggested dates (untreated) that are not configured, sorted by month and day.
+    static func listed(_ rules: [CompanyDayRule]) -> [CompanyDayRule] {
+        var all = rules
+        for suggested in CompanyDayRule.suggested where !all.contains(where: { $0.month == suggested.month && $0.day == suggested.day }) { all.append(suggested) }
+        return all.sorted { ($0.month, $0.day) < ($1.month, $1.day) }
+    }
+    /// Normalised rules or nil when invalid: valid non-leap dates, unique per date, bounded count and name length.
+    static func validated(_ rules: [CompanyDayRule]) -> [CompanyDayRule]? {
+        guard rules.count <= maxRules else { return nil }
+        var seen = Set<Int>(), result: [CompanyDayRule] = []
+        for rule in rules {
+            guard (try? LocalDate(year: 2023, month: rule.month, day: rule.day)) != nil, seen.insert(rule.month * 100 + rule.day).inserted else { return nil }
+            var name = rule.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if name?.isEmpty == true { name = nil }
+            guard name?.fitsColumn(80) ?? true else { return nil }
+            result.append(.init(month: rule.month, day: rule.day, treatment: rule.treatment, name: name))
+        }
+        return result.sorted { ($0.month, $0.day) < ($1.month, $1.day) }
+    }
 }
 struct SnapshotInput: Decodable, Sendable { var date: LocalDate; var remainingHalfDays: Int }
 struct VacationAdjustmentInput: Decodable, Sendable { var date: LocalDate; var halfDays: Int; var reason: String }
@@ -96,12 +121,15 @@ struct CalendarDayDTO: Encodable, Sendable {
     var name: String
     var kind: CalendarDayKind
     var source: CalendarDaySource
+    /// nil for statutory and custom days; `half` or `full` for days derived from a company-day rule (ADR-0029).
+    var companyTreatment: CompanyDayTreatment?
     func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(companyTreatment, forKey: .companyTreatment)
         try c.encode(id, forKey: .id); try c.encode(startDate, forKey: .startDate); try c.encode(endDate, forKey: .endDate)
         try c.encode(name, forKey: .name); try c.encode(kind, forKey: .kind); try c.encode(source, forKey: .source)
     }
-    enum CodingKeys: String, CodingKey { case id, startDate, endDate, name, kind, source }
+    enum CodingKeys: String, CodingKey { case id, startDate, endDate, name, kind, source, companyTreatment }
 }
 struct CustomDayInput: Decodable, Sendable { var kind: CalendarDayKind; var startDate: LocalDate; var endDate: LocalDate; var name: String }
 
