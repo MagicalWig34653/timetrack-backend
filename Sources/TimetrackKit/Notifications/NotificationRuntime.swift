@@ -38,6 +38,8 @@ public struct NotificationOptions: Sendable {
     var pushAllowInsecureLoopback = false
     /// Test hook: replaces the HTTP delivery to push services.
     var transport: (any PushTransport)?
+    /// Test hook: replaces the HTTP/2 delivery to APNs.
+    var apnsTransport: (any ApnsTransport)?
     /// Test hook: overrides the tick interval (default 60 s).
     var interval: TimeInterval = 60
 
@@ -62,6 +64,7 @@ final class NotificationRuntime: @unchecked Sendable {
     let interval: TimeInterval
     var leaseDuration: TimeInterval = JobLease.ttl
     private let transport: any PushTransport
+    var apnsTransport: (any ApnsTransport)?
     private let lock = NSLock()
     private var task: Task<Void, Never>?
 
@@ -115,6 +118,7 @@ final class NotificationRuntime: @unchecked Sendable {
         await running?.value
         try? await JobLease.release(Self.leaseName, holder: holder, on: scheduler.db)
         await transport.shutdown()
+        await apnsTransport?.shutdown()
     }
 }
 
@@ -145,9 +149,17 @@ extension Application {
             if !parsed.isEmpty { policy.allowedHosts = parsed }
         }
         let transport = options.transport ?? HTTPPushTransport(group: eventLoopGroup)
-        let service = NotificationService(auth: auth, vapid: vapid, transport: transport, policy: policy)
-        let scheduler = NotificationScheduler(auth: auth, db: db, vapid: vapid, transport: transport, policy: policy, logger: logger)
+        let apnsConfiguration = ApnsConfiguration(environment: options.environment)
+        if apnsConfiguration == nil, ApnsConfiguration.anyConfigured(options.environment) {
+            logger.warning("APNS_* settings are invalid or incomplete: APNs push stays unavailable")
+        }
+        let apnsTransport = apnsConfiguration == nil ? nil : (options.apnsTransport ?? HTTP2ApnsTransport(group: eventLoopGroup))
+        let apns = apnsConfiguration.flatMap { configuration in apnsTransport.map { ApnsSender(configuration: configuration, transport: $0) } }
+        let service = NotificationService(auth: auth, vapid: vapid, transport: transport, policy: policy, apns: apns)
+        var scheduler = NotificationScheduler(auth: auth, db: db, vapid: vapid, transport: transport, policy: policy, logger: logger)
+        scheduler.apns = apns
         let runtime = NotificationRuntime(scheduler: scheduler, service: service, transport: transport, interval: options.interval)
+        runtime.apnsTransport = apnsTransport
         notificationRuntime = runtime
         lifecycle.use(NotificationLifecycle(runtime: runtime, start: options.runnerEnabled(testing: environment == .testing)))
     }

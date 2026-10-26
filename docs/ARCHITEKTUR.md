@@ -234,6 +234,13 @@ verifiziert gegen den RFC-8291-Beispielvektor; Zustellung nur gegen Fake-Dienst;
 (`PUSH_ALLOWED_HOSTS`). E-Mail als Hinweiskanal nicht vorhanden. Quelle:
 https://developer.apple.com/documentation/usernotifications/sending-web-push-notifications-in-web-apps-and-browsers
 
+*Umgesetzt (ADR-0030, P14):* APNs-Push für die nativen Apple-Apps. Geräte-Token je Konto über `/api/v1/me/push-devices`
+(Sitzung und CSRF, nicht über Bearer-Token oder MCP; Token im Klartext gespeichert, nie ausgeliefert oder geloggt),
+HTTP/2-Client mit Token-Authentifizierung (`.p8`, ES256-JWT, alle 50 Minuten erneuert) hinter dem Protokoll `ApnsTransport`,
+Zustellung über die Tabelle `apns_outbox` im selben Scheduler wie Web Push mit denselben Kategorie-, Ruhezeit- und Modulregeln.
+Generische Alert-Nutzlast je Benachrichtigungsart, stiller `content-available`-Push als Baustein; 410/BadDeviceToken/Unregistered
+löschen das Gerät. Ohne `APNS_*`-Einstellungen bleibt APNs ausgeschaltet. Nur gegen Testdouble geprüft.
+
 KI-Zugang separat vom App-Login, pro Nutzer verknüpft/widerrufbar. OpenAI dokumentiert
 ChatGPT-Plan-Nutzung ohne eigenen API-Key für geeignete Open-Source-Clients. Eine gemeinsame
 gehostete PWA ist damit nicht automatisch abgedeckt: Deployment, OAuth und Verfügbarkeit vor Zusage erproben.

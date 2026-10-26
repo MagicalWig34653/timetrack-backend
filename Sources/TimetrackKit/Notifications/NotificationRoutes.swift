@@ -48,6 +48,20 @@ func registerNotificationRoutes(_ app: Application, auth: AuthService, service: 
     api.delete("me", "push-subscriptions", ":id") { req async throws -> Response in
         try await service.unsubscribe(account(req), id: id(req), on: req.db); return Response(status: .noContent)
     }
+    // APNs devices of the Apple apps. Session cookie + CSRF only: bearer credentials never reach /api/v1 outside automation and MCP (DeviceScopeGuard).
+    api.get("me", "push-devices") { req async throws -> Response in
+        try timeResponse(await service.devices(account(req), on: req.db))
+    }
+    api.post("me", "push-devices") { req async throws -> Response in
+        let owner = try account(req)
+        return try timeResponse(await service.registerDevice(owner, timeDecode(ApnsDeviceInput.self, request: req), on: req.db), status: .created)
+    }
+    api.delete("me", "push-devices", ":id") { req async throws -> Response in
+        try await service.removeDevice(account(req), id: id(req), on: req.db); return Response(status: .noContent)
+    }
+    api.post("me", "push-devices", ":id", "test") { req async throws -> Response in
+        try await service.sendDeviceTest(account(req), id: id(req), on: req.db); return Response(status: .accepted)
+    }
     api.post("me", "push-subscriptions", ":id", "test") { req async throws -> Response in
         try await service.sendTest(account(req), id: id(req), on: req.db); return Response(status: .accepted)
     }
@@ -58,6 +72,7 @@ struct NotificationErrorMiddleware: AsyncMiddleware {
     static let messages: [String: String] = [
         "push_unavailable": "Push-Benachrichtigungen sind auf diesem Server nicht eingerichtet.",
         "too_many_subscriptions": "Es sind höchstens 10 Geräte für Push-Benachrichtigungen möglich.",
+        "too_many_push_devices": "Es sind höchstens 10 Geräte für Push-Benachrichtigungen möglich.",
         "push_failed": "Die Testnachricht konnte nicht zugestellt werden.",
         "too_many_requests": "Zu viele Anfragen. Bitte versuche es später erneut.",
         "recovery_session_restricted": "Diese Aktion ist in einer Wiederherstellungssitzung nicht erlaubt.",

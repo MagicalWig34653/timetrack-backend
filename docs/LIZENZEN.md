@@ -1,6 +1,6 @@
 # Lizenzinventar C4
 
-Stand: 19.10.2026 (Paket L3: OpenSSL-Altlizenz eingegrenzt, Lösungswege und Ausnahme-Entwurf, XKCP geprüft, `THIRD-PARTY-NOTICES` im Image, Betriebssystempakete inventarisiert; Pins unverändert 43); Paket S1b: Abschnitt „Kette BoringSSL / swift-crypto / NIOSSL im Laufzeit-Image“ ergänzt, Pins unverändert); 17.10.2026 (Paket D3: SwiftPM-Pins gegen `Package.resolved` abgeglichen, 43 Pins unverändert; npm-Abschnitt neu ausgezählt, Website und Apple-Repo ergänzt; die Texte der übrigen Pakete stammen aus C4, 14.10.2026, und D1, 15.10.2026). Projektlizenz: `AGPL-3.0-only`.
+Stand: 19.10.2026 (Paket L3: OpenSSL-Altlizenz eingegrenzt, Lösungswege und Ausnahme-Entwurf, XKCP geprüft, `THIRD-PARTY-NOTICES` im Image, Betriebssystempakete inventarisiert; Pins unverändert 43); Paket S1b: Abschnitt „Kette BoringSSL / swift-crypto / NIOSSL im Laufzeit-Image“ ergänzt, Pins unverändert); 17.10.2026 (Paket D3: SwiftPM-Pins gegen `Package.resolved` abgeglichen, 43 Pins unverändert; npm-Abschnitt neu ausgezählt, Website und Apple-Repo ergänzt; die Texte der übrigen Pakete stammen aus C4, 14.10.2026, und D1, 15.10.2026). Projektlizenz: `AGPL-3.0-only`. Paket P14 (26.10.2026, APNs-Push): keine neue Abhängigkeit; der HTTP/2-Client nutzt das bereits eingebundene AsyncHTTPClient (Apache-2.0) und swift-crypto, Pins unverändert.
 
 ## SwiftPM
 

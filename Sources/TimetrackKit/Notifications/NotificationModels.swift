@@ -71,7 +71,7 @@ final class JobLeaseRecord: Model, @unchecked Sendable {
 
 public enum NotificationSchema {
     public static let migrations: [any Migration] = [
-        CreateNotifications(), CreateNotificationSettings(), CreatePushSubscriptions(), CreatePushOutbox(), CreateJobLeases(), HardenPushOutbox(),
+        CreateNotifications(), CreateNotificationSettings(), CreatePushSubscriptions(), CreatePushOutbox(), CreateJobLeases(), HardenPushOutbox(), CreateApnsDevices(),
     ]
 }
 

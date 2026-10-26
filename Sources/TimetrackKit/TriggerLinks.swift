@@ -285,11 +285,24 @@ func registerTriggerRoutes(_ app: Application, auth: AuthService) {
 // MARK: Log scrubbing
 
 public enum TriggerTokenScrubber {
-    /// Replaces the token segment of any `/t/<token>` or `/ics/<token>.ics` path in a log line. Used by the console log handler as a second line
-    /// of defence; the application itself never logs request paths.
+    private static let linkPattern = try! NSRegularExpression(pattern: "(/t/|/ics/)[A-Za-z0-9_-]{16,}")
+    /// APNs device tokens (hex, 64 or more characters), PEM private keys and JWTs (provider tokens), see ADR-0030.
+    private static let apnsPatterns: [(NSRegularExpression, String)] = [
+        (try! NSRegularExpression(pattern: "(?<![0-9A-Za-z])[0-9a-fA-F]{64,}(?![0-9A-Za-z])"), "[redacted]"),
+        (try! NSRegularExpression(pattern: "-----BEGIN [A-Z ]*PRIVATE KEY-----[\\s\\S]*?(-----END [A-Z ]*PRIVATE KEY-----|$)"), "[redacted]"),
+        (try! NSRegularExpression(pattern: "eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]*"), "[redacted]"),
+    ]
+
+    /// Replaces the token segment of any `/t/<token>` or `/ics/<token>.ics` path in a log line, and APNs tokens, keys and JWTs. Used by the console log
+    /// handler as a second line of defence; the application itself never logs request paths or push tokens.
     public static func scrub(_ text: String) -> String {
-        guard text.contains("/t/") || text.contains("/ics/") else { return text }
-        let pattern = try! NSRegularExpression(pattern: "(/t/|/ics/)[A-Za-z0-9_-]{16,}")
-        return pattern.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text), withTemplate: "$1[redacted]")
+        var result = text
+        if result.contains("/t/") || result.contains("/ics/") {
+            result = linkPattern.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "$1[redacted]")
+        }
+        for (pattern, template) in apnsPatterns {
+            result = pattern.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: template)
+        }
+        return result
     }
 }

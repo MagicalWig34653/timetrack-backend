@@ -39,6 +39,16 @@ enum AccountEraser {
                 try await PushOutboxRecord.query(on: db).filter(\.$notificationId ~~ chunk).delete()
             }
         },
+        // APNs outbox rows reference both notifications and devices.
+        Wipe(schema: ApnsOutboxRecord.schema) { id, db in
+            for chunk in try await ids(ApnsDeviceRecord.self, of: id, on: db).chunked(chunkSize) {
+                try await ApnsOutboxRecord.query(on: db).filter(\.$deviceId ~~ chunk).delete()
+            }
+            for chunk in try await ids(NotificationRecord.self, of: id, on: db).chunked(chunkSize) {
+                try await ApnsOutboxRecord.query(on: db).filter(\.$notificationId ~~ chunk).delete()
+            }
+        },
+        byColumn(ApnsDeviceRecord.self),
         byColumn(NotificationRecord.self), byColumn(NotificationSettingsRecord.self), byColumn(PushSubscriptionRecord.self),
         // OAuth, personal tokens and the MCP audit rows of those credentials.
         Wipe(schema: McpAuditRecord.schema) { id, db in
@@ -91,6 +101,8 @@ enum AccountEraser {
         try await OAuthRequestRecord.query(on: db).filter(\.$accountId == account).delete()
         try await wipes.first { $0.schema == PushOutboxRecord.schema }!.run(account, db)
         try await PushSubscriptionRecord.query(on: db).filter(\.$accountId == account).delete()
+        try await wipes.first { $0.schema == ApnsOutboxRecord.schema }!.run(account, db)
+        try await ApnsDeviceRecord.query(on: db).filter(\.$accountId == account).delete()
     }
 
     // MARK: Erase
