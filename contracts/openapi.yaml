@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.30.1
+  version: 0.31.0
   description: |
     v0.29.0 (R2): Rechtsprofile, Berufsschulstunden und informative Warnungen; keine Rechtsberatung.
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
@@ -60,6 +60,7 @@ info:
     v0.24.0 (B6, ADR-0017 Nachtrag): `Absence.attachmentCount` (integer, additiv, immer vorhanden; gespeicherte, lesbare Anhänge, dieselbe Menge wie `GET /absences/{id}/attachments`); `GET /absences` mit optionalem Filter `hasAttachment=true|false` (anderer Wert → 400 bad_request); `GET /files/{id}?disposition=inline` liefert nur für image/png, image/jpeg, image/gif, image/webp, application/pdf und text/plain `Content-Disposition: inline` (mit nosniff und `Content-Security-Policy: sandbox; default-src 'none'`), alles andere bleibt attachment.
     --- B7 (v0.25.0, additiv) ---
     v0.25.0 (B7, ADR-0026): Vorlage für den Urlaubsantrag je Konto (Modul planning, privat, genau eine): GET /api/v1/vacation/request-form (`exists`, `fileName`, `sizeBytes`, `mapping`, `updatedAt`; ohne Vorlage `exists:false` mit Nullwerten), PUT .../file (Body application/pdf, höchstens 5 MB, Magic Number `%PDF-`, Header `X-File-Name` prozent-kodiert; 400 bad_request, 413 file_too_large, 415 unsupported_type; ersetzt die vorige Datei und behält die Zuordnung), PUT .../mapping (JSON-Objekt, undurchsichtig, höchstens 64 KB; 409 no_template ohne Vorlage, 413 mapping_too_large), GET .../file (PDF als attachment, nosniff; 404 ohne Vorlage), DELETE /api/v1/vacation/request-form (idempotent 204). Die Datei folgt den Speicherregeln (DB/S3/lokal), steckt im Kontoexport (`vacation-request-form.json` und `files/`) und wird mit dem Konto gelöscht. Neuer Fehlercode: no_template (409), mapping_too_large (413).
+    v0.31.0 (N2): (a) `TimeWeekDay.holidayName` (immer vorhanden, null ohne Feiertag oder bei abgeschaltetem Modul planning): Name des gesetzlichen oder eigenen Feiertags an diesem Datum, unabhängig vom Arbeitsmodell; `mark` bleibt am Wochenende und außerhalb jedes Arbeitsmodells `off`, der Feiertag ist aber sichtbar. Die eingebauten Feiertagstabellen sind unverändert vollständig (alle 16 Länder, Jahre 1990 bis 2100, 24.12. und 31.12. sind keine gesetzlichen Feiertage und nicht enthalten; als eigener Feiertag eintragbar). (b) ICS-Kalenderabo: GET /ics/{token}.ics (ohne Sitzung; 256-Bit-Token ist die einzige Berechtigung, nur der SHA-256-Hash wird gespeichert; unbekannt, widerrufen, abgelaufen, fehlerhaft und deaktiviertes Konto sind ununterscheidbar 404; 429 mit Retry-After je Link bzw. je Client bei Fehlversuchen; Inhalt text/calendar nach RFC 5545 mit CRLF, gefalteten Zeilen, stabilen UIDs, ganztägigen Terminen als VALUE=DATE mit exklusivem Ende; Fenster 60 Tage zurück bis 400 Tage voraus; ETag mit If-None-Match/304, Last-Modified, Cache-Control private). Verwaltung: GET/POST /api/v1/me/calendar-feeds und DELETE /api/v1/me/calendar-feeds/{id} (Sitzung, CSRF, nicht über MCP; Klartext-Token und `path` nur in der POST-Antwort). Inhalte je Abo über `include`: absences (geplante, beantragte, genehmigte und genommene Abwesenheiten mit Status im Titel), holidays (Feiertage und eigene Kalendertage), plan (geplante Arbeitstage), tracked (erfasste Zeit je Tag). Neue Tabelle `calendar_feeds` (Migration n2.create_calendar_feeds), Export `calendar-feeds.json` (ohne Token), Kontolöschung widerruft und entfernt die Abos. Neuer Fehlercode: too_many_calendar_feeds (409).
     --- W2 (v0.27.0, additiv) ---
     v0.30.1 (X4, Verhalten ohne Schemaänderung): (a) `work_after_full_school_day` gilt für jede Arbeit (auch vor Schulbeginn) an einem vollen Berufsschultag (mehr als 5 Unterrichtsstunden, § 9 JArbSchG). (b) Die gesetzliche Wochensumme (`weekly_limit`, Jugendprofil) zählt den Soll-Ausfall eines automatisch markierten Feiertags mit (§ 4 Abs. 4 JArbSchG), getrennt vom Zeitkonto. (c) Kontostart ohne Eröffnungssaldo ist der frühere von erstem Arbeitsmodell/Abschnitt und frühester Anpassung; nach Löschen des Eröffnungssaldos fallen frühere Anpassungen nicht mehr aus dem Saldo.
     v0.30.0 (X3): Segmentkorrektur mit neuem/geändertem Ende oder `needsReview:false` sowie Entscheidung über einen Ende-Vorschlag löschen die Prüfmarkierung mit Revision. GET /api/v1/time/account/adjustments listet eigene Anpassungen seitenweise mit ID, Art, Datum, Betrag in Sekunden, Grund und Erstellungszeit; DELETE /api/v1/time/account/adjustments/{id} entfernt eine eigene Anpassung und liefert den neu berechneten Saldo. MCP `list_time_adjustments` liest dieselben Daten.
@@ -961,6 +962,54 @@ paths:
         '400': { description: ungültiger Parameter, content: { application/json: { schema: { $ref: '#/components/schemas/TriggerError' } } } }
         '404': { description: unbekannt, widerrufen, abgelaufen oder Aktion nicht erlaubt (ununterscheidbar), content: { application/json: { schema: { $ref: '#/components/schemas/TriggerError' } } } }
         '409': { description: Start überlappt ein vorhandenes Segment (segment_overlap), content: { application/json: { schema: { $ref: '#/components/schemas/TriggerError' } } } }
+        '429': { description: zu viele Anfragen (Retry-After), content: { application/json: { schema: { $ref: '#/components/schemas/TriggerError' } } } }
+  /api/v1/me/calendar-feeds:
+    get:
+      operationId: listCalendarFeeds
+      summary: Kalenderabos auflisten
+      description: Aktive (nicht widerrufene) ICS-Abos des Kontos. Token und Pfad werden nie wieder ausgegeben.
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/CalendarFeed' } } } } } }
+    post:
+      operationId: createCalendarFeed
+      summary: Kalenderabo erzeugen
+      description: |
+        Erzeugt ein Abo für `GET /ics/{token}.ics`. `include` ist eine nicht leere Teilmenge von absences, holidays, plan, tracked (Standard absences und holidays).
+        Höchstens 10 aktive Abos (409 too_many_calendar_feeds). Das Token (`token`) und der Pfad (`path`, `/ics/<token>.ics`) stehen nur in dieser Antwort.
+        Die Verwaltung ist bewusst nicht über MCP verfügbar.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [label], properties: { label: { type: string, maxLength: 80 }, include: { type: array, minItems: 1, uniqueItems: true, items: { type: string, enum: [absences, holidays, plan, tracked] } }, expiresInDays: { type: integer, minimum: 1, maximum: 730 } } } } } }
+      responses:
+        '201': { description: erzeugt, content: { application/json: { schema: { $ref: '#/components/schemas/CalendarFeed' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { description: Höchstzahl aktiver Abos erreicht (too_many_calendar_feeds), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /api/v1/me/calendar-feeds/{id}:
+    delete:
+      operationId: revokeCalendarFeed
+      summary: Kalenderabo widerrufen
+      description: Der Link antwortet danach sofort mit 404. Wiederholtes Widerrufen ist ein No-op.
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '204': { description: widerrufen }, '404': { $ref: '#/components/responses/NotFound' } }
+  /ics/{file}:
+    get:
+      operationId: fetchCalendarFeed
+      summary: Kalenderabo als ICS abrufen
+      description: |
+        Ohne Anmeldung: das Token im Pfad (`<token>.ics`) ist die einzige Berechtigung (siehe docs/ARCHITEKTUR.md). Liefert nur Daten des besitzenden Kontos
+        als RFC-5545-Kalender (CRLF, Zeilenfaltung bei 75 Oktetten, stabile UIDs `<art>-<id>@<Host der PUBLIC_BASE_URL>`, DTSTAMP, ganztägige Termine als
+        `VALUE=DATE` mit exklusivem DTEND). Fenster: 60 Tage zurück bis 400 Tage voraus. Inhalte laut `include` des Abos; Abwesenheiten tragen den Status im Titel
+        (`Urlaub (genehmigt)`, `Urlaub (geplant)`, `Urlaub (beantragt)`, `Krank (genommen)`), Notizen und Orte werden nie ausgegeben. Abwesenheiten, Feiertage und Plan
+        entfallen bei abgeschaltetem Modul planning. `ETag` (Hash des Inhalts) mit `If-None-Match` und 304; `Last-Modified` ist informativ;
+        `Cache-Control: private, max-age=900, must-revalidate`.
+      security: []
+      parameters:
+        - { name: file, in: path, required: true, description: '`<token>.ics` (Token 43 Zeichen)', schema: { type: string, minLength: 47, maxLength: 47 } }
+        - { name: If-None-Match, in: header, required: false, schema: { type: string } }
+      responses:
+        '200': { description: Kalender, headers: { ETag: { schema: { type: string } }, Last-Modified: { schema: { type: string } }, Cache-Control: { schema: { type: string } } }, content: { text/calendar: { schema: { type: string } } } }
+        '304': { description: unverändert }
+        '404': { description: unbekannt, widerrufen, abgelaufen oder fehlerhaft (ununterscheidbar; Cache-Control no-store), content: { application/json: { schema: { $ref: '#/components/schemas/TriggerError' } } } }
         '429': { description: zu viele Anfragen (Retry-After), content: { application/json: { schema: { $ref: '#/components/schemas/TriggerError' } } } }
   /api/v1/automation/events:
     post:
@@ -2274,6 +2323,18 @@ components:
         lastAction: { type: [string, 'null'], enum: [start, stop, toggle, null] }
         token: { type: string, description: 'nur in der POST-Antwort' }
         path: { type: string, description: 'nur in der POST-Antwort: /t/<token>' }
+    CalendarFeed:
+      type: object
+      required: [id, label, include, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        label: { type: string }
+        include: { type: array, items: { type: string, enum: [absences, holidays, plan, tracked] } }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        lastUsedAt: { type: [string, 'null'], format: date-time }
+        token: { type: string, description: 'nur in der POST-Antwort' }
+        path: { type: string, description: 'nur in der POST-Antwort: /ics/<token>.ics' }
     TriggerError:
       type: object
       required: [error]
@@ -2455,7 +2516,7 @@ components:
           properties: { targetSeconds: { type: integer }, plannedSeconds: { type: integer }, differenceSeconds: { type: integer, description: plannedSeconds − targetSeconds } }
     TimeWeekDay:
       type: object
-      required: [date, weekday, mark, markSource, targetSeconds, plannedSeconds, planMode, workSeconds, creditSeconds, rawWorkSeconds, breakSeconds, breakDeductionSeconds, travelSeconds, schoolSeconds, balanceSeconds, firstStart, lastEnd, segmentsCount, absences, provisional, isToday, isFuture, legalProfileId, breakHints, legalWarnings, schoolLessonCount]
+      required: [date, weekday, mark, markSource, targetSeconds, plannedSeconds, planMode, workSeconds, creditSeconds, rawWorkSeconds, breakSeconds, breakDeductionSeconds, travelSeconds, schoolSeconds, balanceSeconds, firstStart, lastEnd, segmentsCount, absences, provisional, isToday, isFuture, legalProfileId, breakHints, legalWarnings, schoolLessonCount, holidayName]
       properties:
         date: { type: string, format: date }
         weekday: { type: integer, minimum: 1, maximum: 7 }
@@ -2485,6 +2546,7 @@ components:
         breakHints: { $ref: '#/components/schemas/DayEvaluation/properties/breakHints' }
         legalWarnings: { $ref: '#/components/schemas/DayEvaluation/properties/legalWarnings' }
         schoolLessonCount: { type: [integer, 'null'] }
+        holidayName: { type: [string, 'null'], description: 'Name eines gesetzlichen oder eigenen Feiertags an diesem Datum, unabhängig vom Arbeitsmodell (auch am Wochenende, wo mark off bleibt); null ohne Feiertag oder ohne Modul planning' }
     TimeWeek:
       type: object
       required: [week, from, to, days, summary]

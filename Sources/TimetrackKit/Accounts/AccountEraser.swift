@@ -57,7 +57,7 @@ enum AccountEraser {
         // Time data. Segments and plan days reference places.
         byColumn(RevisionRecord.self), byColumn(AutomationEventRecord.self), byColumn(TimerEventRecord.self), byColumn(SuggestionRecord.self),
         byColumn(SegmentRecord.self), byColumn(PlanDayRecord.self), byColumn(PlaceRecord.self), byColumn(DayPreferenceRecord.self),
-        byColumn(AdjustmentRecord.self), byColumn(WorkModelRecord.self), byColumn(DeviceTokenRecord.self), byColumn(TriggerLinkRecord.self),
+        byColumn(AdjustmentRecord.self), byColumn(WorkModelRecord.self), byColumn(DeviceTokenRecord.self), byColumn(TriggerLinkRecord.self), byColumn(CalendarFeedRecord.self),
         // Reports.
         byColumn(ReportSourceRecord.self), byColumn(ReportEntryRecord.self), byColumn(ReportWeekStatusRecord.self), byColumn(LearningFieldRecord.self),
         // Absences, vacation, calendar, shares in both directions.
@@ -80,6 +80,7 @@ enum AccountEraser {
         try await Session.query(on: db).filter(\.$accountId == account).filter(\.$revokedAt == nil).set(\.$revokedAt, to: now).update()
         try await DeviceTokenRecord.query(on: db).filter(\.$accountId == account).filter(\.$revokedAt == nil).set(\.$revokedAt, to: now).update()
         try await TriggerLinkRecord.query(on: db).filter(\.$accountId == account).filter(\.$revokedAt == nil).set(\.$revokedAt, to: now).update()
+        try await CalendarFeedRecord.query(on: db).filter(\.$accountId == account).filter(\.$revokedAt == nil).set(\.$revokedAt, to: now).update()
         try await ApiTokenRecord.query(on: db).filter(\.$accountId == account).filter(\.$revokedAt == nil).set(\.$revokedAt, to: now).update()
         let grants = try await OAuthGrant.query(on: db).filter(\.$accountId == account).all().compactMap(\.id)
         try await OAuthGrant.query(on: db).filter(\.$accountId == account).filter(\.$revokedAt == nil).set(\.$revokedAt, to: now).update()

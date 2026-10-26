@@ -5,6 +5,7 @@ Die Einzelpakete (A1, B2, …) stehen in `docs/ARBEITSPLAN.md`.
 
 ## Unveröffentlicht
 
+- **Kalenderabo und Feiertagsanzeige (N2, Vertrag 0.31.0):** Widerrufbare ICS-Abo-Links `GET /ics/{token}.ics` (RFC 5545; Abwesenheiten mit Status, Feiertage, optional Plan und erfasste Zeit; Fenster -60 bis +400 Tage; ETag/304; Token nur als Hash, 404 ohne Orakel, Ratenbegrenzung), Verwaltung unter `/me/calendar-feeds`, nicht per MCP. `TimeWeekDay.holidayName` nennt Feiertage auch am Wochenende und außerhalb von Arbeitsmodellen; Feiertagstabellen aller Länder mit Tests für 2026/2027 abgesichert.
 - **Korrekturen Jugendprofil und Zeitkonto (X4, Vertrag 0.30.1):** Arbeit an einem vollen Berufsschultag wird auch vor Schulbeginn gewarnt; Feiertags-Ausfall zählt in die gesetzliche Wochensumme (§ 4 Abs. 4 JArbSchG); Kontostart berücksichtigt nach Löschen des Eröffnungssaldos frühere Anpassungen.
 - **Jugendrechtsprofil (R2, Vertrag 0.29.0):** `jarbschg-minor-de` neben `arbzg-adult-de`, Profilwahl je datiertem Arbeitsmodell, Berufsschulstunden und 8-/40-Stunden-Gutschrift, Pausen-, Ruhezeit- und Grenzhinweise; `GET /legal-profiles`, Migration und additive Tages-/Wochen-/Statistikfelder. Hinweise sind informativ und keine Rechtsberatung.
 - **Client-Lücken X3 (Vertrag 0.30.0):** `needsReview` endet nach Ende-Korrektur oder Entscheidung über einen Ende-Vorschlag; ausdrückliche Quittierung per `PATCH` möglich. Zeitkonto-Anpassungen sind seitenweise lesbar und einzeln löschbar; der Saldo wird neu berechnet. MCP kann die Anpassungen lesen.

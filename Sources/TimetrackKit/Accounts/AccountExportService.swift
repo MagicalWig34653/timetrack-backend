@@ -58,6 +58,12 @@ struct AccountExportService: Sendable {
              "kind": .string(l.kind), "createdAt": Self.iso(l.createdAt), "expiresAt": Self.iso(l.expiresAt), "revokedAt": Self.iso(l.revokedAt),
              "lastUsedAt": Self.iso(l.lastUsedAt)]
         })
+        // Calendar feeds: metadata only, never the token or its hash (N2).
+        let feeds = try await CalendarFeedRecord.query(on: db).filter(\.$accountId == id).sort(\.$createdAt).all()
+        try table("calendar-feeds", feeds.map { f in
+            ["id": .string(f.id?.uuidString ?? ""), "label": .string(f.label), "include": .array(f.options.map(JSONValue.string)),
+             "createdAt": Self.iso(f.createdAt), "expiresAt": Self.iso(f.expiresAt), "revokedAt": Self.iso(f.revokedAt), "lastUsedAt": Self.iso(f.lastUsedAt)]
+        })
         let absences = try await AbsenceRecord.query(on: db).filter(\.$accountId == id).sort(\.$startDate).all()
         try table("absences", absences.map { a in
             ["id": .string(a.id?.uuidString ?? ""), "kind": .string(a.kind), "startDate": .string(a.startDate), "endDate": .string(a.endDate),

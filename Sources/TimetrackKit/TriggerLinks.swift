@@ -285,11 +285,11 @@ func registerTriggerRoutes(_ app: Application, auth: AuthService) {
 // MARK: Log scrubbing
 
 public enum TriggerTokenScrubber {
-    /// Replaces the token segment of any `/t/<token>` path in a log line. Used by the console log handler as a second line
+    /// Replaces the token segment of any `/t/<token>` or `/ics/<token>.ics` path in a log line. Used by the console log handler as a second line
     /// of defence; the application itself never logs request paths.
     public static func scrub(_ text: String) -> String {
-        guard text.contains("/t/") else { return text }
-        let pattern = try! NSRegularExpression(pattern: "(/t/)[A-Za-z0-9_-]{16,}")
+        guard text.contains("/t/") || text.contains("/ics/") else { return text }
+        let pattern = try! NSRegularExpression(pattern: "(/t/|/ics/)[A-Za-z0-9_-]{16,}")
         return pattern.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text), withTemplate: "$1[redacted]")
     }
 }

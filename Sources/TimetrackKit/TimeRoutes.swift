@@ -191,6 +191,14 @@ func registerTimeRoutes(_ app: Application, auth: AuthService) {
     api.delete("me", "trigger-links", ":id") { req async throws -> Response in
         let key = try id(req); return try await run(req) { try await $0.triggerLinks.revoke(key); return Response(status: .noContent) }
     }
+    api.get("me", "calendar-feeds") { req async throws -> Response in try await runRead(req) { try timeResponse(await $0.calendarFeeds.list()) } }
+    api.post("me", "calendar-feeds") { req async throws -> Response in
+        let input = try timeDecode(CalendarFeedInput.self, request: req)
+        return try await run(req) { try timeResponse(await $0.calendarFeeds.create(input), status: .created) }
+    }
+    api.delete("me", "calendar-feeds", ":id") { req async throws -> Response in
+        let key = try id(req); return try await run(req) { try await $0.calendarFeeds.revoke(key); return Response(status: .noContent) }
+    }
     app.grouped("api", "v1").grouped(DeviceTokenMiddleware(auth: auth)).post("automation", "events") { req async throws -> Response in
         let input = try timeDecode(AutomationInput.self, request: req)
         guard let token = req.storage[DeviceContextKey.self] else { throw APIError.unauthorized }

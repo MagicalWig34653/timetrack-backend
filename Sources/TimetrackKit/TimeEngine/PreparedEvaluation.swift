@@ -99,6 +99,13 @@ final class PreparedEvaluation {
         return days
     }
 
+    /// Name of the public holiday on `date` (built-in table of the configured region plus custom holidays), regardless of the
+    /// work model; nil when planning is off or nothing applies.
+    func holidayName(on date: LocalDate) -> String? {
+        guard snapshot.planningEnabled else { return nil }
+        return builtInCalendar(year: date.year).first { $0.kind == .holiday && $0.startDate <= date && date <= $0.endDate }?.name
+    }
+
     /// Precedence (ADR-0005, contract v0.3.2): explicit mark > holiday on a model workday > approved/taken absence.
     private func effective(_ date: LocalDate, explicit: DayPreferences) throws -> (DayPreferences, DayMarkSource) {
         if explicit.mark != .none { return (explicit, .explicit) }
