@@ -40,6 +40,8 @@ public struct NotificationOptions: Sendable {
     var transport: (any PushTransport)?
     /// Test hook: replaces the HTTP/2 delivery to APNs.
     var apnsTransport: (any ApnsTransport)?
+    /// Test hook: overrides debounce and minimum interval of the silent sync push.
+    var syncTiming = ApnsSyncCoordinator.Timing()
     /// Test hook: overrides the tick interval (default 60 s).
     var interval: TimeInterval = 60
 
@@ -65,6 +67,7 @@ final class NotificationRuntime: @unchecked Sendable {
     var leaseDuration: TimeInterval = JobLease.ttl
     private let transport: any PushTransport
     var apnsTransport: (any ApnsTransport)?
+    var syncCoordinator: ApnsSyncCoordinator?
     private let lock = NSLock()
     private var task: Task<Void, Never>?
 
@@ -116,6 +119,7 @@ final class NotificationRuntime: @unchecked Sendable {
         let running = takeTask()
         running?.cancel()
         await running?.value
+        await syncCoordinator?.stop()
         try? await JobLease.release(Self.leaseName, holder: holder, on: scheduler.db)
         await transport.shutdown()
         await apnsTransport?.shutdown()
@@ -160,6 +164,14 @@ extension Application {
         scheduler.apns = apns
         let runtime = NotificationRuntime(scheduler: scheduler, service: service, transport: transport, interval: options.interval)
         runtime.apnsTransport = apnsTransport
+        if let apns {
+            let dispatcher = ApnsDispatcher(db: db, sender: apns, modules: auth.modules)
+            let coordinator = ApnsSyncCoordinator(timing: options.syncTiming, logger: logger) { account, excluded in
+                try await dispatcher.sendSyncHint(account: account, excluding: excluded)
+            }
+            runtime.syncCoordinator = coordinator
+            middleware.use(ApnsSyncMiddleware(coordinator: coordinator, auth: auth))
+        }
         notificationRuntime = runtime
         lifecycle.use(NotificationLifecycle(runtime: runtime, start: options.runnerEnabled(testing: environment == .testing)))
     }

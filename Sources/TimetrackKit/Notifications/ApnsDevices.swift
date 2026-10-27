@@ -204,8 +204,11 @@ struct ApnsDispatcher: Sendable {
     }
 
     /// Silent `content-available` push so the apps of one account refresh their data. Respects no quiet hours (it shows nothing).
-    func sendSyncHint(account: UUID, now: Date = Date()) async throws {
-        for device in try await ApnsDeviceRecord.query(on: db).filter(\.$accountId == account).all() {
+    /// `excluding` is the registration of the originating device (it already has the data). Does nothing for disabled accounts or
+    /// when the account switched all push categories off.
+    func sendSyncHint(account: UUID, excluding: UUID? = nil, now: Date = Date()) async throws {
+        guard try await syncHintAllowed(account: account) else { return }
+        for device in try await ApnsDeviceRecord.query(on: db).filter(\.$accountId == account).all() where device.id != excluding {
             let outcome = await sender.deliver(.silentSync, token: device.token, environment: device.environment, topic: device.appBundleId, now: now)
             try await Self.record(outcome, device: device.requireID(), now: now, on: db)
         }

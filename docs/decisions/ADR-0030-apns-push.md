@@ -17,9 +17,12 @@ Der Server stellt die bestehenden Benachrichtigungsarten (`running_timer`, `pend
 - **Einstellungen:** Dieselben Kategorie-Schalter (`push`), Ruhezeiten, Moduleschalter und Kontosperre wie bei Web Push, geprüft beim Einreihen und erneut bei der Zustellung.
 - **Zustellung:** Tabelle `apns_outbox` (je Benachrichtigung und Gerät eine Zeile; pending, deferred, sent, failed), drei Versuche mit Backoff 1 und 5 Minuten bei 429/5xx/Netzwerk; HTTP 410, 400 `BadDeviceToken` und `Unregistered` löschen das Gerät samt Warteschlange; andere Fehler werden mit bereinigtem Grund (`apns_<Reason>`) als fehlgeschlagen vermerkt. Aufbewahrung gesendeter und fehlgeschlagener Zeilen 14 Tage.
 
+## Nachtrag P14b: automatischer Sync-Push
+
+`ApnsSyncMiddleware` (nur bei konfiguriertem APNs) löst nach einer erfolgreichen (2xx) schreibenden Anfrage auf `time`, `plan`, `vacation`, `absences`, `calendar`, `work-models`, `places` oder `automation` (Gerätetoken-Ereignisse) den `ApnsSyncCoordinator` aus. Dieser fasst je Konto zusammen: Senden nach 3 s Ruhe, höchstens alle 30 s (Apple drosselt stille Pushes), asynchron außerhalb der Anfrage; Fehler werden nur mit Fehlertyp geloggt. Optionaler Header `X-Timetrack-Device` mit der Geräte-ID aus `POST /me/push-devices` schließt das auslösende Gerät aus, wenn alle zusammengefassten Änderungen von ihm stammen (gemischte oder unbekannte Herkunft: alle Geräte). `sendSyncHint` sendet nicht an gesperrte Konten oder wenn alle Push-Kategorien des Kontos aus sind (eigener Schalter fehlt bewusst). Nicht ausgelöst: MCP-Schreibaufrufe (JSON-RPC, Lese-/Schreibart nicht am Pfad erkennbar), Änderungen durch Wartungsjobs und Importe außerhalb der genannten Pfade, Planfreigaben (`shares`). Der Zustand der Zusammenfassung liegt im Prozess; bei mehreren Replikas kann ein Konto je Replika einen Push auslösen.
+
 ## Offen
 
-- Der stille Push ist als Baustein (`ApnsDispatcher.sendSyncHint`) vorhanden, wird aber noch von keinem Ereignis ausgelöst; Auslöser (z. B. nach serverseitigen Änderungen anderer Geräte) und Drosselung (Apple begrenzt stille Pushes) sind mit den Apps abzustimmen.
 - Verdrahtung des Schlüssels als Docker-/Swarm-Secret in `deploy/` (der Entrypoint übersetzt `APNS_PRIVATE_KEY_FILE` bereits).
 - Echter Test gegen Sandbox und Produktion; der Aufruf der Apple-Hosts ist nur gegen einen Testdouble geprüft.
 - Wartungsjob: Geräte ohne Erfolg über lange Zeit werden nur über die APNs-Antworten bereinigt (kein Zeitlimit wie bei Web Push).

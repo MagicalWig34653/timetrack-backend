@@ -132,6 +132,7 @@ extension AuthTests {
         let resolved = try await value(); XCTAssertNil(resolved, file: file, line: line)
     }
     func apnsApp(env: [String: String], transport: FakeApnsTransport = FakeApnsTransport(), database: [String: String] = [:],
+                 syncTiming: ApnsSyncCoordinator.Timing = .init(),
                  _ run: (Application, AuthService, NotificationRuntime, FakeApnsTransport) async throws -> Void) async throws {
         let app = try await Application.make(.testing)
         app.logger.logLevel = .critical
@@ -139,6 +140,7 @@ extension AuthTests {
         do {
             var options = NotificationOptions(environment: env)
             options.apnsTransport = transport
+            options.syncTiming = syncTiming
             try await configure(app, configuration: config, notifications: options)
             try await app.autoMigrate()
             try await run(app, AuthService(configuration: config, mailSender: nil), try XCTUnwrap(app.notificationRuntime), transport)
