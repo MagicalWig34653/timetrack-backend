@@ -8,7 +8,7 @@ Stand: 17.10.2026. Jede Information hat genau eine maßgebliche Datei; andere Da
 | Frage | Maßgebliche Datei |
 | --- | --- |
 | **Selbst installieren: Überblick, Auswahl Compose oder Swarm, Image** | [INSTALLATION.md](INSTALLATION.md) |
-| Installation, Seiten im Einzelnen: Compose, Swarm, eigene MariaDB, Reverse Proxy, Ersteinrichtung, Sichern, Probleme, Konfigurationsreferenz | `installation/`: [compose](installation/compose.md), [swarm](installation/swarm.md), [mariadb](installation/mariadb.md), [proxy](installation/proxy.md), [ersteinrichtung](installation/ersteinrichtung.md), [backup](installation/backup.md), [probleme](installation/probleme.md), [konfiguration](installation/konfiguration.md) |
+| Installation, Seiten im Einzelnen: Compose, Swarm, eigene MariaDB, Reverse Proxy, Ersteinrichtung, Push, Sichern, Probleme, Konfigurationsreferenz | `installation/`: [compose](installation/compose.md), [swarm](installation/swarm.md), [mariadb](installation/mariadb.md), [proxy](installation/proxy.md), [ersteinrichtung](installation/ersteinrichtung.md), [push](installation/push.md), [backup](installation/backup.md), [probleme](installation/probleme.md), [konfiguration](installation/konfiguration.md) |
 | Image selbst bauen (buildx, Build-Argumente, eigene Registry) | [IMAGE-BAUEN.md](IMAGE-BAUEN.md) |
 | Aktualisieren, Datenbank-Migrationen, Rollback | [UPDATE.md](UPDATE.md) |
 | Was ist tatsächlich gebaut, geprüft, offen? | [STATUS.md](STATUS.md) |

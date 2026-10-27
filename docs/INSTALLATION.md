@@ -67,6 +67,7 @@ Danach: Reverse Proxy einrichten, `/ready` prüfen, ersten Admin anlegen. Alle S
 3. **[Eigene MariaDB vorbereiten](installation/mariadb.md)**: Datenbank, Benutzer mit minimalen Rechten, TLS.
 4. **[Reverse Proxy und TLS](installation/proxy.md)**: Caddy, nginx, Traefik, Apple-Datei, Client-Adresse.
 5. **[Ersteinrichtung](installation/ersteinrichtung.md)**: erster Admin, Passkey, Onboarding, Einladungen, Speicher, optionale Dienste, Apps, Import, KI-Anbindung.
+   Optional danach: **[Push-Benachrichtigungen](installation/push.md)** (Web-Push und APNs für die Apple-Apps).
 6. **[Aktualisieren und Migrationen](UPDATE.md)**
 7. **[Sichern und Wiederherstellen](installation/backup.md)**
 8. **[Probleme und Lösungen](installation/probleme.md)**

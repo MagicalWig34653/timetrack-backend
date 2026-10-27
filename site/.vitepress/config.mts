@@ -56,6 +56,7 @@ export default defineConfig({
             ...item('Eigene MariaDB', 'docs/installation/mariadb'),
             ...item('Reverse Proxy und TLS', 'docs/installation/proxy'),
             ...item('Ersteinrichtung', 'docs/installation/ersteinrichtung'),
+            ...item('Push-Benachrichtigungen', 'docs/installation/push'),
             ...item('Aktualisieren', 'docs/update'),
             ...item('Sichern und Wiederherstellen', 'docs/installation/backup'),
             ...item('Probleme und Lösungen', 'docs/installation/probleme'),

@@ -25,6 +25,7 @@ const pages = [
   ['docs/installation/mariadb.md', '/docs/installation/mariadb'],
   ['docs/installation/proxy.md', '/docs/installation/proxy'],
   ['docs/installation/ersteinrichtung.md', '/docs/installation/ersteinrichtung'],
+  ['docs/installation/push.md', '/docs/installation/push'],
   ['docs/UPDATE.md', '/docs/update'],
   ['docs/installation/backup.md', '/docs/installation/backup'],
   ['docs/installation/probleme.md', '/docs/installation/probleme'],
