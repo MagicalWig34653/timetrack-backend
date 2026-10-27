@@ -79,7 +79,7 @@ Danach:
 2. `/root/tt-keys/tt_storage_secret_key` und `tt_vapid_private_key` in den Passwortmanager übernehmen und das Verzeichnis löschen. **Docker zeigt Secret-Werte nie wieder an.**
 3. Prüfen: `docker secret ls` zeigt `tt_db_password`, `tt_storage_secret_key`, `tt_vapid_private_key`.
 
-Weitere Optionen: `--db-password-file DATEI` (vorhandenes Passwort), `--smtp-password-file`, `--oidc-client-secret-file`, `--prefix` (anderer Namensprefix). Ohne `--db-password-file`/`--generate-db-password` fragt das Skript das Passwort ohne Echo ab.
+Weitere Optionen: `--db-password-file DATEI` (vorhandenes Passwort), `--smtp-password-file`, `--oidc-client-secret-file`, `--apns-private-key-file`, `--prefix` (anderer Namensprefix). Ohne `--db-password-file`/`--generate-db-password` fragt das Skript das Passwort ohne Echo ab.
 
 | Secret | Inhalt | Folge des Verlusts |
 | --- | --- | --- |
@@ -87,6 +87,15 @@ Weitere Optionen: `--db-password-file DATEI` (vorhandenes Passwort), `--smtp-pas
 | `tt_storage_secret_key` | Base64 von 32 Zufallsbytes (AES-256-GCM) | **Gespeicherte S3-Zugangsdaten nicht mehr entschlüsselbar**: S3-Dateien unlesbar (HTTP 503 `storage_unavailable`), bis ein Admin die S3-Daten neu einträgt. DB und lokale Dateien nicht betroffen. Auch **nicht ohne Not rotieren**. Wird S3 nie verwendet, ist der Schaden gering, der Schlüssel muss aber gesetzt sein. |
 | `tt_vapid_private_key` | P-256-Schlüssel (32 Byte, Base64url) | Push-Abonnements ungültig; Geräte müssen neu abonnieren. |
 | `tt_smtp_password`, `tt_oidc_client_secret` | nur falls genutzt | Neu eintragen. |
+| `tt_apns_private_key` | nur falls APNs genutzt: PEM-Text des Apple-`.p8`-Schlüssels (EC P-256) | Push an die Apple-Apps fällt aus; Schlüssel bei Apple neu erzeugen (oder aus dem Passwortmanager) und als neues Secret anlegen. |
+
+**APNs-Push für die Apple-Apps (optional, ADR-0030).** Ohne diese Schritte bleibt APNs aus (`apnsAvailable:false`), das ist der Normalfall. Aktivieren:
+
+1. Den `.p8`-Schlüssel im Apple-Developer-Konto erzeugen (APNs-Schlüssel) und als Datei sicher ablegen; Key-ID und Team-ID notieren. Den Schlüssel nie ins Repository legen.
+2. Secret anlegen: `./create-secrets.sh --apns-private-key-file /pfad/AuthKey_XXXX.p8` (zusammen mit den anderen Optionen oder später in einem eigenen Aufruf; erst `--dry-run`). Das Skript prüft mit openssl, ohne etwas auszugeben, dass die Datei ein unverschlüsselter EC-P-256-Schlüssel im PEM-Format ist, übergibt den Inhalt per stdin und überschreibt nie ein vorhandenes Secret. Danach die Datei aus dem Arbeitsverzeichnis entfernen (Kopie im Passwortmanager).
+3. In `stack.yaml` den Block „APNs push“, `- tt_apns_private_key` unter `secrets:` des Backends und `tt_apns_private_key:` im Top-Level-`secrets:` einkommentieren (wie bei SMTP/OIDC).
+4. In `.env` `APNS_KEY_ID`, `APNS_TEAM_ID` (je 10 Zeichen) und `APNS_BUNDLE_IDS` (kommagetrennt) setzen; alle vier Werte inklusive Schlüssel sind nötig, sonst bleibt APNs aus.
+5. Neu ausrollen (Abschnitt 6). Prüfen: `GET /api/v1/push/config` meldet `apnsAvailable:true` (angemeldete Sitzung). Eine echte Zustellung ist erst mit den Apple-Apps und einem Testgerät prüfbar.
 
 **VAPID-Schlüssel**: Das Backend bringt keinen Befehl dafür mit (die CLI kennt nur `serve`, `migrate`, `bootstrap-admin`, `maintenance`).
 Das Skript erzeugt ihn mit dem dokumentierten openssl-Verfahren: `openssl ecparam -name prime256v1 -genkey -noout | openssl ec -outform DER | tail -c +8 | head -c 32 | base64 | tr '+/' '-_' | tr -d '=\n'`

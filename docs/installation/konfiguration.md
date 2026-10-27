@@ -18,7 +18,7 @@ Ungültige Werte verhindern den Start; der Fehler nennt die Variable (z. B. `Inv
 | `VAPID_SUBJECT` | – (Pflicht in Compose/Swarm) | Kontakt für Push-Dienste: `mailto:` oder `https://`. Ohne gültigen Wert bleibt Push aus (Warnung im Log). |
 | `DB_PASSWORD` | – | Bei MariaDB ausdrücklich zu setzen. Im Container stattdessen `DB_PASSWORD_FILE` (Docker-Secret). |
 | `STORAGE_SECRET_KEY` | – | Base64 von 32 Zufallsbytes; verschlüsselt gespeicherte S3-Zugangsdaten. Im Container `STORAGE_SECRET_KEY_FILE`. Verlust macht S3-Zugangsdaten unbrauchbar. |
-| `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_PRIVATE_KEY`, `APNS_BUNDLE_IDS` | – | Optional: APNs-Push für die Apple-Apps (ADR-0030), alle vier nötig; Schlüssel als PEM-Text der `.p8`-Datei, im Container `APNS_PRIVATE_KEY_FILE`. Secret-Verdrahtung in Compose/Swarm noch nicht vorbereitet. |
+| `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_PRIVATE_KEY`, `APNS_BUNDLE_IDS` | – | Optional: APNs-Push für die Apple-Apps (ADR-0030), alle vier nötig; Schlüssel als PEM-Text der `.p8`-Datei, im Container `APNS_PRIVATE_KEY_FILE`. Swarm: auskommentierter Block in `stack.yaml`, Secret `tt_apns_private_key` über `create-secrets.sh --apns-private-key-file` ([Deployment-Anleitung](../DEPLOYMENT.md), Abschnitt 4); Compose noch nicht vorbereitet. |
 | `VAPID_PRIVATE_KEY` | – | P-256-Schlüssel (32 Byte, Base64url) für Web Push. Im Container `VAPID_PRIVATE_KEY_FILE`. |
 
 `DB_PASSWORD`, `STORAGE_SECRET_KEY` und `VAPID_PRIVATE_KEY` erzeugen `init-secrets.sh` (Compose) und `create-secrets.sh` (Swarm); du setzt sie nicht von Hand.

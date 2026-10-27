@@ -29,7 +29,7 @@ mkdir -m 700 /root/tt-keys
 ./create-secrets.sh --generate-db-password /root/tt-db-password.txt --save-generated /root/tt-keys
 ```
 
-Das Skript legt `tt_db_password`, `tt_storage_secret_key` und `tt_vapid_private_key` als Docker-Secrets an, zeigt nie Werte an und überschreibt nie vorhandene Secrets. Trage das Passwort aus `/root/tt-db-password.txt` in das `CREATE USER` der Datenbank ein, übernimm die Dateien aus `/root/tt-keys` in den Passwortmanager und lösche beide danach. Weitere Optionen (`--smtp-password-file`, `--oidc-client-secret-file`, `--prefix`) und die Folgen eines Verlusts: [Deployment-Anleitung](../DEPLOYMENT.md), Abschnitt 4.
+Das Skript legt `tt_db_password`, `tt_storage_secret_key` und `tt_vapid_private_key` als Docker-Secrets an, zeigt nie Werte an und überschreibt nie vorhandene Secrets. Trage das Passwort aus `/root/tt-db-password.txt` in das `CREATE USER` der Datenbank ein, übernimm die Dateien aus `/root/tt-keys` in den Passwortmanager und lösche beide danach. Weitere Optionen (`--smtp-password-file`, `--oidc-client-secret-file`, `--apns-private-key-file` für APNs-Push, `--prefix`) und die Folgen eines Verlusts: [Deployment-Anleitung](../DEPLOYMENT.md), Abschnitt 4.
 
 Prüfen: `docker secret ls` zeigt `tt_db_password`, `tt_storage_secret_key`, `tt_vapid_private_key`.
 

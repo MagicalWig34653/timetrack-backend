@@ -2,7 +2,8 @@
 # Creates the Docker secrets of the Timetrack Swarm stack (deploy/swarm/stack.yaml).
 #
 #   deploy/swarm/create-secrets.sh [--dry-run] [--db-password-file FILE | --generate-db-password FILE]
-#                                  [--save-generated DIR] [--smtp-password-file FILE] [--oidc-client-secret-file FILE] [--prefix tt_]
+#                                  [--save-generated DIR] [--smtp-password-file FILE] [--oidc-client-secret-file FILE]
+#                                  [--apns-private-key-file FILE] [--prefix tt_]
 #
 # Secrets:
 #   tt_db_password          the password of the MariaDB user. Either read from --db-password-file, or generated with
@@ -17,6 +18,9 @@
 #   value again. Without this option the generated values are unrecoverable. DIR must not contain these files yet.)
 #   tt_smtp_password        only with --smtp-password-file (or --smtp-password-stdin)
 #   tt_oidc_client_secret   only with --oidc-client-secret-file
+#   tt_apns_private_key     only with --apns-private-key-file: the Apple .p8 APNs key (PEM, EC P-256). The file is
+#                           validated with openssl without printing it; the PEM text (with line breaks) becomes the
+#                           secret value. Needs the APNs block in stack.yaml (docs/DEPLOYMENT.md).
 #
 # Guarantees: values are never printed and never passed as command-line arguments (they travel through stdin and
 # files with mode 0600); existing secrets are never overwritten (the script aborts before creating anything).
@@ -31,6 +35,7 @@ DB_PASSWORD_FILE=""
 GENERATE_DB_PASSWORD_FILE=""
 SMTP_PASSWORD_FILE=""
 OIDC_SECRET_FILE=""
+APNS_KEY_FILE=""
 SAVE_DIR=""
 
 die() { echo "create-secrets: $*" >&2; exit 1; }
@@ -45,6 +50,7 @@ while [ $# -gt 0 ]; do
     --generate-db-password) [ $# -ge 2 ] || die "--generate-db-password needs a path"; GENERATE_DB_PASSWORD_FILE="$2"; shift ;;
     --smtp-password-file) [ $# -ge 2 ] || die "--smtp-password-file needs a path"; SMTP_PASSWORD_FILE="$2"; shift ;;
     --oidc-client-secret-file) [ $# -ge 2 ] || die "--oidc-client-secret-file needs a path"; OIDC_SECRET_FILE="$2"; shift ;;
+    --apns-private-key-file) [ $# -ge 2 ] || die "--apns-private-key-file needs a path"; APNS_KEY_FILE="$2"; shift ;;
     --save-generated) [ $# -ge 2 ] || die "--save-generated needs a directory"; SAVE_DIR="$2"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown option: $1 (see --help)" ;;
@@ -57,7 +63,7 @@ case "$PREFIX" in *[!a-zA-Z0-9_.-]*|"") die "--prefix may only contain letters, 
 command -v openssl >/dev/null 2>&1 || die "openssl is required"
 command -v docker >/dev/null 2>&1 || [ "$DRY_RUN" -eq 1 ] || die "docker is required"
 
-for f in "$DB_PASSWORD_FILE" "$SMTP_PASSWORD_FILE" "$OIDC_SECRET_FILE"; do
+for f in "$DB_PASSWORD_FILE" "$SMTP_PASSWORD_FILE" "$OIDC_SECRET_FILE" "$APNS_KEY_FILE"; do
   [ -z "$f" ] || [ -r "$f" ] || die "cannot read $f"
 done
 if [ -n "$SAVE_DIR" ]; then
@@ -82,7 +88,7 @@ gen_password() { openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n'; }
 
 # ---- collect values into memory ----
 ORDER=()
-V_db=""; V_storage=""; V_vapid=""; V_smtp=""; V_oidc=""
+V_db=""; V_storage=""; V_vapid=""; V_smtp=""; V_oidc=""; V_apns=""
 value_of() { local v="V_$1"; printf '%s' "${!v}"; }
 
 V_storage="$(gen_storage_key)"
@@ -114,6 +120,18 @@ ORDER+=(db)
 
 if [ -n "$SMTP_PASSWORD_FILE" ]; then V_smtp="$(cat "$SMTP_PASSWORD_FILE")"; [ -n "$V_smtp" ] || die "SMTP password file is empty"; ORDER+=(smtp); fi
 if [ -n "$OIDC_SECRET_FILE" ]; then V_oidc="$(cat "$OIDC_SECRET_FILE")"; [ -n "$V_oidc" ] || die "OIDC secret file is empty"; ORDER+=(oidc); fi
+if [ -n "$APNS_KEY_FILE" ]; then
+  # Validate without printing: must be an unencrypted PEM private key that is an EC key on prime256v1 (P-256), as Apple issues.
+  # openssl output is captured/discarded; the key text never reaches the terminal.
+  grep -q -e '-----BEGIN [A-Z ]*PRIVATE KEY-----' "$APNS_KEY_FILE" 2>/dev/null || die "--apns-private-key-file: not a PEM private key (expected the Apple .p8 file)"
+  if grep -q -e 'BEGIN ENCRYPTED PRIVATE KEY' "$APNS_KEY_FILE" 2>/dev/null; then die "--apns-private-key-file: the key is encrypted; APNs .p8 files are not"; fi
+  apns_info="$(openssl pkey -in "$APNS_KEY_FILE" -noout -text </dev/null 2>/dev/null)" || die "--apns-private-key-file: openssl cannot parse the key"
+  printf '%s' "$apns_info" | grep -q 'prime256v1' || die "--apns-private-key-file: not an EC P-256 (prime256v1) private key"
+  unset apns_info
+  # shellcheck disable=SC2034 # read indirectly by value_of
+  V_apns="$(cat "$APNS_KEY_FILE")"
+  ORDER+=(apns)
+fi
 
 name_of() {
   case "$1" in
@@ -122,6 +140,7 @@ name_of() {
     vapid) echo "${PREFIX}vapid_private_key" ;;
     smtp) echo "${PREFIX}smtp_password" ;;
     oidc) echo "${PREFIX}oidc_client_secret" ;;
+    apns) echo "${PREFIX}apns_private_key" ;;
   esac
 }
 
