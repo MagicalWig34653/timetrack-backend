@@ -17,4 +17,4 @@ Ein Zeitfenster pro Plantag kann geteilte Schichten und eine Kombination aus Ber
 
 ## Folgen
 
-Bestehende Clients können weiterhin lesen und schreiben. Sie sehen bei geteilten Schichten nur den äußeren Rahmen und die aufsummierten Lücken. Ein alter `PUT` ersetzt die feinere Blockaufteilung vollständig; Clients sollen vor dem Schreiben ab API 0.34.0 `blocks` verwenden. Das ICS-Abo (N2) bleibt bei Ganztagsterminen und nennt Blöcke gemischter Tage in der Beschreibung (ohne Ort und Notiz); native Kalenderkonflikte bleiben Arbeit der geplanten EventKit-Brücke.
+Bestehende Clients können weiterhin lesen und schreiben. Sie sehen bei geteilten Schichten nur den äußeren Rahmen und die aufsummierten Lücken. Ein alter `PUT` ersetzt die feinere Blockaufteilung vollständig; Clients sollen vor dem Schreiben ab API 0.35.0 `blocks` verwenden. Das ICS-Abo (N2) bleibt bei Ganztagsterminen und nennt Blöcke gemischter Tage in der Beschreibung (ohne Ort und Notiz); native Kalenderkonflikte bleiben Arbeit der geplanten EventKit-Brücke.
