@@ -74,6 +74,7 @@ und keine Nutzerentscheidungen (siehe jeweilige Statuszeile). Nummer 0004 existi
 | 0025 | Urlaubsplanung (Urlaubsvorschläge) | Umsetzungsentscheidung (V2); Lead-Prüfung offen | [ADR-0025](decisions/ADR-0025-urlaubsplanung.md) |
 | 0026 | Vorlage für den Urlaubsantrag je Konto | Umsetzungsentscheidung (B7); Lead-Prüfung offen | [ADR-0026](decisions/ADR-0026-urlaubsantrag-vorlage.md) |
 | 0027 | Abgang beendet fremd gestartete Timer; Auslöse-Links (`GET /t/<token>/…`) | Umsetzungsentscheidung (W1); Lead-Prüfung offen | [ADR-0027](decisions/ADR-0027-ausloese-links.md) |
+| 0028 | Mehrere Planblöcke pro Tag, Alt-API und Migration | Umsetzungsentscheidung (P13); Prüfung im Worktree | [ADR-0028](decisions/ADR-0028-planbloecke.md) |
 
 ## Namensgebung und Kennungen (Entscheidung 17.10.2026)
 

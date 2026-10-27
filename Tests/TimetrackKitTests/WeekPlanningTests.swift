@@ -10,6 +10,53 @@ extension AuthTests {
 
     private func intValue(_ value: Any?) -> Int? { (value as? NSNumber)?.intValue }
 
+    func scenarioPlanBlocks(_ app: Application, _ auth: AuthService) async throws {
+        let (owner, _) = try await registered(auth, db: app.db)
+        let member = try await second(app, auth, owner)
+        try await planningModel(app, owner)
+        let blocks: [[String: Any]] = [
+            ["start": "08:00", "end": "12:00", "kind": "school", "note": "Private block"],
+            ["start": "13:00", "end": "17:00", "kind": "work"]
+        ]
+        let saved = try object(await api(app, owner, .PUT, "plan/days/2026-07-20", ["mode": "office", "blocks": blocks]))
+        XCTAssertEqual(saved["plannedStart"] as? String, "08:00")
+        XCTAssertEqual(saved["plannedEnd"] as? String, "17:00")
+        XCTAssertEqual(saved["plannedBreakMinutes"] as? Int, 60)
+        XCTAssertEqual(saved["plannedSeconds"] as? Int, 28_800)
+        XCTAssertEqual((saved["blocks"] as? [[String: Any]])?.count, 2)
+        XCTAssertEqual(saved["planHints"] as? [String], [])
+        let week = try object(await api(app, owner, .GET, "plan/weeks/\(Self.week)"))
+        XCTAssertEqual((week["totals"] as? [String: Any])?["plannedSeconds"] as? Int, 28_800)
+        let actual = try object(await api(app, owner, .GET, "time/weeks/\(Self.week)"))
+        let monday = try XCTUnwrap((actual["days"] as? [[String: Any]])?.first)
+        XCTAssertEqual((monday["planBlocks"] as? [[String: Any]])?.count, 2)
+        XCTAssertEqual(monday["planActualDifferenceSeconds"] as? Int, -28_800)
+        let share = try object(await api(app, owner, .POST, "shares", ["recipientHandle": "member", "scopes": ["plan": true]], .created))
+        let view = try object(await api(app, member, .GET, "shares/incoming/\(share["id"] as! String)/view?from=2026-07-20&to=2026-07-20"))
+        let shared = try XCTUnwrap((view["plan"] as? [[String: Any]])?.first)
+        XCTAssertEqual((shared["blocks"] as? [[String: Any]])?.count, 2)
+        XCTAssertNil((shared["blocks"] as? [[String: Any]])?.first?["note"])
+        XCTAssertNil((shared["blocks"] as? [[String: Any]])?.first?["placeId"])
+        let invalidInputs: [([String: Any], String)] = [
+            (["mode": "office", "blocks": [blocks[0], ["start": "11:00", "end": "14:00", "kind": "work"]]], "plan_blocks_overlap"),
+            (["mode": "office", "blocks": [blocks[1], blocks[0]]], "plan_blocks_overlap"),
+            (["mode": "office", "blocks": [["start": "08:00", "end": "08:00", "kind": "work"]]], "plan_time_invalid"),
+            (["mode": "office", "blocks": [["start": "08:00", "end": "09:00", "kind": "invalid"]]], "plan_kind_invalid"),
+            (["mode": "off", "blocks": blocks], "plan_blocks_invalid")
+        ]
+        for (body, code) in invalidInputs {
+            try await eq(try errorCode(await api(app, owner, .PUT, "plan/days/2026-07-20", body, .badRequest)), code)
+        }
+        let unchanged = try object(await api(app, owner, .GET, "plan/weeks/\(Self.week)"))
+        XCTAssertEqual((unchanged["totals"] as? [String: Any])?["plannedSeconds"] as? Int, 28_800)
+        // An old client can still overwrite a block plan using the legacy fields.
+        let legacy = try object(await api(app, owner, .PUT, "plan/days/2026-07-20", ["mode": "home", "plannedStart": "09:00", "plannedEnd": "17:00", "plannedBreakMinutes": 30]))
+        XCTAssertEqual(legacy["plannedSeconds"] as? Int, 27_000)
+        XCTAssertEqual((legacy["blocks"] as? [[String: Any]])?.count, 2)
+        let longBlock = try object(await api(app, owner, .PUT, "plan/days/2026-07-21", ["mode": "office", "blocks": [["start": "08:00", "end": "16:00", "kind": "work"]]]))
+        XCTAssertEqual(Set(longBlock["planHints"] as? [String] ?? []), ["planned_break_short", "planned_work_stretch_long"])
+    }
+
     func scenarioPlanDayTimes(_ app: Application, _ auth: AuthService) async throws {
         let (context, _) = try await registered(auth, db: app.db)
         // A legacy client without the new fields keeps working; the new fields read back as null.
@@ -229,11 +276,25 @@ extension AuthTests {
     }
 
     func weekScenarios() -> [Scenario] {
-        [scenarioPlanDayTimes, scenarioPlanWeek, scenarioPlanWeekIsolationAndShares, scenarioTimeWeek, scenarioWeekQueryBudget, scenarioWeekEndpointsRequireSession]
+        [scenarioPlanDayTimes, scenarioPlanBlocks, scenarioPlanWeek, scenarioPlanWeekIsolationAndShares, scenarioTimeWeek, scenarioWeekQueryBudget, scenarioWeekEndpointsRequireSession]
     }
     func testWeekPlanningSQLite() async throws {
         setenv("DB_SQL_LOG", "1", 1); defer { unsetenv("DB_SQL_LOG") }
         for scenario in weekScenarios() { try await withApp(scenario) }
+    }
+    func testPlanBlockMigrationSQLite() async throws {
+        try await withApp { app, auth in
+            let (context, _) = try await registered(auth, db: app.db)
+            _ = try await api(app, context, .PUT, "plan/days/2026-07-20", ["mode": "office", "plannedStart": "08:00", "plannedEnd": "16:00", "plannedBreakMinutes": 30])
+            _ = try await api(app, context, .PUT, "plan/days/2026-07-21", ["mode": "school", "plannedStart": "09:00", "plannedEnd": "12:00"])
+            try await AddPlanBlocks().revert(on: app.db)
+            try await AddPlanBlocks().prepare(on: app.db)
+            let rows = try list(await api(app, context, .GET, "plan/days?from=2026-07-20&to=2026-07-21"))
+            XCTAssertEqual(rows[0]["plannedSeconds"] as? Int, 27_000)
+            XCTAssertEqual((rows[0]["blocks"] as? [[String: Any]])?.count, 2)
+            XCTAssertEqual((rows[1]["blocks"] as? [[String: Any]])?.count, 1)
+            XCTAssertEqual((rows[1]["blocks"] as? [[String: Any]])?.first?["kind"] as? String, "school")
+        }
     }
     func testWeekPlanningMariaDB() async throws {
         let env = ProcessInfo.processInfo.environment

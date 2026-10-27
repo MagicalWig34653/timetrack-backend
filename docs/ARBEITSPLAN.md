@@ -1,5 +1,9 @@
 # Arbeitsplan und Agent-Übergabe
 
+## P13 – Mehrere Planblöcke pro Tag (24.10.2026)
+
+Codex ist alleiniger Schreiber im Worktree `worktree-agent-a34fccae7f0e10f5a` auf gleichnamigem Branch. Umfang: Planmodell und Migration, REST-/MCP-Vertrag 0.29.0, Wochen- und Plan/Ist-Auswertung, Freigaben, Kontoexport, Tests und Dokumentation. API-Vertrag: `contracts/openapi.yaml`; Abnahme: Alt-Clients bleiben les-/schreibfähig, neue Blöcke validiert, Freigaben ohne Orte/Notizen, Migration erhält darstellbare Pausen, vollständige serielle Swift-Tests grün. Derzeit Umsetzung im Worktree, Integration und Client-Arbeit offen; Details `handoffs/P13.md`. Kein paralleler Schreiber in diesen Dateien. Nächster Schritt: Testfehler beheben, vollständige Testsuite ausführen, dann PWA-/Apple-Handoff übernehmen.
+
 Stand: 17.10.2026. Alle Pakete der Tabellen sind abgeschlossen (integriert, abgeschlossen, verworfen oder als nicht ausgeführt vermerkt); es gibt kein laufendes Paket. Zuweisung gemäß ADR-0003.
 Gewichte sind Schätzwerte (Startvorschlag, nie nachträglich neu bewertet). **Commit-Hashes** in älteren Handoffs und Dokumenten stammen aus der Zeit vor der Historienbereinigung (17.10.2026) und passen nicht mehr zur veröffentlichten Historie; maßgeblich sind Paket-IDs, Merge-Nachrichten (`git log --grep`) und die Handoffs.
 Die Punktebilanz (Codex gegen Claude) steht im Abschnitt „Punktebilanz“.

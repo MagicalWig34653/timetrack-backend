@@ -135,6 +135,7 @@ Kontokorrektur, Plan, Abwesenheit, Urlaubskontobewegung, Dokument, Berichtsheft/
 Kalenderverbindung/-regel, Freigabe, Importcharge, Exportauftrag, Push-Abo und KI-Auftrag/Worker.
 
 Zeitpunkte UTC plus fachliche Zeitzone, Ganztagsplanung als lokale Datumswerte.
+**Planblöcke (P13, ADR-0028):** `plan_days` bleibt eindeutig je Konto/Datum; die Migration `p13.add_plan_blocks` ergänzt eine JSON-Liste geordneter lokaler Zeitintervalle. `PlanService` validiert alle Blöcke für REST und MCP und leitet die alten Zeitfelder ab. Die Wochen- und Plan/Ist-Ansichten summieren Blockdauern, während die Ist-Bewertung weiterhin nur reale Abschnitte liest. Kontoexport enthält alle Blockdetails; eine Planfreigabe entfernt Ort und Notiz pro Block. Der Server hat derzeit keinen Kalender-Feed und keine externe Kalenderverbindung; die spätere EventKit-Brücke soll jeden freigegebenen Planblock einzeln darstellen und lokale Konflikte prüfen.
 Dauern als Ganzzahlen (z. B. Sekunden), keine Float-Stunden als maßgebliche Werte.
 Regelversion/Rundungsherkunft speichern; heutige Profiländerung bewertet Vergangenheit nicht still neu.
 Korrekturen versionieren, Rohereignisse erhalten. Wiedereröffnen (W2): `PATCH /time/segments/{id}` mit ausdrücklichem `endedAt: null` setzt nur den korrigierten Wert (Rohende bleibt), verlangt keinen laufenden Abschnitt und keinen späteren Abschnitt (409 `timer_already_running` / `segment_overlap`); die Revision trägt den Grund mit Präfix „Reopened: “. Gilt gleich für REST und MCP `correct_segment`. Mitternacht, Sommerzeit und Teilzeit berücksichtigen.

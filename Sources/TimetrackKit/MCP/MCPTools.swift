@@ -204,13 +204,13 @@ enum McpTools {
             return try list("holidays", await ctx.time.calendar.holidays(year: year, region: args["region"]?.string))
         },
         read("list_plan_days", "List plan days", "schedule:read",
-             "Lists planned working modes per day (planning, not recorded time) for at most 366 days.",
+             "Lists planned blocks and working modes per day (planning, not recorded time) for at most 366 days.",
              McpSchema.object(["from": from, "to": to], required: ["from", "to"])) { ctx, args in
             try list("planDays", await ctx.time.plans.list(from: day(args, "from"), to: day(args, "to")))
         },
         read("view_shared", "View shared plans", "schedule:read",
              "Without shareId, lists plan shares other people granted to this account. With shareId, returns the limited view that owner shared "
-             + "(only the shared parts: planned mode, evaluated start/end/work seconds, or booked vacation ranges). Requires from and to when shareId is given.",
+             + "(only the shared parts: planned mode and blocks without places or notes, evaluated start/end/work seconds, or booked vacation ranges). Requires from and to when shareId is given.",
              McpSchema.object(["shareId": McpSchema.uuid("Share to view; omit to list available shares"), "from": from, "to": to]),
              durations: false) { ctx, args in
             guard let share = args["shareId"]?.string.flatMap(UUID.init(uuidString:)) else {
@@ -235,13 +235,20 @@ enum McpTools {
             return try McpJSON.encoding(await ctx.time.absences.create(input))
         },
         write("set_plan_day", "Set plan day", "schedule:write",
-              "Sets the planned working mode of one day (planning only; it does not record time). Replaces an existing plan for that day.", idempotent: true,
+              "Sets ordered, non-overlapping planned blocks of one day (planning only; it does not record time). Replaces an existing plan for that day.", idempotent: true,
               McpSchema.object(["date": McpSchema.date("Day to plan"),
                                 "mode": McpSchema.string("Planned mode", enumeration: PlanService.modes),
                                 "placeId": McpSchema.uuid("Optional place id"), "note": McpSchema.string("Optional note", maxLength: 200),
                                 "plannedStart": McpSchema.string("Optional planned start, local time HH:mm (with plannedEnd)", maxLength: 5),
                                 "plannedEnd": McpSchema.string("Optional planned end, local time HH:mm, after the start on the same day", maxLength: 5),
-                                "plannedBreakMinutes": McpSchema.integer("Optional planned break in minutes (needs times)", minimum: 0, maximum: PlanTimes.maxBreakMinutes)],
+                                "plannedBreakMinutes": McpSchema.integer("Optional planned break in minutes (needs times)", minimum: 0, maximum: PlanTimes.maxBreakMinutes),
+                                "blocks": McpSchema.array("Optional ordered blocks; supersedes legacy planned times", items: McpSchema.object([
+                                    "start": McpSchema.string("Local start HH:mm", maxLength: 5),
+                                    "end": McpSchema.string("Local end HH:mm", maxLength: 5),
+                                    "kind": McpSchema.string("Planned block kind", enumeration: ["work", "school", "travel", "office", "home", "customer"]),
+                                    "placeId": McpSchema.uuid("Optional place id"),
+                                    "note": McpSchema.string("Optional private note", maxLength: 200)
+                                ], required: ["start", "end", "kind"]), maxItems: 32)],
                                required: ["date", "mode"])) { ctx, args in
             try McpJSON.encoding(await ctx.time.plans.put(day(args, "date"), decodeArguments(PlanDayInput.self, args, dropping: ["date"])))
         },

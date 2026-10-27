@@ -1,5 +1,7 @@
 # Aktueller Projektstand
 
+**P13 (Planblöcke, 24.10.2026, Worktree `worktree-agent-a34fccae7f0e10f5a`, noch nicht integriert):** API 0.29.0, Blockliste je Plantag, Migration `p13.add_plan_blocks`, Wochen- und Plan/Ist-Ansichten, Planfreigabe mit geschwärzten Blockdetails, Kontoexport und MCP erweitert. PWA und Apple-Clients sind nicht angepasst; Übergabe `docs/handoffs/P13.md`, Entscheidung ADR-0028. Vollständige Testsuite im Worktree noch offen; SwiftPM benötigt im Sandboxlauf lokale Abhängigkeiten und einen beschreibbaren Modulcache. Keine Kalender-Feeds oder externe Kalenderbrücke vorhanden. Änderungen uncommitted, keine laufenden Dienste.
+
 **Release v0.1.0 (19.10.2026):** Tags `v0.1.0` in Backend, PWA und Apple-Repo; Docker-Image `ghcr.io/magicalwig34653/timetrack-backend:0.1.0` (mit PWA 0.1.0), GitHub-Release (kein Pre-Release) mit Quellarchiv und Vertrag 0.22.0; TestFlight Version 0.1.0 Build 7. Nächste Schritte: Roadmap in `docs/ARBEITSPLAN.md` (S1-Rest, N1, LA1, E1, AI1, R2, Q1, M2).
 
 

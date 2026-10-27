@@ -304,19 +304,47 @@ struct PlanService: Sendable {
         default: throw APIError(.badRequest, "plan_time_invalid")
         }
     }
-    private func validate(_ input: PlanDayInput) async throws -> (start: String?, end: String?, breakMinutes: Int?) {
+    private func validate(_ input: PlanDayInput) async throws -> (start: String?, end: String?, breakMinutes: Int?, blocks: [PlanBlock]) {
         guard Self.modes.contains(input.mode), input.note?.fitsColumn(200) ?? true else { throw APIError.invalid }
-        let times = try Self.normalizedTimes(input)
+        var times = input.blocks == nil ? try Self.normalizedTimes(input) : (start: nil, end: nil, breakMinutes: nil)
+        let blocks: [PlanBlock]
+        if let supplied = input.blocks {
+            guard supplied.count <= 32, input.mode != "off" || supplied.isEmpty else { throw APIError(.badRequest, "plan_blocks_invalid") }
+            var previousEnd = -1
+            var gapMinutes = 0
+            for block in supplied {
+                guard let start = PlanTimes.minutes(block.start), let end = PlanTimes.minutes(block.end), start < end else {
+                    throw APIError(.badRequest, "plan_time_invalid")
+                }
+                guard ["work", "school", "travel", "office", "home", "customer"].contains(block.kind) else {
+                    throw APIError(.badRequest, "plan_kind_invalid")
+                }
+                guard block.note?.fitsColumn(200) ?? true else { throw APIError(.badRequest, "plan_note_invalid") }
+                if start < previousEnd { throw APIError(.badRequest, "plan_blocks_overlap") }
+                if previousEnd >= 0 { gapMinutes += start - previousEnd }
+                previousEnd = end
+                if let place = block.placeId {
+                    let row = try await scope.places.record(place)
+                    guard row.payload.archived != true else { throw APIError.missing }
+                }
+            }
+            blocks = supplied
+            times = (supplied.first?.start, supplied.last?.end, supplied.isEmpty ? nil : gapMinutes)
+        } else {
+            blocks = PlanTimes.legacyBlocks(start: times.start, end: times.end, breakMinutes: times.breakMinutes,
+                                            kind: input.mode, placeId: input.placeId, note: input.note)
+        }
         if let place = input.placeId {
             // Archived places are treated like foreign ones.
             let row = try await scope.places.record(place)
             guard row.payload.archived != true else { throw APIError.missing }
         }
-        return times
+        return (times.start, times.end, times.breakMinutes, blocks)
     }
-    private func assign(_ row: PlanDayRecord, date: LocalDate, input: PlanDayInput, times: (start: String?, end: String?, breakMinutes: Int?)) {
+    private func assign(_ row: PlanDayRecord, date: LocalDate, input: PlanDayInput, times: (start: String?, end: String?, breakMinutes: Int?, blocks: [PlanBlock])) {
         row.accountId = scope.accountId; row.date = date.description; row.mode = input.mode; row.placeId = input.placeId; row.note = input.note
         row.plannedStart = times.start; row.plannedEnd = times.end; row.plannedBreakMinutes = times.breakMinutes
+        row.blocks = times.blocks
     }
     func put(_ date: LocalDate, _ input: PlanDayInput) async throws -> PlanDayDTO {
         let times = try await validate(input)
@@ -330,7 +358,7 @@ struct PlanService: Sendable {
         guard input.days.count <= 7 else { throw APIError(.badRequest, "week_day_invalid") }
         let dates = input.days.map(\.date)
         guard Set(dates).count == dates.count, dates.allSatisfy({ $0 >= week.monday && $0 <= week.sunday }) else { throw APIError(.badRequest, "week_day_invalid") }
-        var validated: [(PlanWeekDayInput, (start: String?, end: String?, breakMinutes: Int?))] = []
+        var validated: [(PlanWeekDayInput, (start: String?, end: String?, breakMinutes: Int?, blocks: [PlanBlock]))] = []
         for entry in input.days { validated.append((entry, try await validate(entry.day))) }
         let existing = Dictionary(try await rows(from: week.monday, to: week.sunday).map { ($0.date, $0) }, uniquingKeysWith: { first, _ in first })
         if input.replace == true {
@@ -432,9 +460,13 @@ struct ShareService: Sendable {
         var view = SharedViewDTO()
         if share.scopePlan {
             view.plan = try await ownerScope.plans.rows(from: from, to: to).map { row in
-                .init(date: try LocalDate(row.date), mode: row.mode, plannedStart: row.plannedStart, plannedEnd: row.plannedEnd,
+                let sharedBlocks = row.blocks?.isEmpty == false
+                    ? row.blocks?.map { PlanBlock(start: $0.start, end: $0.end, kind: $0.kind, placeId: nil, note: nil) }
+                    : nil
+                return .init(date: try LocalDate(row.date), mode: row.mode, plannedStart: row.plannedStart, plannedEnd: row.plannedEnd,
                       plannedBreakMinutes: row.plannedBreakMinutes,
-                      plannedSeconds: PlanTimes.seconds(start: row.plannedStart, end: row.plannedEnd, breakMinutes: row.plannedBreakMinutes))
+                      plannedSeconds: try PlanDayDTO(row).plannedSeconds,
+                      blocks: sharedBlocks)
             }
         }
         if share.scopeActual {

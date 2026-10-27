@@ -440,6 +440,8 @@ extension AuthTests {
             let b = try await self.registered(auth, db: app.db, handle: "bravo", admin: admin).0
             let seededA = try await self.seed(app, auth, a, share: "bravo")
             let seededB = try await self.seed(app, auth, b, share: "alpha")
+            try await self.api(app, a, .PUT, "plan/days/2026-10-14", ["mode": "office", "blocks": [
+                ["start": "08:00", "end": "12:00", "kind": "school"], ["start": "13:00", "end": "17:00", "kind": "work"]]])
             try await self.api(app, b, .PUT, "time/days/2026-10-20", ["mark": "sick", "note": "bravo-private-note"])
             try await self.api(app, a, .PUT, "time/days/2026-10-21", ["mark": "sick", "note": "=alpha formula"])
 
@@ -451,6 +453,8 @@ extension AuthTests {
             XCTAssertTrue(response.headers.first(name: .contentDisposition)?.contains("timetrack-export-alpha-") ?? false)
             XCTAssertEqual(response.headers.first(name: .cacheControl), "no-store")
             let files = try self.entries(Data(response.body.readableBytesView))
+            let exportedPlans = try JSONSerialization.jsonObject(with: try XCTUnwrap(files["plan-days.json"])) as? [[String: Any]]
+            XCTAssertEqual((exportedPlans?.first?["blocks"] as? [[String: Any]])?.count, 2)
             let names = Set(files.keys)
             for name in ["manifest.json", "account.json", "time-entries.json", "time-entries.csv", "time-entry-revisions.json", "absences.json", "absences.csv", "report-entries.json", "report-entries.csv",
                          "shares-outgoing.json", "work-models.json", "places.json", "day-preferences.json", "plan-days.json", "files.json", "notification-settings.json", "preferences.json"] {

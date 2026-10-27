@@ -79,6 +79,7 @@ final class PlanDayRecord: Model, @unchecked Sendable {
     @OptionalField(key: "planned_start") var plannedStart: String?
     @OptionalField(key: "planned_end") var plannedEnd: String?
     @OptionalField(key: "planned_break_minutes") var plannedBreakMinutes: Int?
+    @OptionalField(key: "blocks") var blocks: [PlanBlock]?
     init() {}
 }
 
@@ -210,5 +211,20 @@ struct AddPlanDayTimes: AsyncMigration {
         try await db.schema("plan_days").deleteField("planned_break_minutes").update()
         try await db.schema("plan_days").deleteField("planned_end").update()
         try await db.schema("plan_days").deleteField("planned_start").update()
+    }
+}
+
+struct AddPlanBlocks: AsyncMigration {
+    let name = "p13.add_plan_blocks"
+    func prepare(on db: any Database) async throws {
+        try await db.schema("plan_days").field("blocks", .json).update()
+        for row in try await PlanDayRecord.query(on: db).all() {
+            row.blocks = PlanTimes.legacyBlocks(start: row.plannedStart, end: row.plannedEnd,
+                breakMinutes: row.plannedBreakMinutes, kind: row.mode, placeId: row.placeId, note: row.note)
+            try await row.update(on: db)
+        }
+    }
+    func revert(on db: any Database) async throws {
+        try await db.schema("plan_days").deleteField("blocks").update()
     }
 }

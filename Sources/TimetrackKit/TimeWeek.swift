@@ -12,6 +12,9 @@ struct TimeWeekDayDTO: Encodable, Sendable {
     var targetSeconds: Int
     var plannedSeconds: Int?
     var planMode: String?
+    var planBlocks: [PlanBlock]?
+    var planHints: [String]
+    var planActualDifferenceSeconds: Int?
     var workSeconds: Int; var creditSeconds: Int; var rawWorkSeconds: Int
     /// Real gaps between the day's segments; no pauses are invented.
     var breakSeconds: Int
@@ -29,6 +32,8 @@ struct TimeWeekDayDTO: Encodable, Sendable {
         try c.encode(date, forKey: .date); try c.encode(weekday, forKey: .weekday); try c.encode(mark, forKey: .mark)
         try c.encode(markSource, forKey: .markSource); try c.encode(targetSeconds, forKey: .targetSeconds)
         try c.encode(plannedSeconds, forKey: .plannedSeconds); try c.encode(planMode, forKey: .planMode)
+        try c.encode(planBlocks, forKey: .planBlocks); try c.encode(planHints, forKey: .planHints)
+        try c.encode(planActualDifferenceSeconds, forKey: .planActualDifferenceSeconds)
         try c.encode(workSeconds, forKey: .workSeconds); try c.encode(creditSeconds, forKey: .creditSeconds)
         try c.encode(rawWorkSeconds, forKey: .rawWorkSeconds); try c.encode(breakSeconds, forKey: .breakSeconds)
         try c.encode(breakDeductionSeconds, forKey: .breakDeductionSeconds)
@@ -39,7 +44,7 @@ struct TimeWeekDayDTO: Encodable, Sendable {
         try c.encode(isToday, forKey: .isToday); try c.encode(isFuture, forKey: .isFuture)
     }
     enum CodingKeys: String, CodingKey {
-        case date, weekday, mark, markSource, targetSeconds, plannedSeconds, planMode, workSeconds, creditSeconds, rawWorkSeconds
+        case date, weekday, mark, markSource, targetSeconds, plannedSeconds, planMode, planBlocks, planHints, planActualDifferenceSeconds, workSeconds, creditSeconds, rawWorkSeconds
         case breakSeconds, breakDeductionSeconds, travelSeconds, schoolSeconds, balanceSeconds, firstStart, lastEnd
         case segmentsCount, absences, provisional, isToday, isFuture
     }
@@ -141,11 +146,14 @@ struct TimeWeekService: Sendable {
         let isFuture = day.date > today
         let blocked = [DayMarkKind.holiday, .vacation, .sick, .excused].contains(day.mark)
             && !(day.mark == .vacation && day.targetOverrideSeconds != nil)
-        let planned = plan.flatMap { PlanTimes.seconds(start: $0.plannedStart, end: $0.plannedEnd, breakMinutes: $0.plannedBreakMinutes) }
+        let planned = plan.flatMap { PlanTimes.blockSeconds($0.blocks ?? []) ?? PlanTimes.seconds(start: $0.plannedStart, end: $0.plannedEnd, breakMinutes: $0.plannedBreakMinutes) }
+        let effectivePlanned = blocked ? (plan == nil ? nil : 0) : planned
         let dayAbsences = absences.filter { $0.contains(day.date) && $0.status.isActive }
             .map { TimeWeekDayDTO.Absence(kind: $0.kind, status: $0.status, halfDay: $0.isHalfDay(day.date)) }
         return .init(date: day.date, weekday: day.date.isoWeekday, mark: mark, markSource: day.markSource, targetSeconds: day.targetSeconds,
-                     plannedSeconds: blocked ? (plan == nil ? nil : 0) : planned, planMode: plan?.mode,
+                     plannedSeconds: effectivePlanned, planMode: plan?.mode, planBlocks: plan?.blocks,
+                     planHints: PlanTimes.hints(plan?.blocks ?? []),
+                     planActualDifferenceSeconds: isFuture || blocked ? nil : effectivePlanned.map { day.evaluatedWorkSeconds + day.creditSeconds - $0 },
                      workSeconds: day.evaluatedWorkSeconds, creditSeconds: day.creditSeconds, rawWorkSeconds: day.rawWorkSeconds,
                      breakSeconds: gaps, breakDeductionSeconds: day.breakDeductionSeconds, travelSeconds: travel, schoolSeconds: school,
                      balanceSeconds: isFuture ? nil : day.deltaSeconds, firstStart: day.evaluatedStart, lastEnd: day.evaluatedEnd,

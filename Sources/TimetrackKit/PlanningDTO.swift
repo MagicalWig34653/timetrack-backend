@@ -105,24 +105,37 @@ struct CalendarDayDTO: Encodable, Sendable {
 }
 struct CustomDayInput: Decodable, Sendable { var kind: CalendarDayKind; var startDate: LocalDate; var endDate: LocalDate; var name: String }
 
+struct PlanBlock: Codable, Sendable, Equatable {
+    var start: String
+    var end: String
+    var kind: String
+    var placeId: UUID?
+    var note: String?
+}
+
 struct PlanDayInput: Decodable, Sendable {
     var mode: String; var placeId: UUID?; var note: String?
     /// K1 (ADR-0021): rough planned working window, local wall-clock "HH:mm" in the work model's time zone.
     var plannedStart: String?; var plannedEnd: String?; var plannedBreakMinutes: Int?
+    var blocks: [PlanBlock]?
 }
 struct PlanDayDTO: Encodable, Sendable {
     var date: LocalDate; var mode: String; var placeId: UUID?; var note: String?
     var plannedStart: String?; var plannedEnd: String?; var plannedBreakMinutes: Int?
     /// Derived, never stored: (end - start - break), not negative; nil without planned times.
     var plannedSeconds: Int?
-    init(date: LocalDate, mode: String, placeId: UUID?, note: String?, plannedStart: String? = nil, plannedEnd: String? = nil, plannedBreakMinutes: Int? = nil) {
+    var blocks: [PlanBlock]
+    var planHints: [String]
+    init(date: LocalDate, mode: String, placeId: UUID?, note: String?, plannedStart: String? = nil, plannedEnd: String? = nil, plannedBreakMinutes: Int? = nil, blocks: [PlanBlock] = []) {
         self.date = date; self.mode = mode; self.placeId = placeId; self.note = note
         self.plannedStart = plannedStart; self.plannedEnd = plannedEnd; self.plannedBreakMinutes = plannedBreakMinutes
-        plannedSeconds = PlanTimes.seconds(start: plannedStart, end: plannedEnd, breakMinutes: plannedBreakMinutes)
+        self.blocks = blocks
+        plannedSeconds = blocks.isEmpty ? PlanTimes.seconds(start: plannedStart, end: plannedEnd, breakMinutes: plannedBreakMinutes) : PlanTimes.blockSeconds(blocks)
+        planHints = PlanTimes.hints(blocks)
     }
     init(_ row: PlanDayRecord) throws {
         self.init(date: try LocalDate(row.date), mode: row.mode, placeId: row.placeId, note: row.note,
-                  plannedStart: row.plannedStart, plannedEnd: row.plannedEnd, plannedBreakMinutes: row.plannedBreakMinutes)
+                  plannedStart: row.plannedStart, plannedEnd: row.plannedEnd, plannedBreakMinutes: row.plannedBreakMinutes, blocks: row.blocks ?? [])
     }
     func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -130,8 +143,10 @@ struct PlanDayDTO: Encodable, Sendable {
         try c.encode(placeId, forKey: .placeId); try c.encode(note, forKey: .note)
         try c.encode(plannedStart, forKey: .plannedStart); try c.encode(plannedEnd, forKey: .plannedEnd)
         try c.encode(plannedBreakMinutes, forKey: .plannedBreakMinutes); try c.encode(plannedSeconds, forKey: .plannedSeconds)
+        try c.encode(blocks, forKey: .blocks)
+        try c.encode(planHints, forKey: .planHints)
     }
-    enum CodingKeys: String, CodingKey { case date, mode, placeId, note, plannedStart, plannedEnd, plannedBreakMinutes, plannedSeconds }
+    enum CodingKeys: String, CodingKey { case date, mode, placeId, note, plannedStart, plannedEnd, plannedBreakMinutes, plannedSeconds, blocks, planHints }
 }
 
 /// Planned times are plain wall-clock strings; the plan is rough, so no time zone or DST arithmetic is involved.
@@ -147,6 +162,57 @@ enum PlanTimes {
     static func seconds(start: String?, end: String?, breakMinutes: Int?) -> Int? {
         guard let start, let end, let from = minutes(start), let to = minutes(end), to > from else { return nil }
         return max(0, (to - from - (breakMinutes ?? 0)) * 60)
+    }
+    static func blockSeconds(_ blocks: [PlanBlock]) -> Int? {
+        guard !blocks.isEmpty else { return nil }
+        var total = 0
+        for block in blocks {
+            guard let start = minutes(block.start), let end = minutes(block.end), end > start else { return nil }
+            total += (end - start) * 60
+        }
+        return total
+    }
+    static func hints(_ blocks: [PlanBlock]) -> [String] {
+        guard !blocks.isEmpty else { return [] }
+        var workMinutes = 0, validBreakMinutes = 0, continuousWork = 0, longestWork = 0
+        var previousEnd: Int?
+        var shortGap = false
+        for block in blocks {
+            guard let start = minutes(block.start), let end = minutes(block.end) else { return [] }
+            if let previousEnd, start > previousEnd {
+                let gap = start - previousEnd
+                if gap >= 15 {
+                    validBreakMinutes += gap
+                    longestWork = max(longestWork, continuousWork)
+                    continuousWork = 0
+                } else { shortGap = true }
+            }
+            if block.kind != "school" {
+                workMinutes += end - start
+                continuousWork += end - start
+            }
+            previousEnd = end
+        }
+        longestWork = max(longestWork, continuousWork)
+        var result: [String] = []
+        let requiredBreak = workMinutes > 540 ? 45 : workMinutes > 360 ? 30 : 0
+        if requiredBreak > validBreakMinutes { result.append("planned_break_short") }
+        if longestWork > 360 { result.append("planned_work_stretch_long") }
+        if shortGap { result.append("planned_break_part_short") }
+        return result
+    }
+    static func legacyBlocks(start: String?, end: String?, breakMinutes: Int?, kind: String, placeId: UUID?, note: String?) -> [PlanBlock] {
+        // A free day never carries blocks (validation rejects them), so legacy times on "off" days are kept as legacy fields only.
+        guard kind != "off", let start, let end, let from = minutes(start), let to = minutes(end), to > from else { return [] }
+        let first = PlanBlock(start: start, end: end, kind: kind, placeId: placeId, note: note)
+        let gap = breakMinutes ?? 0
+        guard gap > 0 else { return [first] }
+        guard gap < to - from - 1 else { return [] }
+        let work = to - from - gap
+        let split = from + work / 2
+        func clock(_ value: Int) -> String { String(format: "%02d:%02d", value / 60, value % 60) }
+        return [PlanBlock(start: start, end: clock(split), kind: kind, placeId: placeId, note: note),
+                PlanBlock(start: clock(split + gap), end: end, kind: kind, placeId: placeId, note: note)]
     }
 }
 
@@ -202,14 +268,16 @@ struct SharedViewDTO: Encodable, Sendable {
         var date: LocalDate; var mode: String
         // Planned times belong to the plan scope; notes and places never leave the owner's account.
         var plannedStart: String?; var plannedEnd: String?; var plannedBreakMinutes: Int?; var plannedSeconds: Int?
+        var blocks: [PlanBlock]?
         func encode(to encoder: any Encoder) throws {
             var c = encoder.container(keyedBy: CodingKeys.self)
             try c.encode(date, forKey: .date); try c.encode(mode, forKey: .mode)
             // Without planned times the entry stays exactly as before (date and mode only).
             try c.encodeIfPresent(plannedStart, forKey: .plannedStart); try c.encodeIfPresent(plannedEnd, forKey: .plannedEnd)
             try c.encodeIfPresent(plannedBreakMinutes, forKey: .plannedBreakMinutes); try c.encodeIfPresent(plannedSeconds, forKey: .plannedSeconds)
+            try c.encodeIfPresent(blocks, forKey: .blocks)
         }
-        enum CodingKeys: String, CodingKey { case date, mode, plannedStart, plannedEnd, plannedBreakMinutes, plannedSeconds }
+        enum CodingKeys: String, CodingKey { case date, mode, plannedStart, plannedEnd, plannedBreakMinutes, plannedSeconds, blocks }
     }
     struct Actual: Encodable, Sendable {
         var date: LocalDate; var evaluatedStart: Date?; var evaluatedEnd: Date?; var evaluatedWorkSeconds: Int

@@ -21,6 +21,9 @@ enum McpSchema {
         return .object(schema)
     }
     static func boolean(_ description: String) -> McpJSON { ["type": "boolean", "description": .string(description)] }
+    static func array(_ description: String, items: McpJSON, maxItems: Int) -> McpJSON {
+        ["type": "array", "description": .string(description), "items": items, "maxItems": .int(maxItems)]
+    }
     static func date(_ description: String) -> McpJSON { string(description + " (ISO date YYYY-MM-DD)", format: "date") }
     static func dateTime(_ description: String) -> McpJSON { string(description + " (ISO 8601 instant, e.g. 2026-10-12T06:07:00Z)", format: "date-time") }
     static func uuid(_ description: String) -> McpJSON { string(description, format: "uuid") }
@@ -67,6 +70,13 @@ enum McpSchemaValidator {
                     continue
                 }
                 if let problem = validate(member, against: child, path: path + "." + name) { return problem }
+            }
+        case .array(let members):
+            if case .int(let limit)? = rules["maxItems"], members.count > limit { return "\(path) has too many items" }
+            if let itemSchema = rules["items"] {
+                for (index, member) in members.enumerated() {
+                    if let problem = validate(member, against: itemSchema, path: "\(path)[\(index)]") { return problem }
+                }
             }
         default: break
         }
