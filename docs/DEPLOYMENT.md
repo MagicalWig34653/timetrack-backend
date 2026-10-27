@@ -95,7 +95,7 @@ Weitere Optionen: `--db-password-file DATEI` (vorhandenes Passwort), `--smtp-pas
 2. Secret anlegen: `./create-secrets.sh --apns-private-key-file /pfad/AuthKey_XXXX.p8` (zusammen mit den anderen Optionen oder später in einem eigenen Aufruf; erst `--dry-run`). Das Skript prüft mit openssl, ohne etwas auszugeben, dass die Datei ein unverschlüsselter EC-P-256-Schlüssel im PEM-Format ist, übergibt den Inhalt per stdin und überschreibt nie ein vorhandenes Secret. Danach die Datei aus dem Arbeitsverzeichnis entfernen (Kopie im Passwortmanager).
 3. In `stack.yaml` den Block „APNs push“, `- tt_apns_private_key` unter `secrets:` des Backends und `tt_apns_private_key:` im Top-Level-`secrets:` einkommentieren (wie bei SMTP/OIDC).
 4. In `.env` `APNS_KEY_ID`, `APNS_TEAM_ID` (je 10 Zeichen) und `APNS_BUNDLE_IDS` (kommagetrennt) setzen; alle vier Werte inklusive Schlüssel sind nötig, sonst bleibt APNs aus.
-5. Neu ausrollen (Abschnitt 6). Prüfen: `GET /api/v1/push/config` meldet `apnsAvailable:true` (angemeldete Sitzung). Eine echte Zustellung ist erst mit den Apple-Apps und einem Testgerät prüfbar.
+5. Stack neu ausrollen (Variablen: Abschnitt 6). Prüfen: `GET /api/v1/push/config` meldet `apnsAvailable:true` (angemeldete Sitzung). Eine echte Zustellung ist erst mit den Apple-Apps und einem Testgerät prüfbar.
 
 **VAPID-Schlüssel**: Das Backend bringt keinen Befehl dafür mit (die CLI kennt nur `serve`, `migrate`, `bootstrap-admin`, `maintenance`).
 Das Skript erzeugt ihn mit dem dokumentierten openssl-Verfahren: `openssl ecparam -name prime256v1 -genkey -noout | openssl ec -outform DER | tail -c +8 | head -c 32 | base64 | tr '+/' '-_' | tr -d '=\n'`
