@@ -66,6 +66,147 @@ extension AuthTests {
             try await timeRequest(app, context, .PATCH, "work-models/" + modelId, ["validTo": "2026-10-31"])
         }
     }
+
+    func testLegalProfileSelectionAndSchoolLessons() async throws {
+        try await withApp { app, auth in
+            let (context, _) = try await registered(auth, db: app.db)
+            let catalogue = try await timeRequest(app, context, .GET, "legal-profiles")
+            let profiles = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(catalogue.body.readableBytesView)) as? [[String: Any]])
+            XCTAssertEqual(Set(profiles.compactMap { $0["id"] as? String }), ["arbzg-adult-de", "jarbschg-minor-de"])
+            let adult = try object(await timeRequest(app, context, .POST, "work-models", modelBody("2026-10-01"), status: .created))
+            XCTAssertEqual(adult["legalProfileId"] as? String, "arbzg-adult-de")
+            var minor = modelBody("2026-10-12")
+            minor["legalProfileId"] = "jarbschg-minor-de"
+            let selected = try object(await timeRequest(app, context, .POST, "work-models", minor, status: .created))
+            XCTAssertEqual(selected["legalProfileId"] as? String, "jarbschg-minor-de")
+            try await timeRequest(app, context, .POST, "time/segments", [
+                "kind": "school", "startedAt": "2026-10-12T06:00:00Z", "endedAt": "2026-10-12T11:00:00Z"
+            ], status: .created)
+            let day = try object(await timeRequest(app, context, .PUT, "time/days/2026-10-12", ["schoolLessonCount": 6]))
+            XCTAssertEqual(day["creditSeconds"] as? Int, 28_800)
+            XCTAssertEqual(day["legalProfileId"] as? String, "jarbschg-minor-de")
+            XCTAssertEqual(day["schoolLessonCount"] as? Int, 6)
+            let previous = try object(await timeRequest(app, context, .GET, "time/days/2026-10-11"))
+            XCTAssertEqual(previous["legalProfileId"] as? String, "arbzg-adult-de")
+        }
+    }
+    func testAccountAdjustmentPagesDeletionAndAccountIsolation() async throws {
+        try await withApp { app, auth in
+            let (owner, _) = try await registered(auth, db: app.db)
+            let (other, _) = try await registered(auth, db: app.db, handle: "second", admin: owner)
+            for (kind, seconds) in [("opening", 1000), ("correction", 200), ("correction", -50)] {
+                try await timeRequest(app, owner, .POST, "time/account/adjustments",
+                                      ["kind": kind, "date": "2026-10-12", "seconds": seconds, "reason": kind], status: .created)
+            }
+            let first = try object(await timeRequest(app, owner, .GET, "time/account/adjustments?limit=2&offset=0"))
+            let second = try object(await timeRequest(app, owner, .GET, "time/account/adjustments?limit=2&offset=2"))
+            XCTAssertEqual(first["total"] as? Int, 3)
+            XCTAssertEqual((first["items"] as? [[String: Any]])?.count, 2)
+            XCTAssertEqual((second["items"] as? [[String: Any]])?.count, 1)
+            let all = try XCTUnwrap(first["items"] as? [[String: Any]]) + (try XCTUnwrap(second["items"] as? [[String: Any]]))
+            XCTAssertEqual(Set(all.compactMap { $0["kind"] as? String }), ["opening", "correction"])
+            XCTAssertTrue(all.allSatisfy { $0["id"] is String && $0["createdAt"] is String && $0["reason"] is String && $0["seconds"] is Int })
+            let otherPage = try object(await timeRequest(app, other, .GET, "time/account/adjustments"))
+            XCTAssertEqual(otherPage["total"] as? Int, 0)
+            let correction = try XCTUnwrap(all.first { ($0["seconds"] as? Int) == 200 }?["id"] as? String)
+            try await timeRequest(app, other, .DELETE, "time/account/adjustments/" + correction, status: .notFound)
+            let after = try object(await timeRequest(app, owner, .DELETE, "time/account/adjustments/" + correction))
+            XCTAssertEqual(after["balanceSeconds"] as? Int, 950)
+            try await timeRequest(app, owner, .DELETE, "time/account/adjustments/" + correction, status: .notFound)
+            let audit = try await AccountAuditRecord.query(on: app.db).filter(\.$action == "time_adjustment.deleted").first()
+            XCTAssertEqual(audit?.detail, UUID(uuidString: correction)?.uuidString)
+            let opening = try XCTUnwrap(all.first { ($0["kind"] as? String) == "opening" }?["id"] as? String)
+            let reset = try object(await timeRequest(app, owner, .DELETE, "time/account/adjustments/" + opening))
+            XCTAssertEqual(reset["openingSeconds"] as? Int, 0)
+            try await timeRequest(app, owner, .POST, "time/account/adjustments",
+                                  ["kind": "opening", "date": "2026-10-12", "seconds": 500, "reason": "Replacement"], status: .created)
+            try await timeRequest(app, owner, .GET, "time/account/adjustments?limit=0", status: .badRequest)
+            try await timeRequest(app, owner, .GET, "time/account/adjustments?offset=invalid", status: .badRequest)
+        }
+    }
+
+    func testDeletingOpeningBalanceKeepsEarlierAdjustmentsInAccount() async throws {
+        try await withApp { app, auth in
+            let (owner, _) = try await registered(auth, db: app.db)
+            try await timeRequest(app, owner, .POST, "work-models", modelBody("2026-10-01"), status: .created)
+            try await timeRequest(app, owner, .POST, "time/account/adjustments",
+                ["kind": "opening", "date": "2026-09-20", "seconds": 1000, "reason": "Opening"], status: .created)
+            try await timeRequest(app, owner, .POST, "time/account/adjustments",
+                ["kind": "correction", "date": "2026-09-25", "seconds": 200, "reason": "Early correction"], status: .created)
+            let before = try object(await timeRequest(app, owner, .GET, "time/account?asOf=2026-09-30"))
+            XCTAssertEqual(before["balanceSeconds"] as? Int, 1200)
+            let page = try object(await timeRequest(app, owner, .GET, "time/account/adjustments"))
+            let opening = try XCTUnwrap((page["items"] as? [[String: Any]])?.first { ($0["kind"] as? String) == "opening" }?["id"] as? String)
+            let after = try object(await timeRequest(app, owner, .DELETE, "time/account/adjustments/" + opening))
+            XCTAssertEqual(after["accountStart"] as? String, "2026-09-25")
+            XCTAssertEqual(after["adjustmentSeconds"] as? Int, 200)
+            XCTAssertEqual(after["openingSeconds"] as? Int, 0)
+            let early = try object(await timeRequest(app, owner, .GET, "time/account?asOf=2026-09-30"))
+            XCTAssertEqual(early["balanceSeconds"] as? Int, 200)
+        }
+    }
+
+    func testSegmentReviewClearsWithEndCorrectionAndAcknowledgement() async throws {
+        try await withApp { app, auth in
+            let (owner, _) = try await registered(auth, db: app.db)
+            let segment = try await timeRequest(app, owner, .POST, "time/segments", segmentBody("2026-10-12T08:00:00Z"), status: .created)
+            let id = try resourceID(segment)
+            let initialRow = try await SegmentRecord.query(on: app.db).filter(\.$id == UUID(uuidString: id)!).first()
+            let row = try XCTUnwrap(initialRow)
+            row.needsReview = true; try await row.update(on: app.db)
+            let corrected = try object(await timeRequest(app, owner, .PATCH, "time/segments/" + id,
+                ["endedAt": "2026-10-12T16:00:00Z", "reason": "Corrected end"], extra: ["If-Match": "1"]))
+            XCTAssertEqual(corrected["needsReview"] as? Bool, false)
+            XCTAssertEqual(corrected["version"] as? Int, 2)
+            let latestRow = try await SegmentRecord.query(on: app.db).filter(\.$id == UUID(uuidString: id)!).first()
+            let changedRow = try XCTUnwrap(latestRow)
+            changedRow.needsReview = true; try await changedRow.update(on: app.db)
+            let changed = try object(await timeRequest(app, owner, .PATCH, "time/segments/" + id,
+                ["endedAt": "2026-10-12T16:30:00Z", "reason": "Changed end"], extra: ["If-Match": "2"]))
+            XCTAssertEqual(changed["needsReview"] as? Bool, false)
+            let pendingRow = try await SegmentRecord.query(on: app.db).filter(\.$id == UUID(uuidString: id)!).first()
+            let reviewedRow = try XCTUnwrap(pendingRow)
+            reviewedRow.needsReview = true; try await reviewedRow.update(on: app.db)
+            let acknowledged = try object(await timeRequest(app, owner, .PATCH, "time/segments/" + id,
+                ["needsReview": false, "reason": "Reviewed"], extra: ["If-Match": "3"]))
+            XCTAssertEqual(acknowledged["needsReview"] as? Bool, false)
+            XCTAssertEqual(acknowledged["revisions"] as? Int, 3)
+            try await timeRequest(app, owner, .PATCH, "time/segments/" + id,
+                                  ["needsReview": true, "reason": "Invalid"], status: .badRequest, extra: ["If-Match": "4"])
+            let revisions = try await RevisionRecord.query(on: app.db).filter(\.$segmentId == UUID(uuidString: id)!).all()
+            XCTAssertEqual(revisions.count, 3)
+            XCTAssertTrue(revisions.allSatisfy { $0.before.needsReview && !$0.after.needsReview })
+        }
+    }
+
+    func testEndSuggestionDecisionsClearReviewWithRevision() async throws {
+        try await withApp { app, auth in
+            let (owner, _) = try await registered(auth, db: app.db)
+            for (index, decision) in ["accept", "reject"].enumerated() {
+                let start = index == 0 ? "2026-10-12T08:00:00Z" : "2026-10-13T08:00:00Z"
+                let segmentId = try resourceID(await timeRequest(app, owner, .POST, "time/segments", segmentBody(start), status: .created))
+                let pendingSegment = try await SegmentRecord.query(on: app.db).filter(\.$id == UUID(uuidString: segmentId)!).first()
+                let segment = try XCTUnwrap(pendingSegment)
+                segment.needsReview = true; try await segment.update(on: app.db)
+                let suggestion = SuggestionRecord(); suggestion.id = UUID(); suggestion.accountId = try owner.account.requireID()
+                suggestion.payload = SuggestionDTO(id: suggestion.id!, type: "end", placeId: nil, proposedStartedAt: nil,
+                    proposedEndedAt: timeInstant(index == 0 ? "2026-10-12T16:00:00Z" : "2026-10-13T16:00:00Z"),
+                    segmentId: UUID(uuidString: segmentId), createdAt: Date())
+                try await suggestion.create(on: app.db)
+                let response = try await timeRequest(app, owner, .POST, "time/suggestions/" + suggestion.id!.uuidString + "/" + decision,
+                                                     status: decision == "accept" ? .ok : .noContent)
+                if decision == "accept" { XCTAssertEqual(try object(response)["needsReview"] as? Bool, false) }
+                let after = try object(await timeRequest(app, owner, .GET, "time/segments/" + segmentId))
+                XCTAssertEqual(after["needsReview"] as? Bool, false)
+                XCTAssertEqual(after["version"] as? Int, 2)
+                let revisions = try await RevisionRecord.query(on: app.db).filter(\.$segmentId == UUID(uuidString: segmentId)!).all()
+                XCTAssertEqual(revisions.count, 1)
+                XCTAssertTrue(revisions[0].before.needsReview)
+                XCTAssertFalse(revisions[0].after.needsReview)
+            }
+        }
+    }
+
     func testTimeCorrectionOverlapAndVoiding() async throws {
         try await withApp { app, auth in
             let (context, _) = try await registered(auth, db: app.db)

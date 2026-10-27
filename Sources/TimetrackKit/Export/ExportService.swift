@@ -67,8 +67,17 @@ struct ExportService: Sendable {
             case .breakMissing45: parts.append("Hinweis: Pause von 45 Min. fehlt")
             case .breakPartTooShort: parts.append("Hinweis: Pausenteil unter 15 Min.")
             case .workOver6hWithoutBreak: parts.append("Hinweis: über 6 Std. ohne Pause")
+            case .workOver4h30WithoutBreak: parts.append("Hinweis: über 4,5 Std. ohne Pause")
+            case .breakMissing60: parts.append("Hinweis: 60 Min. Pause fehlen")
             }
         }
+        let legalLabels: [LegalWarning.Code: String] = [
+            .dailyLimit: "Tagesgrenze überschritten", .weeklyLimit: "Wochengrenze überschritten",
+            .fiveDayWeek: "Fünf-Tage-Woche überschritten", .restPeriod: "Ruhezeit unterschritten",
+            .weekendWork: "Wochenendarbeit prüfen", .workAfterFullSchoolDay: "Arbeit an vollem Berufsschultag",
+            .workBeforeSchool: "Arbeit vor 9 Uhr am Berufsschultag"
+        ]
+        for warning in day.legalWarnings { if let label = legalLabels[warning.code] { parts.append("Hinweis: " + label) } }
         if let note = day.note, !note.isEmpty { parts.append(note) }
         return parts.joined(separator: "; ")
     }

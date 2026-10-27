@@ -28,6 +28,7 @@ struct MarkReadInput: Decodable, Sendable { var ids: [UUID]?; var all: Bool? }
 struct PushConfigDTO: Codable, Sendable {
     var available: Bool
     var vapidPublicKey: String?
+    var apnsAvailable: Bool = false
 }
 struct PushSubscriptionInput: Decodable, Sendable {
     struct Keys: Decodable, Sendable { var p256dh: String; var auth: String }
@@ -59,6 +60,8 @@ struct NotificationService: Sendable {
     let vapid: VapidConfiguration?
     let transport: any PushTransport
     var policy = PushEndpointPolicy()
+    /// APNs delivery for the Apple apps; nil while unconfigured (ADR-0030).
+    var apns: ApnsSender?
 
     // MARK: Notifications
 
@@ -116,7 +119,7 @@ struct NotificationService: Sendable {
 
     // MARK: Push
 
-    var config: PushConfigDTO { .init(available: vapid != nil, vapidPublicKey: vapid?.publicKeyBase64URL) }
+    var config: PushConfigDTO { .init(available: vapid != nil, vapidPublicKey: vapid?.publicKeyBase64URL, apnsAvailable: apns != nil) }
 
     func subscriptions(_ accountId: UUID, on db: any Database) async throws -> [PushSubscriptionDTO] {
         try await PushSubscriptionRecord.query(on: db).filter(\.$accountId == accountId).sort(\.$createdAt).all().map(PushSubscriptionDTO.init)

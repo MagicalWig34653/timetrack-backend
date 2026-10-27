@@ -17,6 +17,7 @@ struct WorkModelDTO: Content {
     var schoolCreditSeconds: Int?
     var dayBoundaryMinutes: Int?
     var fixedBreaks: [BreakInput]?
+    var legalProfileId: String?
     /// Correction counter (M1); absent on versions created before it, which count as 1. Ignored on input.
     var version: Int?
     struct BreakInput: Content { var start: String; var end: String }
@@ -36,7 +37,8 @@ struct WorkModelDTO: Content {
             dailyTargetSeconds: targets, travelCountsAsWork: travelCountsAsWork ?? true, roundingEnabled: roundingEnabled ?? true,
             roundingMinutes: roundingMinutes ?? 15, schoolFullDayThresholdSeconds: schoolFullDayThresholdSeconds ?? 10800,
             schoolCreditSeconds: schoolCreditSeconds, dayBoundaryMinutes: dayBoundaryMinutes ?? 0,
-            fixedBreaks: (fixedBreaks ?? []).map { try FixedBreak(start: time($0.start), end: time($0.end)) })
+            fixedBreaks: (fixedBreaks ?? []).map { try FixedBreak(start: time($0.start), end: time($0.end)) },
+            legalProfileId: legalProfileId ?? LegalWorkProfile.adult.id)
         try value.validate()
         return value
     }
@@ -73,10 +75,11 @@ struct SegmentCorrection: Decodable, Sendable {
     var placeId: UUID?
     var note: String?
     var reason: String
+    var needsReview: Bool?
     var hasEnd: Bool
     var hasPlace: Bool
     var hasNote: Bool
-    enum CodingKeys: String, CodingKey { case startedAt, endedAt, kind, placeId, note, reason }
+    enum CodingKeys: String, CodingKey { case startedAt, endedAt, kind, placeId, note, reason, needsReview }
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         startedAt = try c.decodeIfPresent(Date.self, forKey: .startedAt)
@@ -85,24 +88,33 @@ struct SegmentCorrection: Decodable, Sendable {
         placeId = try c.decodeIfPresent(UUID.self, forKey: .placeId)
         note = try c.decodeIfPresent(String.self, forKey: .note)
         reason = try c.decode(String.self, forKey: .reason)
+        needsReview = try c.decodeIfPresent(Bool.self, forKey: .needsReview)
         hasEnd = c.contains(.endedAt); hasPlace = c.contains(.placeId); hasNote = c.contains(.note)
     }
 }
 struct TimerInput: Content { var clientEventId: UUID; var kind: EngineSegmentKind?; var placeId: UUID? }
 struct DayInput: Decodable, Sendable {
     var mark: DayMarkKind?; var creditSeconds: Int?; var skipFixedBreaks: Bool?; var note: String?
-    var hasCredit: Bool; var hasNote: Bool
-    enum CodingKeys: String, CodingKey { case mark, creditSeconds, skipFixedBreaks, note }
+    var schoolLessonCount: Int?
+    var hasCredit: Bool; var hasNote: Bool; var hasSchoolLessonCount: Bool
+    enum CodingKeys: String, CodingKey { case mark, creditSeconds, skipFixedBreaks, note, schoolLessonCount }
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         mark = try c.decodeIfPresent(DayMarkKind.self, forKey: .mark)
         creditSeconds = try c.decodeIfPresent(Int.self, forKey: .creditSeconds)
         skipFixedBreaks = try c.decodeIfPresent(Bool.self, forKey: .skipFixedBreaks)
         note = try c.decodeIfPresent(String.self, forKey: .note)
-        hasCredit = c.contains(.creditSeconds); hasNote = c.contains(.note)
+        schoolLessonCount = try c.decodeIfPresent(Int.self, forKey: .schoolLessonCount)
+        hasCredit = c.contains(.creditSeconds); hasNote = c.contains(.note); hasSchoolLessonCount = c.contains(.schoolLessonCount)
     }
 }
 struct AdjustmentInput: Content { var kind: String; var date: LocalDate; var seconds: Int; var reason: String }
+struct AdjustmentDTO: Content {
+    var id: UUID; var kind: String; var date: String; var seconds: Int; var reason: String; var createdAt: Date
+}
+struct AdjustmentPage: Content {
+    var items: [AdjustmentDTO]; var total: Int; var limit: Int; var offset: Int
+}
 struct SuggestionDTO: Content {
     var id: UUID
     var type: String

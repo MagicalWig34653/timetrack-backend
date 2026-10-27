@@ -5,7 +5,7 @@
 # Setting both VAR and VAR_FILE is an error (no silent precedence).
 set -eu
 
-for name in DB_PASSWORD STORAGE_SECRET_KEY VAPID_PRIVATE_KEY SMTP_PASSWORD OIDC_CLIENT_SECRET; do
+for name in DB_PASSWORD STORAGE_SECRET_KEY VAPID_PRIVATE_KEY APNS_PRIVATE_KEY SMTP_PASSWORD OIDC_CLIENT_SECRET; do
   file_var="${name}_FILE"
   eval "file=\${$file_var:-}"
   [ -n "$file" ] || continue

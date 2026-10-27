@@ -58,6 +58,12 @@ struct AccountExportService: Sendable {
              "kind": .string(l.kind), "createdAt": Self.iso(l.createdAt), "expiresAt": Self.iso(l.expiresAt), "revokedAt": Self.iso(l.revokedAt),
              "lastUsedAt": Self.iso(l.lastUsedAt)]
         })
+        // Calendar feeds: metadata only, never the token or its hash (N2).
+        let feeds = try await CalendarFeedRecord.query(on: db).filter(\.$accountId == id).sort(\.$createdAt).all()
+        try table("calendar-feeds", feeds.map { f in
+            ["id": .string(f.id?.uuidString ?? ""), "label": .string(f.label), "include": .array(f.options.map(JSONValue.string)),
+             "createdAt": Self.iso(f.createdAt), "expiresAt": Self.iso(f.expiresAt), "revokedAt": Self.iso(f.revokedAt), "lastUsedAt": Self.iso(f.lastUsedAt)]
+        })
         let absences = try await AbsenceRecord.query(on: db).filter(\.$accountId == id).sort(\.$startDate).all()
         try table("absences", absences.map { a in
             ["id": .string(a.id?.uuidString ?? ""), "kind": .string(a.kind), "startDate": .string(a.startDate), "endDate": .string(a.endDate),
@@ -81,17 +87,19 @@ struct AccountExportService: Sendable {
         let sources = try await ReportSourceRecord.query(on: db).filter(\.$accountId == id).all()
         try table("report-sources", sources.map { ["isoYear": .number(Double($0.isoYear)), "isoWeek": .number(Double($0.isoWeek)), "date": Self.opt($0.date), "note": Self.opt($0.note), "fileId": Self.uuid($0.fileId)] })
         let models = try await WorkModelRecord.query(on: db).filter(\.$accountId == id).sort(\.$validFrom).all()
-        try table("work-models", try models.map { ["id": .string($0.id?.uuidString ?? ""), "validFrom": .string($0.validFrom), "validTo": Self.opt($0.validTo), "model": try Self.value($0.payload)] })
+        try table("work-models", try models.map { ["id": .string($0.id?.uuidString ?? ""), "validFrom": .string($0.validFrom), "validTo": Self.opt($0.validTo), "model": try Self.value($0.versioned)] })
         let places = try await PlaceRecord.query(on: db).filter(\.$accountId == id).all()
         try table("places", try places.map { ["id": .string($0.id?.uuidString ?? ""), "place": try Self.value($0.payload)] })
         let days = try await DayPreferenceRecord.query(on: db).filter(\.$accountId == id).sort(\.$date).all()
         try table("day-preferences", days.map { ["date": .string($0.date), "mark": .string($0.mark), "creditSeconds": $0.creditSeconds.map { .number(Double($0)) } ?? .null,
-                                                  "skipFixedBreaks": .bool($0.skipFixedBreaks), "note": Self.opt($0.note)] })
+                                                  "skipFixedBreaks": .bool($0.skipFixedBreaks), "note": Self.opt($0.note),
+                                                  "schoolLessonCount": $0.schoolLessonCount.map { .number(Double($0)) } ?? .null] })
         let adjustments = try await AdjustmentRecord.query(on: db).filter(\.$accountId == id).sort(\.$date).all()
-        try table("balance-adjustments", adjustments.map { ["kind": .string($0.kind), "date": .string($0.date), "seconds": .number(Double($0.seconds)), "reason": .string($0.reason), "opening": $0.opening.map { .number(Double($0)) } ?? .null] })
+        try table("balance-adjustments", adjustments.map { ["id": .string(try $0.requireID().uuidString), "kind": .string($0.kind), "date": .string($0.date), "seconds": .number(Double($0.seconds)), "reason": .string($0.reason), "createdAt": Self.iso($0.createdAt), "opening": $0.opening.map { .number(Double($0)) } ?? .null] })
         let vacation = try await VacationSettingsRecord.query(on: db).filter(\.$accountId == id).all()
         try table("vacation-settings", vacation.map { ["region": .string($0.region), "annualEntitlementHalfDays": .number(Double($0.annualEntitlementHalfDays)),
-                                                         "carryOver": .object($0.carryOver.mapValues { .number(Double($0)) }), "carryOverExpiry": Self.opt($0.carryOverExpiry)] })
+                                                         "carryOver": .object($0.carryOver.mapValues { .number(Double($0)) }), "carryOverExpiry": Self.opt($0.carryOverExpiry),
+                                                         "companyDays": .array(($0.companyDays ?? []).map { .object(["month": .number(Double($0.month)), "day": .number(Double($0.day)), "treatment": .string($0.treatment.rawValue), "name": Self.opt($0.name)]) })] })
         let vacationAdjustments = try await VacationAdjustmentRecord.query(on: db).filter(\.$accountId == id).sort(\.$date).all()
         try table("vacation-adjustments", vacationAdjustments.map { ["date": .string($0.date), "halfDays": .number(Double($0.halfDays)), "reason": .string($0.reason), "createdAt": Self.iso($0.createdAt)] })
         if let form = try await VacationRequestFormRecord.query(on: db).filter(\.$accountId == id).first(),

@@ -10,9 +10,14 @@ final class WorkModelRecord: Model, @unchecked Sendable {
     @Field(key: "valid_from") var validFrom: String
     @OptionalField(key: "valid_to") var validTo: String?
     @Field(key: "payload") var payload: WorkModelDTO
+    @OptionalField(key: "legal_profile_id") var legalProfileId: String?
     init() {}
     /// The payload as served: versions stored before M1 have no correction counter and count as 1.
-    var versioned: WorkModelDTO { var value = payload; value.version = value.version ?? 1; return value }
+    var versioned: WorkModelDTO {
+        var value = payload; value.version = value.version ?? 1
+        value.legalProfileId = legalProfileId ?? value.legalProfileId ?? LegalWorkProfile.adult.id
+        return value
+    }
 }
 
 final class PlaceRecord: Model, @unchecked Sendable {
@@ -66,6 +71,7 @@ final class DayPreferenceRecord: Model, @unchecked Sendable {
     @OptionalField(key: "credit_seconds") var creditSeconds: Int?
     @Field(key: "skip_fixed_breaks") var skipFixedBreaks: Bool
     @OptionalField(key: "note") var note: String?
+    @OptionalField(key: "school_lesson_count") var schoolLessonCount: Int?
     init() {}
 }
 
@@ -78,7 +84,21 @@ final class AdjustmentRecord: Model, @unchecked Sendable {
     @Field(key: "seconds") var seconds: Int
     @Field(key: "reason") var reason: String
     @OptionalField(key: "opening") var opening: Int?
+    @OptionalField(key: "created_at") var createdAt: Date?
     init() {}
+}
+
+struct AddAdjustmentCreatedAt: AsyncMigration {
+    let name = "x3.add_adjustment_created_at"
+    func prepare(on db: any Database) async throws {
+        try await db.schema(AdjustmentRecord.schema).field("created_at", .datetime).update()
+        let legacy = try await AdjustmentRecord.query(on: db).all()
+        let migratedAt = Date()
+        for row in legacy { row.createdAt = migratedAt; try await row.update(on: db) }
+    }
+    func revert(on db: any Database) async throws {
+        try await db.schema(AdjustmentRecord.schema).deleteField("created_at").update()
+    }
 }
 
 final class SuggestionRecord: Model, @unchecked Sendable {
@@ -131,6 +151,18 @@ final class TimerEventRecord: Model, @unchecked Sendable {
 
 enum StageTwoSchema {
     static let migrations: [any Migration] = [CreateTimePersistence()]
+}
+
+struct AddLegalWorkProfile: AsyncMigration {
+    let name = "r2.add_legal_work_profile"
+    func prepare(on db: any Database) async throws {
+        try await db.schema("work_models").field("legal_profile_id", .string).update()
+        try await db.schema("day_preferences").field("school_lesson_count", .int).update()
+    }
+    func revert(on db: any Database) async throws {
+        try await db.schema("day_preferences").deleteField("school_lesson_count").update()
+        try await db.schema("work_models").deleteField("legal_profile_id").update()
+    }
 }
 
 struct CreateTimePersistence: AsyncMigration {

@@ -57,6 +57,8 @@ public enum TimeEngine {
         guard validInstant(now) else { throw TimeEngineError.invalidSegment }
         guard preferences.creditSeconds.map({ $0 >= 0 }) ?? true else { throw TimeEngineError.invalidPreferences }
         guard preferences.targetOverrideSeconds.map({ $0 >= 0 }) ?? true else { throw TimeEngineError.invalidPreferences }
+        guard preferences.schoolLessonCount.map({ (0...20).contains($0) }) ?? true else { throw TimeEngineError.invalidPreferences }
+        let legalProfile = LegalWorkProfile.profile(model.legalProfileId)!
         let calendar = model.calendar
         let today = LocalDate.local(now, calendar: calendar)
         var selected: [EngineSegment] = []
@@ -84,12 +86,21 @@ public enum TimeEngine {
         let absence = [.holiday, .vacation, .sick, .excused].contains(preferences.mark)
         let target = preferences.targetOverrideSeconds ?? (absence ? 0 : baseTarget)
         // Explicit marks win over automatic school credit; absence without credit still allows actual work.
+        let statutorySchool = legalProfile.school != nil && selected.contains { $0.kind == .school }
+            && (((preferences.schoolLessonCount ?? 0) >= legalProfile.school!.fullDayLessons && preferences.schoolFullDayAllowed)
+                || preferences.schoolBlockWeek)
         let automaticSchool = preferences.mark == .none && selected.contains { $0.kind == .school }
-            && school >= model.schoolFullDayThresholdSeconds
+            && (statutorySchool || (legalProfile.school == nil && school >= model.schoolFullDayThresholdSeconds))
         let replacesWork = automaticSchool || preferences.mark == .schoolCredit
             || (absence && preferences.creditSeconds != nil)
         let credit: Int
-        if automaticSchool { credit = model.schoolCreditSeconds ?? baseTarget }
+        if automaticSchool {
+            if preferences.schoolBlockWeek, let schoolRule = legalProfile.school {
+                credit = schoolRule.blockWeekCreditSeconds / schoolRule.blockWeekDays
+            } else {
+                credit = statutorySchool ? legalProfile.school!.fullDayCreditSeconds : (model.schoolCreditSeconds ?? baseTarget)
+            }
+        }
         else if preferences.mark == .schoolCredit { credit = preferences.creditSeconds ?? model.schoolCreditSeconds ?? baseTarget }
         else if absence { credit = preferences.creditSeconds ?? 0 }
         else { credit = 0 }
@@ -108,7 +119,7 @@ public enum TimeEngine {
             startAdjust = seconds(first, since: start!)
             endAdjust = seconds(end!, since: last)
         }
-        return DayEvaluationResult(
+        var result = DayEvaluationResult(
             date: date, modelId: model.id, mark: preferences.mark, skipFixedBreaks: preferences.skipFixedBreaks,
             targetSeconds: target, rawWorkSeconds: raw, breakDeductionSeconds: deduction,
             startAdjustSeconds: startAdjust, endAdjustSeconds: endAdjust,
@@ -116,7 +127,26 @@ public enum TimeEngine {
             creditSeconds: credit, evaluatedStart: replacesWork ? nil : start, evaluatedEnd: replacesWork ? nil : end,
             provisional: date <= today && selected.contains { $0.endedAt == nil && $0.startedAt <= now },
             segmentIds: selected.map(\.id), segments: selected, markCreditSeconds: preferences.creditSeconds,
-            note: preferences.note, breakHints: hints(intervals))
+            note: preferences.note, breakHints: hints(intervals, profile: legalProfile))
+        result.legalProfileId = legalProfile.id
+        result.schoolLessonCount = preferences.schoolLessonCount
+        if let maximum = legalProfile.maxDailySeconds, raw > maximum {
+            result.legalWarnings.append(.init(.dailyLimit))
+        }
+        if !legalProfile.restrictedWeekdays.isEmpty, legalProfile.restrictedWeekdays.contains(date.isoWeekday),
+           selected.contains(where: { $0.kind != .school }) {
+            result.legalWarnings.append(.init(.weekendWork))
+        }
+        // §9 JArbSchG: on a full school day (more than five lessons) any other work is flagged, also before school.
+        if statutorySchool && selected.contains(where: { $0.kind != .school }) {
+            result.legalWarnings.append(.init(.workAfterFullSchoolDay))
+        }
+        if let schoolRule = legalProfile.school, selected.contains(where: { $0.kind == .school }),
+           selected.contains(where: { segment in
+               segment.kind != .school && calendar.component(.hour, from: segment.startedAt) * 60
+                   + calendar.component(.minute, from: segment.startedAt) < schoolRule.noWorkBeforeMinutes
+           }) { result.legalWarnings.append(.init(.workBeforeSchool)) }
+        return result
     }
 
     /// Half-open intervals: touching boundaries do not overlap; an open end extends indefinitely.
@@ -162,14 +192,12 @@ public enum TimeEngine {
         var date = accountStart
         var evaluations: [DayEvaluationResult] = []
         _ = try selectModel(for: date, models: models)
+        let prepared = TimeEvaluationSnapshot(models: models, segments: segments,
+            preferences: Dictionary(uniqueKeysWithValues: preferences.map { ($0.key.description, $0.value) }),
+            planningEnabled: false).prepared()
         while date <= min(asOf, today) {
-            guard let model = try selectModel(for: date, models: models) else { throw TimeEngineError.missingModel(date) }
-            let assigned = try segments.filter {
-                guard !$0.voided, let owner = try assignment(for: $0.startedAt, models: models) else { return false }
-                return owner.model.id == model.id && owner.date == date
-            }
-            evaluations.append(try evaluateAssignedDay(date: date, model: model, segments: assigned,
-                                               preferences: preferences[date] ?? DayPreferences(), now: now))
+            guard try selectModel(for: date, models: models) != nil else { throw TimeEngineError.missingModel(date) }
+            evaluations.append(try prepared.evaluate(date, now: now))
             date = date.addingDays(1)
         }
         return try accountBalance(accountStart: accountStart, asOf: asOf, today: today, openingSeconds: openingSeconds,
@@ -292,7 +320,7 @@ public enum TimeEngine {
         return best ?? value
     }
     static func roundedFast(_ value: Date, down: Bool, model: EngineWorkModel) -> Date { rounded(value, down: down, model: model) }
-    private static func hints(_ intervals: [Span]) -> [BreakHint] {
+    private static func hints(_ intervals: [Span], profile: LegalWorkProfile) -> [BreakHint] {
         guard let first = intervals.first else { return [] }
         var qualifiedBreak = 0
         var shortPart = false
@@ -300,16 +328,19 @@ public enum TimeEngine {
         var longestWork = continuousWork
         for (left, right) in zip(intervals, intervals.dropFirst()) {
             let gap = seconds(right.start, since: left.end)
-            if gap >= 900 { qualifiedBreak += gap; continuousWork = right.seconds }
+            if gap >= profile.minimumBreakPartSeconds { qualifiedBreak += gap; continuousWork = right.seconds }
             else { if gap > 0 { shortPart = true }; continuousWork += right.seconds }
             longestWork = max(longestWork, continuousWork)
         }
         let work = intervals.reduce(0) { $0 + $1.seconds }
         var codes: [BreakHint.Code] = []
-        if work > 32_400 && qualifiedBreak < 2700 { codes.append(.breakMissing45) }
-        else if work > 21_600 && qualifiedBreak < 1800 { codes.append(.breakMissing30) }
+        if let rule = profile.breakRules.last(where: { work > $0.afterSeconds && qualifiedBreak < $0.requiredSeconds }) {
+            codes.append(rule.requiredSeconds == 3_600 ? .breakMissing60 : rule.requiredSeconds == 2_700 ? .breakMissing45 : .breakMissing30)
+        }
         if shortPart { codes.append(.breakPartTooShort) }
-        if longestWork > 21_600 { codes.append(.workOver6hWithoutBreak) }
+        if longestWork > profile.maximumContinuousSeconds {
+            codes.append(profile.maximumContinuousSeconds == 16_200 ? .workOver4h30WithoutBreak : .workOver6hWithoutBreak)
+        }
         return codes.map { BreakHint(code: $0) }
     }
 }

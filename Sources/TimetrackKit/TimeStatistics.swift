@@ -27,6 +27,8 @@ struct TimeStatisticsBucket: Encodable, Sendable {
     var absences = Absences(); var absenceDays = 0.0
     var breakSeconds = 0; var breakDeductionSeconds = 0
     var workDays = 0; var provisional = false
+    var legalWarningDays = 0
+    var breakHintDays = 0
 }
 
 struct TimeStatisticsDTO: Encodable, Sendable {
@@ -34,6 +36,7 @@ struct TimeStatisticsDTO: Encodable, Sendable {
         var targetSeconds = 0, targetToDateSeconds = 0, actualSeconds = 0, creditSeconds = 0, deltaSeconds = 0
         var overtimeSeconds = 0, undertimeSeconds = 0, breakSeconds = 0, breakDeductionSeconds = 0
         var kindSeconds = TimeStatisticsBucket.Kinds(); var absenceDays = 0.0
+        var legalWarningDays = 0; var breakHintDays = 0
     }
     var from: LocalDate; var to: LocalDate
     var granularity: String; var basis: String; var timezone: String
@@ -106,6 +109,7 @@ struct StatisticsService: Sendable {
             totals.breakDeductionSeconds += bucket.breakDeductionSeconds; totals.absenceDays += bucket.absenceDays
             totals.kindSeconds.work += bucket.kindSeconds.work; totals.kindSeconds.school += bucket.kindSeconds.school
             totals.kindSeconds.travel += bucket.kindSeconds.travel
+            totals.legalWarningDays += bucket.legalWarningDays; totals.breakHintDays += bucket.breakHintDays
         }
         return .init(from: from, to: to, granularity: granularity.rawValue, basis: basis.rawValue, timezone: timezone, accountStart: start,
                      openingBalanceSeconds: baseline, buckets: buckets, totals: totals)
@@ -160,5 +164,7 @@ struct StatisticsService: Sendable {
         if view.mark == "vacation" { bucket.absenceDays += half } else if view.mark == "sick" || view.mark == "excused" { bucket.absenceDays += 1 }
         if view.workSeconds > 0 { bucket.workDays += 1 }
         if day.provisional { bucket.provisional = true }
+        if !day.legalWarnings.isEmpty { bucket.legalWarningDays += 1 }
+        if !day.breakHints.isEmpty { bucket.breakHintDays += 1 }
     }
 }

@@ -42,6 +42,31 @@ public enum CalendarDayKind: String, Codable, Sendable {
 }
 public enum CalendarDaySource: String, Codable, Sendable { case builtin, custom }
 
+/// N4 (ADR-0029): how a company-specific day such as 24.12. or 31.12. is treated. `none` keeps the day an ordinary workday.
+public enum CompanyDayTreatment: String, Codable, Sendable { case none, half, full }
+
+/// A fixed month/day per year (never 29.02.) with a treatment, configured per account in the vacation settings.
+public struct CompanyDayRule: Equatable, Codable, Sendable {
+    public var month: Int
+    public var day: Int
+    public var treatment: CompanyDayTreatment
+    /// Display name; nil uses the default of the date (Heiligabend, Silvester, else "Betriebsfreier Tag").
+    public var name: String?
+    public init(month: Int, day: Int, treatment: CompanyDayTreatment, name: String? = nil) {
+        self.month = month; self.day = day; self.treatment = treatment; self.name = name
+    }
+    public var displayName: String {
+        if let name { return name }
+        switch (month, day) {
+        case (12, 24): return "Heiligabend"
+        case (12, 31): return "Silvester"
+        default: return "Betriebsfreier Tag"
+        }
+    }
+    /// The two suggested dates, always listed by the API even while untreated.
+    public static let suggested: [CompanyDayRule] = [.init(month: 12, day: 24, treatment: .none), .init(month: 12, day: 31, treatment: .none)]
+}
+
 /// Built-in single days and caller-supplied custom ranges share the contract representation.
 public struct CustomCalendarDay: Equatable, Codable, Sendable {
     public var id: UUID?
@@ -50,10 +75,12 @@ public struct CustomCalendarDay: Equatable, Codable, Sendable {
     public var name: String
     public var kind: CalendarDayKind
     public var source: CalendarDaySource
+    /// Set only for days derived from a company-day rule: `full` behaves like a public holiday, `half` halves the target.
+    public var companyTreatment: CompanyDayTreatment?
     public init(id: UUID? = nil, startDate: LocalDate, endDate: LocalDate, name: String,
-                kind: CalendarDayKind = .holiday, source: CalendarDaySource = .custom) {
+                kind: CalendarDayKind = .holiday, source: CalendarDaySource = .custom, companyTreatment: CompanyDayTreatment? = nil) {
         self.id = id; self.startDate = startDate; self.endDate = endDate
-        self.name = name; self.kind = kind; self.source = source
+        self.name = name; self.kind = kind; self.source = source; self.companyTreatment = companyTreatment
     }
 }
 
@@ -63,10 +90,11 @@ public struct VacationSettings: Equatable, Sendable {
     public var carryOverByYear: [Int: Int]
     /// MM-DD; informational only, never an automatic deduction.
     public var carryOverExpiry: String?
+    public var companyDays: [CompanyDayRule]
     public init(region: String = "DE-ST", annualEntitlementHalfDays: Int = 60,
-                carryOverByYear: [Int: Int] = [:], carryOverExpiry: String? = nil) {
+                carryOverByYear: [Int: Int] = [:], carryOverExpiry: String? = nil, companyDays: [CompanyDayRule] = []) {
         self.region = region; self.annualEntitlementHalfDays = annualEntitlementHalfDays
-        self.carryOverByYear = carryOverByYear; self.carryOverExpiry = carryOverExpiry
+        self.carryOverByYear = carryOverByYear; self.carryOverExpiry = carryOverExpiry; self.companyDays = companyDays
     }
 }
 public struct VacationSnapshot: Equatable, Sendable {

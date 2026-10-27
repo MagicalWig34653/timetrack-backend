@@ -38,8 +38,10 @@ Arbeitsmodelle erhalten. Eigene Selbstständigenfunktionen: **geplant** (Abschni
 
 Umsetzungsstand: **umgesetzt** (ADR-0004, ADR-0005) – Soll täglich oder wöchentlich, Modelle mit `validFrom` ohne Rückwirkung,
 Schulregel mit Schwelle und Gutschrift (Standard 4 × 45 min, 7:42), Fahrtzeiten als Arbeit konfigurierbar, Zeitkonto mit
-Anfangsstand und datierten Korrekturen, Feiertage für alle 16 Bundesländer. **Teilweise**: Rechtsprofil nur
-`arbzg-adult-de` (Hinweise); Profile für Jugendliche **geplant**. Geführtes Onboarding (Ausbildungsstichtag u. Ä.) **umgesetzt als PWA-Assistent** (P1, ADR-0019; Lead-Prüfung offen): Arbeitsmodell, Pausenfenster, Schule, Urlaub (Stichtagsbestand statt anteiligem Anspruch), Module, Zusammenfassung; Vorschläge werden erst nach Bestätigung gespeichert.
+Anfangsstand und datierten Korrekturen, Feiertage für alle 16 Bundesländer. **Teilweise**: `arbzg-adult-de` und
+`jarbschg-minor-de` (R2, ADR-0028) im Backend-Worktree; fachliche Prüfung und Client-Anzeige offen. Geführtes Onboarding (Ausbildungsstichtag u. Ä.) **umgesetzt als PWA-Assistent** (P1, ADR-0019; Lead-Prüfung offen): Arbeitsmodell, Pausenfenster, Schule, Urlaub (Stichtagsbestand statt anteiligem Anspruch), Module, Zusammenfassung; Vorschläge werden erst nach Bestätigung gespeichert.
+
+X3: Anfangsstand und Korrekturen sind mit Grund, Betrag und Erstellungszeit abrufbar und einzeln löschbar. Nach dem Löschen gilt der neu berechnete Saldo; ein gelöschter Anfangsstand kann neu angelegt werden. Die Markierung `needsReview` eines Zeitabschnitts wird bei einer Ende-Korrektur, bei Annahme oder Ablehnung seines Ende-Vorschlags oder durch ausdrückliche Quittierung entfernt. Jede Änderung am Abschnitt wird als Revision festgehalten.
 
 Vorschlag: Wochen-Soll mit Verteilung auf Arbeitstage oder explizite Tages-Sollwerte, klare
 Vorrangregel. Bei reinem Wochen-Soll braucht die Abwesenheitsbewertung eine definierte Tagesbasis.
@@ -95,8 +97,8 @@ Implementierung fachlich validieren. Jugendliche und Sonderfälle brauchen eigen
 Quelle: https://www.gesetze-im-internet.de/arbzg/__4.html
 
 Umsetzungsstand: **umgesetzt** als reine Hinweise (`breakHints`, Profil `arbzg-adult-de`) auf tatsächlichen Zeiten; feste
-Pausenvorlagen überspringbar. Fachliche Validierung der Rechtsregeln durch eine fachkundige Person steht aus; keine
-Rechtsprüfung. Jugendliche/Sonderfälle **geplant**.
+Pausenvorlagen überspringbar. R2 ergänzt Jugendprofil und `legalWarnings` (ADR-0028).
+Fachliche Validierung durch eine fachkundige Person steht aus; keine Rechtsberatung. Sonderfälle bleiben offen.
 
 ## 4. Urlaub, Abwesenheit und Planung
 
@@ -243,7 +245,7 @@ Stand 17.10.2026. Erledigtes ist vermerkt, nicht gelöscht; offen bleibt, was ni
 5. Neu (15.10.2026, Nutzerentscheidung): Module sind durch Betreiber und je Konto abschaltbar (ADR-0012, Vertrag v0.9.0);
    Umgesetzt (C20/L17, 16.10.). Annahmen dazu (z. B. Wirkung auf Zeitkonto bei abgeschaltetem Modul `planning`) sind im ADR
    als Lead-Annahmen markiert.
-6. Rechtsprofil: Jugendliche und Sonderfälle sowie fachliche Validierung der Pausenhinweise stehen aus.
+6. Rechtsprofil: Jugendprofil R2 im Backend-Worktree umgesetzt (ADR-0028); Sonderfälle, Client-Anzeige und fachliche Validierung stehen aus.
 
 ## 10. Abgrenzung
 

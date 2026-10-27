@@ -215,6 +215,34 @@ final class TimeEngineTests: XCTestCase {
         for (segments, codes) in cases { XCTAssertEqual(Set(try evaluate(segments).breakHints.map(\.code)), codes) }
     }
 
+    func testMinorBreakAndDailyBoundaries() throws {
+        var minor = model(); minor.legalProfileId = LegalWorkProfile.minor.id; minor.roundingEnabled = false
+        func hints(_ start: String, _ end: String) throws -> Set<BreakHint.Code> {
+            Set(try evaluate([segment(start, end)], model: minor).breakHints.map(\.code))
+        }
+        XCTAssertEqual(try hints("08:00", "12:30"), [])
+        XCTAssertEqual(try hints("08:00", "12:31"), [.breakMissing30, .workOver4h30WithoutBreak])
+        XCTAssertEqual(try hints("08:00", "14:00"), [.breakMissing30, .workOver4h30WithoutBreak])
+        XCTAssertEqual(try hints("08:00", "14:01"), [.breakMissing60, .workOver4h30WithoutBreak])
+        let exact = try evaluate([segment("08:00", "16:00")], model: minor)
+        XCTAssertFalse(exact.legalWarnings.contains(.init(.dailyLimit)))
+        let over = try evaluate([segment("08:00", "16:01")], model: minor)
+        XCTAssertTrue(over.legalWarnings.contains(.init(.dailyLimit)))
+    }
+
+    func testMinorSchoolCreditUsesLessonCount() throws {
+        var minor = model(); minor.legalProfileId = LegalWorkProfile.minor.id
+        let school = segment("08:00", "13:00", kind: .school)
+        let five = try evaluate([school], model: minor, preferences: .init(schoolLessonCount: 5))
+        XCTAssertEqual(five.creditSeconds, 0)
+        let six = try evaluate([school, segment("14:00", "15:00")], model: minor, preferences: .init(schoolLessonCount: 6))
+        XCTAssertEqual(six.creditSeconds, 28_800)
+        XCTAssertEqual(six.evaluatedWorkSeconds, 0)
+        XCTAssertTrue(six.legalWarnings.contains(.init(.workAfterFullSchoolDay)))
+        let early = try evaluate([segment("07:00", "07:30"), school], model: minor, preferences: .init(schoolLessonCount: 5))
+        XCTAssertTrue(early.legalWarnings.contains(.init(.workBeforeSchool)))
+    }
+
     func testModelHistoryAndOverlapValidation() throws {
         var first = model(); first.validTo = try LocalDate("2026-10-12")
         var second = model(); second.validFrom = try LocalDate("2026-10-13"); second.weeklyTargetSeconds = 144_000

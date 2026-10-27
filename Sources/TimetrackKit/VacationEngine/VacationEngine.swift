@@ -34,7 +34,9 @@ public enum VacationEngine {
         while date <= end {
             if let model = try TimeEngine.selectModel(for: date, models: models) {
                 if model.workdays.contains(HolidayCalendar.weekday(date)), !HolidayCalendar.isHoliday(date, days: days) {
-                    result = result.addingReportingOverflow(absence.isHalfDay(date) ? 1 : 2).partialValue
+                    // A half company day leaves at most one half day of vacation to consume.
+                    let units = absence.isHalfDay(date) || HolidayCalendar.isHalfCompanyDay(date, days: days) ? 1 : 2
+                    result = result.addingReportingOverflow(units).partialValue
                 }
             } else if !lenient {
                 throw TimeEngineError.missingModel(date)
@@ -63,7 +65,7 @@ public enum VacationEngine {
                                snapshots: [VacationSnapshot] = [], adjustments: [VacationAdjustment] = [],
                                customCalendarDays: [CustomCalendarDay] = [], asOf: LocalDate? = nil,
                                lenient: Bool = false) throws -> VacationBalanceResult {
-        let days = try HolidayCalendar.holidays(year: year, region: settings.region) + customCalendarDays
+        let days = try HolidayCalendar.calendar(year: year, region: settings.region, companyDays: settings.companyDays) + customCalendarDays
         try HolidayCalendar.validate(days)
         guard settings.annualEntitlementHalfDays >= 0,
               settings.annualEntitlementHalfDays <= VacationLimits.maxHalfDays,

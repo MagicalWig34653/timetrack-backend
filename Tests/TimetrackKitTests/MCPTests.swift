@@ -13,7 +13,7 @@ struct TestMcpAuthenticator: McpAuthenticator {
 private let readScopes: Set<String> = ["time:read", "schedule:read", "reports:read", "documents:read"]
 private let allScopes: Set<String> = readScopes.union(["time:write", "schedule:write", "reports:write"])
 private let adrToolNames: Set<String> = [
-    "get_day", "list_days", "get_time_account", "list_segments", "list_cancelled_segments", "get_current_timer",
+    "get_day", "list_days", "get_time_account", "list_time_adjustments", "list_segments", "list_cancelled_segments", "get_current_timer",
     "start_timer", "stop_timer", "create_segment", "correct_segment", "restore_segment",
     "list_absences", "get_vacation_balance", "list_holidays", "list_plan_days", "view_shared",
     "create_absence", "set_plan_day", "get_report_week", "get_report_week_text", "list_learning_fields",
@@ -158,13 +158,13 @@ extension AuthTests {
             let result = try await unwrapA(try await mcpRPC(app, token, "tools/list")["result"] as? [String: Any])
             return Set((result["tools"] as? [[String: Any]] ?? []).compactMap { $0["name"] as? String })
         }
-        try await eq(try await names("T"), ["get_day", "list_days", "get_time_account", "list_segments", "list_cancelled_segments", "get_current_timer"])
+        try await eq(try await names("T"), ["get_day", "list_days", "get_time_account", "list_time_adjustments", "list_segments", "list_cancelled_segments", "get_current_timer"])
         let readOnly = try await names("RO")
-        XCTAssertEqual(readOnly.count, 15)
+        XCTAssertEqual(readOnly.count, 16)
         for write in ["start_timer", "stop_timer", "create_segment", "correct_segment", "restore_segment", "create_absence", "set_plan_day", "create_report_entry", "update_report_entry"] {
             XCTAssertFalse(readOnly.contains(write))
         }
-        try await eq(try await names("A").count, 24)
+        try await eq(try await names("A").count, 25)
         // A read-only credential can neither write nor change anything.
         let calls: [(String, [String: Any])] = [
             ("start_timer", ["clientEventId": UUID().uuidString]), ("stop_timer", [:]),
@@ -414,6 +414,23 @@ extension AuthTests {
     var mcpScenarios: [Scenario] {
         [scenarioMcpProtocol, scenarioMcpAuthOriginAndScopes, scenarioMcpTimeTools, scenarioMcpScheduleAndReportTools,
          scenarioMcpIsolationAndShares, scenarioMcpRateLimitAndAudit]
+    }
+
+    func testX3MCPAdjustmentReadParity() async throws {
+        try await withApp { app, auth in
+            let (owner, _) = try await registered(auth, db: app.db)
+            let (other, _) = try await registered(auth, db: app.db, handle: "second", admin: owner)
+            installMcp(app, ["A": try principal(owner), "B": try principal(other)])
+            try await timeRequest(app, owner, .POST, "time/account/adjustments",
+                                  ["kind": "opening", "date": "2026-10-12", "seconds": 3600, "reason": "Opening"], status: .created)
+            let rest = try object(await timeRequest(app, owner, .GET, "time/account/adjustments?limit=1&offset=0"))
+            let mcp = try await mcpTool(app, "A", "list_time_adjustments", ["limit": 1, "offset": 0])
+            XCTAssertFalse(mcp.error)
+            XCTAssertEqual((mcp.data["items"] as? [[String: Any]])?.first?["id"] as? String,
+                           (rest["items"] as? [[String: Any]])?.first?["id"] as? String)
+            let foreign = try await mcpTool(app, "B", "list_time_adjustments")
+            XCTAssertEqual(foreign.data["total"] as? Int, 0)
+        }
     }
 
     func testMCPSQLite() async throws {

@@ -467,6 +467,11 @@ extension AuthTests {
             XCTAssertEqual(entries?.first?["startedAt"] as? String, "2026-10-12T06:10:00.000Z")
             let revisions = try JSONSerialization.jsonObject(with: try XCTUnwrap(files["time-entry-revisions.json"])) as? [[String: Any]]
             XCTAssertEqual(revisions?.count, 1)
+            let adjustments = try JSONSerialization.jsonObject(with: try XCTUnwrap(files["balance-adjustments.json"])) as? [[String: Any]]
+            XCTAssertEqual(adjustments?.count, 1)
+            XCTAssertEqual(adjustments?.first?["kind"] as? String, "opening")
+            XCTAssertNotNil(adjustments?.first?["id"] as? String)
+            XCTAssertNotNil(adjustments?.first?["createdAt"] as? String)
             let csv = String(decoding: try XCTUnwrap(files["time-entries.csv"]), as: UTF8.self)
             XCTAssertTrue(csv.hasPrefix("id,kind,rawStartedAt,rawEndedAt,startedAt,endedAt,placeId,source,note,voidedAt,voidReason,needsReview,version\r\n")); XCTAssertEqual(csv.split(separator: "\r\n").count, 2)
             let reports = String(decoding: try XCTUnwrap(files["report-entries.csv"]), as: UTF8.self)

@@ -99,6 +99,7 @@ extension AuthTests {
             try await check(.GET, "me/identities")
             try await check(.GET, "me/recovery")
             try await check(.GET, "me/push-subscriptions")
+            try await check(.GET, "me/push-devices")
             // Account administration.
             try await check(.GET, "admin/accounts")
             try await check(.GET, "admin/accounts", nil, nil, .forbidden, as: member)

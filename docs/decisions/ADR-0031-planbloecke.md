@@ -1,4 +1,4 @@
-# ADR-0028: Mehrere Planblöcke pro Tag (P13)
+# ADR-0031: Mehrere Planblöcke pro Tag (P13)
 
 Status: akzeptiert für P13 (24.10.2026). Baut auf ADR-0021 auf.
 
@@ -17,4 +17,4 @@ Ein Zeitfenster pro Plantag kann geteilte Schichten und eine Kombination aus Ber
 
 ## Folgen
 
-Bestehende Clients können weiterhin lesen und schreiben. Sie sehen bei geteilten Schichten nur den äußeren Rahmen und die aufsummierten Lücken. Ein alter `PUT` ersetzt die feinere Blockaufteilung vollständig; Clients sollen vor dem Schreiben ab API 0.29.0 `blocks` verwenden. Keine serverseitige Kalenderanbindung oder Kalender-Feeds sind vorhanden (ADR-0021 und KONZEPT); native Kalenderkonflikte bleiben Arbeit der geplanten EventKit-Brücke.
+Bestehende Clients können weiterhin lesen und schreiben. Sie sehen bei geteilten Schichten nur den äußeren Rahmen und die aufsummierten Lücken. Ein alter `PUT` ersetzt die feinere Blockaufteilung vollständig; Clients sollen vor dem Schreiben ab API 0.34.0 `blocks` verwenden. Das ICS-Abo (N2) bleibt bei Ganztagsterminen und nennt Blöcke gemischter Tage in der Beschreibung (ohne Ort und Notiz); native Kalenderkonflikte bleiben Arbeit der geplanten EventKit-Brücke.

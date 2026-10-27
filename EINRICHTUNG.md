@@ -227,6 +227,7 @@ Nie ein echtes `.env` committen. Ungültige Werte brechen den Start mit klarer M
 | `STORAGE_SECRET_KEY` | – | Base64 von 32 Zufallsbytes; verschlüsselt S3-Secrets. Ohne ihn wird S3-Konfiguration abgelehnt; Verlust macht gespeicherte Secrets unbrauchbar |
 | `NOTIFICATIONS_ENABLED` | `true` | `false` schaltet den Erinnerungs-Runner ab (Liste und REST bleiben) |
 | `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | – | Web Push; beide nötig, sonst `available:false` |
+| `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_PRIVATE_KEY`, `APNS_BUNDLE_IDS` | – | APNs-Push für die Apple-Apps (ADR-0030); alle vier nötig, sonst `apnsAvailable:false`. `APNS_KEY_ID`/`APNS_TEAM_ID`: je 10 Zeichen (Großbuchstaben/Ziffern, z. B. Team `ABCDE12345`). `APNS_PRIVATE_KEY`: PEM-Text der `.p8`-Datei (Zeilenumbrüche als `\n` erlaubt; im Container `APNS_PRIVATE_KEY_FILE`). `APNS_BUNDLE_IDS`: kommagetrennt, z. B. `com.example.timetrack`; nur diese App-Kennungen können Geräte registrieren |
 | `PUSH_ALLOWED_HOSTS` | Standard-Allowlist (ADR-0011) | kommagetrennt, **ersetzt** die Standardliste (`fcm.googleapis.com`, `*.push.services.mozilla.com`, `*.notify.windows.com`, `web.push.apple.com`, `*.push.apple.com`); `*.` erlaubt Subdomains, nicht die Hauptdomain. Getesteter Vorschlag mit je einem echten Muster pro Dienst siehe unten |
 | `DB_POOL_CONNECTIONS_PER_LOOP` | `1` | MariaDB: Verbindungen pro Event-Loop (1 bis 8). Bei vielen Kernen und mehreren Replikaten summiert sich das (Kerne × Wert × Replikate); `max_connections` und `MAX_USER_CONNECTIONS` der Datenbank müssen reichen. |
 | `DB_POOL_TIMEOUT_SECONDS` | `10` | MariaDB: Wartezeit auf eine freie Verbindung (1 bis 120). |
@@ -251,7 +252,7 @@ Aufräumjob (ADR-0017): läuft im Backend-Prozess (Sperre über `job_leases`, be
 `App maintenance` bzw. im Container `docker compose --project-name timetrack-dev --profile app run --rm -T backend maintenance` (Ausgabe: nur Zähler; Exit-Code ungleich 0, wenn ein Schritt scheiterte).
 
 `*_FILE`: Das Backend liest nur die Variablen selbst. Das Container-Image übersetzt im Einstiegspunkt `DB_PASSWORD_FILE`, `STORAGE_SECRET_KEY_FILE`,
-`VAPID_PRIVATE_KEY_FILE`, `SMTP_PASSWORD_FILE`, `OIDC_CLIENT_SECRET_FILE` in die jeweilige Variable (Docker/Swarm-Secrets, `docs/BETRIEB.md` 5.4); bei `swift run` gilt das nicht.
+`VAPID_PRIVATE_KEY_FILE`, `APNS_PRIVATE_KEY_FILE`, `SMTP_PASSWORD_FILE`, `OIDC_CLIENT_SECRET_FILE` in die jeweilige Variable (Docker/Swarm-Secrets, `docs/BETRIEB.md` 5.4); bei `swift run` gilt das nicht.
 
 Schlüssel erzeugen:
 

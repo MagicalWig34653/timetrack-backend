@@ -10,6 +10,45 @@ extension AuthTests {
 
     private func intValue(_ value: Any?) -> Int? { (value as? NSNumber)?.intValue }
 
+    func scenarioPlanBlocksPlacesAndIsolation(_ app: Application, _ auth: AuthService) async throws {
+        let (owner, _) = try await registered(auth, db: app.db)
+        let member = try await second(app, auth, owner)
+        try await planningModel(app, owner)
+        let place = try resourceID(await api(app, owner, .POST, "places", placeBody(), .created))
+        let blocks: [[String: Any]] = [
+            ["start": "08:00", "end": "12:00", "kind": "customer", "placeId": place, "note": "secret-block-note"],
+            ["start": "12:00", "end": "16:00", "kind": "work"]
+        ]
+        let saved = try object(await api(app, owner, .PUT, "plan/days/2026-07-22", ["mode": "customer", "note": "secret-day-note", "placeId": place, "blocks": blocks]))
+        XCTAssertEqual((saved["blocks"] as? [[String: Any]])?.first?["placeId"] as? String, place, "the owner sees own places and notes")
+        // A foreign account cannot reference the owner's place in a block.
+        try await eq(try errorCode(await api(app, member, .PUT, "plan/days/2026-07-22", ["mode": "office", "blocks": [
+            ["start": "08:00", "end": "09:00", "kind": "work", "placeId": place]], ] as [String: Any], .notFound)), "not_found")
+        let share = try object(await api(app, owner, .POST, "shares", ["recipientHandle": "member", "scopes": ["plan": true]], .created))
+        let response = try await api(app, member, .GET, "shares/incoming/\(share["id"] as! String)/view?from=2026-07-22&to=2026-07-22")
+        let text = response.body.string
+        XCTAssertFalse(text.contains("secret-block-note")); XCTAssertFalse(text.contains("secret-day-note")); XCTAssertFalse(text.contains(place))
+        let shared = try XCTUnwrap((try object(response)["plan"] as? [[String: Any]])?.first)
+        let sharedKeys = ((shared["blocks"] as? [[String: Any]]) ?? []).map { Set($0.keys) }
+        XCTAssertEqual(sharedKeys, [Set(["start", "end", "kind"]), Set(["start", "end", "kind"])])
+        // The member's own plan list never contains the owner's blocks.
+        let memberDays = try list(await api(app, member, .GET, "plan/days?from=2026-07-22&to=2026-07-22"))
+        XCTAssertTrue(memberDays.isEmpty)
+        // Legacy times on a free day are stored without blocks (blocks are not allowed on "off").
+        let off = try object(await api(app, owner, .PUT, "plan/days/2026-07-23", ["mode": "off", "plannedStart": "08:00", "plannedEnd": "12:00"]))
+        XCTAssertEqual((off["blocks"] as? [[String: Any]])?.count, 0)
+        // Replacing with an empty list clears the day's times.
+        let cleared = try object(await api(app, owner, .PUT, "plan/days/2026-07-22", ["mode": "office", "blocks": [[String: Any]]()]))
+        XCTAssertTrue(cleared["plannedStart"] is NSNull); XCTAssertTrue(cleared["plannedSeconds"] is NSNull)
+        // Sixteen-plus-sixteen blocks exceed the cap of 32.
+        var many: [[String: Any]] = []
+        for index in 0..<33 {
+            let hour = index / 2, minute = (index % 2) * 30
+            many.append(["start": String(format: "%02d:%02d", hour, minute), "end": String(format: "%02d:%02d", hour, minute + 29), "kind": "work"])
+        }
+        try await eq(try errorCode(await api(app, owner, .PUT, "plan/days/2026-07-22", ["mode": "office", "blocks": many], .badRequest)), "plan_blocks_invalid")
+    }
+
     func scenarioPlanBlocks(_ app: Application, _ auth: AuthService) async throws {
         let (owner, _) = try await registered(auth, db: app.db)
         let member = try await second(app, auth, owner)
@@ -276,7 +315,7 @@ extension AuthTests {
     }
 
     func weekScenarios() -> [Scenario] {
-        [scenarioPlanDayTimes, scenarioPlanBlocks, scenarioPlanWeek, scenarioPlanWeekIsolationAndShares, scenarioTimeWeek, scenarioWeekQueryBudget, scenarioWeekEndpointsRequireSession]
+        [scenarioPlanDayTimes, scenarioPlanBlocks, scenarioPlanBlocksPlacesAndIsolation, scenarioPlanWeek, scenarioPlanWeekIsolationAndShares, scenarioTimeWeek, scenarioWeekQueryBudget, scenarioWeekEndpointsRequireSession]
     }
     func testWeekPlanningSQLite() async throws {
         setenv("DB_SQL_LOG", "1", 1); defer { unsetenv("DB_SQL_LOG") }

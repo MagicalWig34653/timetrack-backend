@@ -39,6 +39,16 @@ enum AccountEraser {
                 try await PushOutboxRecord.query(on: db).filter(\.$notificationId ~~ chunk).delete()
             }
         },
+        // APNs outbox rows reference both notifications and devices.
+        Wipe(schema: ApnsOutboxRecord.schema) { id, db in
+            for chunk in try await ids(ApnsDeviceRecord.self, of: id, on: db).chunked(chunkSize) {
+                try await ApnsOutboxRecord.query(on: db).filter(\.$deviceId ~~ chunk).delete()
+            }
+            for chunk in try await ids(NotificationRecord.self, of: id, on: db).chunked(chunkSize) {
+                try await ApnsOutboxRecord.query(on: db).filter(\.$notificationId ~~ chunk).delete()
+            }
+        },
+        byColumn(ApnsDeviceRecord.self),
         byColumn(NotificationRecord.self), byColumn(NotificationSettingsRecord.self), byColumn(PushSubscriptionRecord.self),
         // OAuth, personal tokens and the MCP audit rows of those credentials.
         Wipe(schema: McpAuditRecord.schema) { id, db in
@@ -57,7 +67,7 @@ enum AccountEraser {
         // Time data. Segments and plan days reference places.
         byColumn(RevisionRecord.self), byColumn(AutomationEventRecord.self), byColumn(TimerEventRecord.self), byColumn(SuggestionRecord.self),
         byColumn(SegmentRecord.self), byColumn(PlanDayRecord.self), byColumn(PlaceRecord.self), byColumn(DayPreferenceRecord.self),
-        byColumn(AdjustmentRecord.self), byColumn(WorkModelRecord.self), byColumn(DeviceTokenRecord.self), byColumn(TriggerLinkRecord.self),
+        byColumn(AdjustmentRecord.self), byColumn(WorkModelRecord.self), byColumn(DeviceTokenRecord.self), byColumn(TriggerLinkRecord.self), byColumn(CalendarFeedRecord.self),
         // Reports.
         byColumn(ReportSourceRecord.self), byColumn(ReportEntryRecord.self), byColumn(ReportWeekStatusRecord.self), byColumn(LearningFieldRecord.self),
         // Absences, vacation, calendar, shares in both directions.
@@ -80,6 +90,7 @@ enum AccountEraser {
         try await Session.query(on: db).filter(\.$accountId == account).filter(\.$revokedAt == nil).set(\.$revokedAt, to: now).update()
         try await DeviceTokenRecord.query(on: db).filter(\.$accountId == account).filter(\.$revokedAt == nil).set(\.$revokedAt, to: now).update()
         try await TriggerLinkRecord.query(on: db).filter(\.$accountId == account).filter(\.$revokedAt == nil).set(\.$revokedAt, to: now).update()
+        try await CalendarFeedRecord.query(on: db).filter(\.$accountId == account).filter(\.$revokedAt == nil).set(\.$revokedAt, to: now).update()
         try await ApiTokenRecord.query(on: db).filter(\.$accountId == account).filter(\.$revokedAt == nil).set(\.$revokedAt, to: now).update()
         let grants = try await OAuthGrant.query(on: db).filter(\.$accountId == account).all().compactMap(\.id)
         try await OAuthGrant.query(on: db).filter(\.$accountId == account).filter(\.$revokedAt == nil).set(\.$revokedAt, to: now).update()
@@ -90,6 +101,8 @@ enum AccountEraser {
         try await OAuthRequestRecord.query(on: db).filter(\.$accountId == account).delete()
         try await wipes.first { $0.schema == PushOutboxRecord.schema }!.run(account, db)
         try await PushSubscriptionRecord.query(on: db).filter(\.$accountId == account).delete()
+        try await wipes.first { $0.schema == ApnsOutboxRecord.schema }!.run(account, db)
+        try await ApnsDeviceRecord.query(on: db).filter(\.$accountId == account).delete()
     }
 
     // MARK: Erase

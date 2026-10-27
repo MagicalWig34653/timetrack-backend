@@ -166,7 +166,7 @@ Claude-Agent im eigenen Worktree (Backend und PWA), Branch `x1-perf`.
 4. **Aufräumjobs**: umgesetzt (B2, ADR-0017).
 5. **Vertragstreue**: B5 integriert (Routenabgleich, Antwortformen, Redocly-Lint nicht blockierend). Offen: `operation-summary` (Lint meldet 189 Fehler, überwiegend dies), Request-Schemas und Fehlerstatus je Endpunkt, Typgenerierung für Swift-Clients.
 6. **Restpunkte Review/Tests**: Lernfeld-409, `pushsubscriptionchange`, `PUSH_ALLOWED_HOSTS` (B2/L23 umgesetzt). Offen: Import mit 20 000 Zeilen und Blobs nahe 64 MiB auf MariaDB messen, `auth_lock`-Durchsatz, Linux-Testkompilierung (`XMLParser` in `ExportTests.swift` braucht `FoundationXML`; Backend-CI auf GitHub deshalb rot).
-7. **Fachlich/Produkt (offen)**: IHK-Ausgabeformat, Rechtsprofile für Jugendliche, Selbstständigenfunktionen (Kunden/Projekte/Sätze), Kalenderbrücke und KI-Worker-Schnittstellen (Job-Queue), Standortautomatik auf iOS. Onboarding und Profilpflege sind umgesetzt (P1).
+7. **Fachlich/Produkt (offen)**: IHK-Ausgabeformat, fachliche Prüfung und Client-Anzeige des Jugendprofils R2, Selbstständigenfunktionen (Kunden/Projekte/Sätze), Kalenderbrücke und KI-Worker-Schnittstellen (Job-Queue), Standortautomatik auf iOS. Onboarding und Profilpflege sind umgesetzt (P1).
 
 ## B5 – Vertragstreue und Testrobustheit (16.10.2026)
 
@@ -282,6 +282,8 @@ Zusammenarbeit durch Dritte (Pull Requests, Issues) ist über die GitHub-Vorlage
 
 ## Roadmap nach Release v0.1.0 (Nutzerentscheidungen 17.10.2026)
 
+**X3 (24.10.2026, eigener Worktree):** Backend-Lücken für Clients: Prüfmarkierung an Segmenten abschließen, Zeitkonto-Anpassungen lesen/löschen, Vertrag 0.29.0 und Client-Aufrufe in `docs/handoffs/X3-backend.md`. Bearbeitung in `worktree-agent-ad51edf6202fb6b47`; Lead-Integration offen.
+
 **Betrieb des Nutzers:** Produktion läuft als Cluster aus **2 Replikaten** hinter einem Reverse Proxy mit **Sticky Sessions**. Die Ratenbegrenzung und Sitzungen liegen in der Datenbank (kein Sticky-Zwang für die Korrektheit); `TRUSTED_PROXY_CIDRS` muss das Netz der Proxy-Verbindungen enthalten.
 
 **Reihenfolge und Umfang** (Kernfunktionen aus `KONZEPT.md`, außer IHK-Format und Selbstständigenfunktionen, die zurückgestellt sind):
@@ -298,7 +300,7 @@ Zusammenarbeit durch Dritte (Pull Requests, Issues) ist über die GitHub-Vorlage
 | L1' | Standortautomatik: in-App energiesparend (Signifikante Standortänderung und Regionenüberwachung, nie minütliches Abfragen) **und** über Kurzbefehle (Ankunft/Verlassen als Automation, App Intents), in der App „Kurzbefehl erstellen" wo die Plattform es erlaubt; Modi pro Ort direkt/Vorschlag/aus, Vorbeifahrt wird nicht gebucht | geplant (größeres Paket, Abstimmung nötig) |
 | E1 | Kalenderbrücke nur nativ (EventKit, ohne App-Passwort), Standard lesen | geplant |
 | AI1 | KI-Entwürfe fürs Berichtsheft (bearbeitbar, nichts erfunden): **in der App nur über Apple Foundation Models und nur auf unterstützten Geräten**; zusätzlich nutzen ChatGPT/Claude den vorhandenen MCP-Zugang (getrennt vom App-Login) | geplant |
-| R2 | Rechtsprofile für Jugendliche (Pausen/Zeitgrenzen) | geplant |
+| R2 | Rechtsprofile für Jugendliche (Pausen/Zeitgrenzen) | Backend-Worktree `worktree-agent-a540a8eec2a90d179` umgesetzt, nicht committet; Vertrag 0.29.0, Migration `r2.add_legal_work_profile`, Handoff `docs/handoffs/R2.md`; 8 gezielte und 33/34 breite Tests bestanden (1 optional übersprungen), Gesamtlauf durch Sandbox-Socket-Verbot rot/abgebrochen; nächster Schritt: vollständigen Lauf mit erlaubtem lokalen Bind wiederholen, dann Commit und Lead-Prüfung |
 | Q1 | Codex-Reviews (Kontingent nur noch ~6 %: gezielt, `gpt-6-sol`, Aufwand mittel) für sicherheitsrelevante Pakete (B1 Konten, A2/OAuth, B4 Proxys) | geplant |
 | M2 | Mac-App: Vorbereitung dort, wo es sich anbietet; sonst hinten angestellt (nichts vor 19.10. 8 Uhr) | zurückgestellt |
 | CI | Apple-CI auf dem gehosteten Image `xcode-27` (GitHub, seit 15.10.2026 allgemein verfügbar) | umgesetzt (17.10.); Lauf offen |

@@ -26,6 +26,16 @@ struct TimeWeekDayDTO: Encodable, Sendable {
     var firstStart: Date?; var lastEnd: Date?
     var segmentsCount: Int
     var absences: [Absence]
+    var legalProfileId: String
+    var breakHints: [BreakHint]
+    var legalWarnings: [LegalWarning]
+    var schoolLessonCount: Int?
+    /// Name of a public holiday (built-in region table or custom holiday) on this date, independent of the work model:
+    /// it is also set on weekends and days outside every model, where `mark` stays `off`. nil without planning.
+    var holidayName: String?
+    /// N4 (ADR-0029): `half` or `full` when `holidayName` stems from a configured company day (24.12./31.12.), else nil.
+    /// `full` behaves like a public holiday (`mark` holiday on workdays); `half` keeps `mark` work with a halved `targetSeconds`.
+    var companyDayTreatment: CompanyDayTreatment?
     var provisional: Bool; var isToday: Bool; var isFuture: Bool
     func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -42,11 +52,15 @@ struct TimeWeekDayDTO: Encodable, Sendable {
         try c.encode(lastEnd, forKey: .lastEnd); try c.encode(segmentsCount, forKey: .segmentsCount)
         try c.encode(absences, forKey: .absences); try c.encode(provisional, forKey: .provisional)
         try c.encode(isToday, forKey: .isToday); try c.encode(isFuture, forKey: .isFuture)
+        try c.encode(legalProfileId, forKey: .legalProfileId)
+        try c.encode(breakHints, forKey: .breakHints); try c.encode(legalWarnings, forKey: .legalWarnings)
+        try c.encode(schoolLessonCount, forKey: .schoolLessonCount)
+        try c.encode(holidayName, forKey: .holidayName); try c.encode(companyDayTreatment, forKey: .companyDayTreatment)
     }
     enum CodingKeys: String, CodingKey {
         case date, weekday, mark, markSource, targetSeconds, plannedSeconds, planMode, planBlocks, planHints, planActualDifferenceSeconds, workSeconds, creditSeconds, rawWorkSeconds
         case breakSeconds, breakDeductionSeconds, travelSeconds, schoolSeconds, balanceSeconds, firstStart, lastEnd
-        case segmentsCount, absences, provisional, isToday, isFuture
+        case segmentsCount, absences, provisional, isToday, isFuture, legalProfileId, breakHints, legalWarnings, schoolLessonCount, holidayName, companyDayTreatment
     }
 }
 
@@ -110,7 +124,8 @@ struct TimeWeekService: Sendable {
         for date in week.dates {
             let day = try prepared.evaluate(date, now: now)
             let model = snapshot.models.first { $0.validFrom <= date && ($0.validTo.map { date <= $0 } ?? true) }
-            days.append(dto(day, model: model, absences: snapshot.absences, plan: plans[date.description], today: today, now: now))
+            days.append(dto(day, model: model, absences: snapshot.absences, plan: plans[date.description], today: today, now: now,
+                            holidayName: prepared.holidayName(on: date), companyDayTreatment: prepared.companyDayTreatment(on: date)))
         }
         let accountService = scope.account
         let before = try accountService.balance(snapshot: snapshot, adjustments: adjustments, asOf: week.monday.addingDays(-1), now: now)
@@ -120,7 +135,8 @@ struct TimeWeekService: Sendable {
     }
 
     func dto(_ day: DayEvaluationResult, model: EngineWorkModel?, absences: [EngineAbsence], plan: PlanDayRecord?,
-                     today: LocalDate, now: Date) -> TimeWeekDayDTO {
+                     today: LocalDate, now: Date, holidayName: String? = nil,
+                     companyDayTreatment: CompanyDayTreatment? = nil) -> TimeWeekDayDTO {
         var travel = 0, school = 0, gaps = 0
         var previousEnd: Date?
         for segment in day.segments {
@@ -157,7 +173,10 @@ struct TimeWeekService: Sendable {
                      workSeconds: day.evaluatedWorkSeconds, creditSeconds: day.creditSeconds, rawWorkSeconds: day.rawWorkSeconds,
                      breakSeconds: gaps, breakDeductionSeconds: day.breakDeductionSeconds, travelSeconds: travel, schoolSeconds: school,
                      balanceSeconds: isFuture ? nil : day.deltaSeconds, firstStart: day.evaluatedStart, lastEnd: day.evaluatedEnd,
-                     segmentsCount: day.segments.count, absences: dayAbsences, provisional: day.provisional,
+                     segmentsCount: day.segments.count, absences: dayAbsences, legalProfileId: day.legalProfileId,
+                     breakHints: day.breakHints, legalWarnings: day.legalWarnings, schoolLessonCount: day.schoolLessonCount, holidayName: holidayName,
+                     companyDayTreatment: companyDayTreatment,
+                     provisional: day.provisional,
                      isToday: day.date == today, isFuture: isFuture)
     }
 

@@ -71,10 +71,13 @@ extension VacationService {
         guard to >= from else { throw APIError.invalid }
         guard to <= (try from.addingMonths(VacationSuggestionLimits.maxSpanMonths)) else { throw APIError(.badRequest, "range_too_large") }
 
-        let region = try await settings().region
+        let settings = try await settings()
         var holidays: [LocalDate: String] = [:]
         for year in from.year...to.year {
-            for day in try HolidayCalendar.holidays(year: year, region: region) { holidays[day.startDate] = day.name }
+            // Half company days still cost vacation, so only statutory and fully free company days count as holidays.
+            for day in try HolidayCalendar.calendar(year: year, region: settings.region, companyDays: settings.companyDays ?? []) where day.companyTreatment != .half {
+                holidays[day.startDate] = day.name
+            }
         }
         var periods: [VacationSuggestionPeriod] = []
         for custom in try await customDays() where custom.endDate >= from && custom.startDate <= to {

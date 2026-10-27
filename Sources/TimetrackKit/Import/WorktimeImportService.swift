@@ -19,13 +19,14 @@ extension ImportService {
         let rules = options.effectiveRules
         let planning = try await scope.modules.enabled(.planning, account: scope.accountId, on: scope.db)
         let models = try await scope.models.list().map { try $0.engine() }
-        let region = try await scope.vacation.settings().region
+        let vacationSettings = try await scope.vacation.settings()
+        let region = vacationSettings.region
         let existingAbsences = try await AbsenceRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).all()
         let activeAbsences = try existingAbsences.filter { try $0.engine().status.isActive }
         let existingDays = try await CustomCalendarDayRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).all()
         let existingSegments = try await SegmentRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).filter(\.$voidedAt == nil).all()
         let custom = try existingDays.map { try $0.engine() }
-        let builtin = Set(parsed.days.map { $0.date.year }).flatMap { (try? HolidayCalendar.holidays(year: $0, region: region)) ?? [] }
+        let builtin = Set(parsed.days.map { $0.date.year }).flatMap { (try? HolidayCalendar.calendar(year: $0, region: region, companyDays: vacationSettings.companyDays ?? [])) ?? [] }
         let actions = parsed.days.map { day in (day, rules.first { $0.matches(day.remark) }?.action ?? .work) }
         let importedHolidays = actions.filter { $0.1 == .holiday }.map { $0.0.date }
         func holiday(_ date: LocalDate) -> Bool {

@@ -60,34 +60,40 @@ struct NotificationScheduler: Sendable {
     let transport: any PushTransport
     var policy = PushEndpointPolicy()
     let logger: Logger
+    var apns: ApnsSender?
 
     func runOnce(now: Date = Date(), ownsLease: @escaping @Sendable () async -> Bool = { true }) async {
         let started = Date()
         try? await PushDispatcher.retain(now: now, on: db)
+        try? await ApnsDispatcher.retain(now: now, on: db)
         let accounts: [UUID]
         do { accounts = try await Account.query(on: db).filter(\.$disabledAt == nil).all().compactMap(\.id) }
         catch { logger.warning("notification scheduler: account lookup failed (\(type(of: error)))"); return }
         for account in accounts {
             guard await ownsLease() else { return }
-            do { try await auth.transaction(on: db) { tx in try await Self.remind(account, now: now, vapid: vapid != nil, on: tx, modules: auth.modules); try await PushDispatcher.cap(account: account, on: tx) } }
+            do { try await auth.transaction(on: db) { tx in try await Self.remind(account, now: now, vapid: vapid != nil, apns: apns != nil, on: tx, modules: auth.modules); try await PushDispatcher.cap(account: account, on: tx) } }
             catch { logger.warning("notification scheduler: reminders failed for one account (\(type(of: error)))") }
         }
         if let vapid {
             do { try await PushDispatcher(db: db, sender: .init(vapid: vapid, transport: transport, policy: policy), modules: auth.modules).deliverDue(now: now, clockNow: { now.addingTimeInterval(Date().timeIntervalSince(started)) }, ownsLease: ownsLease) }
             catch { logger.warning("notification scheduler: push delivery failed (\(type(of: error)))") }
         }
+        if let apns {
+            do { try await ApnsDispatcher(db: db, sender: apns, modules: auth.modules).deliverDue(now: now, clockNow: { now.addingTimeInterval(Date().timeIntervalSince(started)) }, ownsLease: ownsLease) }
+            catch { logger.warning("notification scheduler: APNs delivery failed (\(type(of: error)))") }
+        }
     }
 
     // MARK: Reminders
 
     private struct Context {
-        let account: UUID, now: Date, clock: LocalClock, settings: NotificationSettingsDTO, pushAvailable: Bool, db: any Database
+        let account: UUID, now: Date, clock: LocalClock, settings: NotificationSettingsDTO, pushAvailable: Bool, apnsAvailable: Bool, db: any Database
     }
 
-    static func remind(_ account: UUID, now: Date, vapid: Bool, on db: any Database, modules: ModuleRegistry = .init()) async throws {
+    static func remind(_ account: UUID, now: Date, vapid: Bool, apns: Bool = false, on db: any Database, modules: ModuleRegistry = .init()) async throws {
         let settings = try await NotificationService.effectiveSettings(account, on: db)
         let context = Context(account: account, now: now, clock: try await LocalClock.resolve(account: account, now: now, on: db),
-                              settings: settings, pushAvailable: vapid, db: db)
+                              settings: settings, pushAvailable: vapid, apnsAvailable: apns, db: db)
         for kind in NotificationKind.reminders {
             if let key = ModuleKey.notification(kind), try await !modules.enabled(key, account: account, on: db) { continue }
             guard let category = settings.categories[kind], category.inApp || category.push else { continue }
@@ -161,9 +167,18 @@ struct NotificationScheduler: Sendable {
         row.accountId = c.account; row.kind = kind; row.title = title; row.body = body; row.url = url; row.dedupKey = key
         row.createdAt = c.now; row.deletedAt = category.inApp ? nil : c.now
         try await row.create(on: c.db)
-        guard category.push, c.pushAvailable else { return }
+        guard category.push, c.pushAvailable || c.apnsAvailable else { return }
         let deferUntil = c.clock.inQuietHours(c.now, start: c.settings.quietStart, end: c.settings.quietEnd)
             ? c.settings.quietEnd.map { c.clock.quietEnd(after: c.now, end: $0) } : nil
+        if c.apnsAvailable {
+            for device in try await ApnsDeviceRecord.query(on: c.db).filter(\.$accountId == c.account).all() {
+                let item = ApnsOutboxRecord()
+                item.notificationId = try row.requireID(); item.deviceId = try device.requireID()
+                item.status = deferUntil == nil ? "pending" : "deferred"; item.attempts = 0; item.nextAttemptAt = deferUntil ?? c.now; item.createdAt = c.now
+                try await item.create(on: c.db)
+            }
+        }
+        guard c.pushAvailable else { return }
         for subscription in try await PushSubscriptionRecord.query(on: c.db).filter(\.$accountId == c.account).all() {
             let item = PushOutboxRecord()
             item.notificationId = try row.requireID(); item.subscriptionId = try subscription.requireID()

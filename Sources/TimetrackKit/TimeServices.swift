@@ -70,7 +70,9 @@ struct WorkModelService: Sendable {
         }
         let row = WorkModelRecord(); row.id = UUID(); row.accountId = scope.accountId
         var value = input; value.id = row.id; value.createdAt = Date(); value.version = 1
+        value.legalProfileId = value.legalProfileId ?? LegalWorkProfile.adult.id
         row.validFrom = value.validFrom.description; row.validTo = value.validTo?.description; row.payload = value
+        row.legalProfileId = value.legalProfileId ?? LegalWorkProfile.adult.id
         try await row.create(on: scope.db)
         return value
     }
@@ -186,6 +188,11 @@ struct SegmentService: Sendable {
         if let start = input.startedAt { value.startedAt = start }
         let reopens = input.hasEnd && input.endedAt == nil && value.endedAt != nil
         if input.hasEnd { value.endedAt = input.endedAt }
+        if input.hasEnd, input.endedAt != nil, input.endedAt != row.endedAt { value.needsReview = false }
+        if let needsReview = input.needsReview {
+            guard !needsReview else { throw APIError.invalid }
+            value.needsReview = false
+        }
         if input.hasPlace { value.placeId = input.placeId }
         if input.hasNote { value.note = input.note }
         if let kind = input.kind { value.kind = kind }

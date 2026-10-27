@@ -9,6 +9,7 @@ struct TimeEvaluationSnapshot: Sendable {
     var customDays: [CustomCalendarDay] = []
     var planningEnabled = true
     var region = "DE-ST"
+    var companyDays: [CompanyDayRule] = []
     /// Index the snapshot once (segment assignment, holiday calendars, validations) before evaluating many days.
     func prepared() -> PreparedEvaluation { PreparedEvaluation(self) }
     func evaluate(_ date: LocalDate, now: Date) throws -> DayEvaluationResult {
@@ -26,20 +27,24 @@ struct DayService: Sendable {
     /// absences by date); without one the complete history is loaded (account balance, exports of long ranges).
     func snapshot(window: ClosedRange<LocalDate>? = nil, includeSegments: Bool = true) async throws -> TimeEvaluationSnapshot {
         let models = try await scope.models.list().map { try $0.engine() }
-        let segments = includeSegments ? try await scope.segments.all(window: window) : []
+        // Legal weekly and rest warnings need the complete surrounding week and preceding day.
+        let expanded = window.map { $0.lowerBound.addingDays(-7)...$0.upperBound.addingDays(7) }
+        let segments = includeSegments ? try await scope.segments.all(window: expanded) : []
         let query = DayPreferenceRecord.query(on: scope.db).filter(\.$accountId == scope.accountId)
-        if let window { query.filter(\.$date >= window.lowerBound.description).filter(\.$date <= window.upperBound.description) }
+        if let expanded { query.filter(\.$date >= expanded.lowerBound.description).filter(\.$date <= expanded.upperBound.description) }
         let rows = try await query.all()
         let preferences = Dictionary(uniqueKeysWithValues: rows.map { row in
             (row.date, DayPreferences(mark: DayMarkKind(rawValue: row.mark) ?? .none,
-                creditSeconds: row.creditSeconds, skipFixedBreaks: row.skipFixedBreaks, note: row.note))
+                creditSeconds: row.creditSeconds, skipFixedBreaks: row.skipFixedBreaks, note: row.note,
+                schoolLessonCount: row.schoolLessonCount))
         })
         guard try await scope.modules.enabled(.planning, account: scope.accountId, on: scope.db) else {
             return .init(models: models, segments: segments, preferences: preferences, planningEnabled: false)
         }
+        let settings = try await scope.vacation.settings()
         return .init(models: models, segments: segments, preferences: preferences,
                      absences: try await scope.vacation.engineAbsences(window: window), customDays: try await scope.vacation.customDays(),
-                     region: try await scope.vacation.settings().region)
+                     region: settings.region, companyDays: settings.companyDays ?? [])
     }
     func evaluate(_ date: LocalDate, now: Date = Date()) async throws -> DayEvaluationResult {
         try await snapshot(window: date...date).evaluate(date, now: now)
@@ -55,7 +60,9 @@ struct DayService: Sendable {
         }
     }
     func set(_ date: LocalDate, input: DayInput) async throws -> DayEvaluationResult {
-        guard input.creditSeconds.map({ (0...86_400).contains($0) }) ?? true, input.note?.fitsColumn(200) ?? true else { throw APIError.invalid }
+        guard input.creditSeconds.map({ (0...86_400).contains($0) }) ?? true,
+              input.schoolLessonCount.map({ (0...20).contains($0) }) ?? true,
+              input.note?.fitsColumn(200) ?? true else { throw APIError.invalid }
         let existing = try await preference(date)
         let row = existing ?? DayPreferenceRecord()
         if existing == nil { row.accountId = scope.accountId; row.date = date.description; row.mark = "none"; row.skipFixedBreaks = false }
@@ -63,6 +70,7 @@ struct DayService: Sendable {
         if let skip = input.skipFixedBreaks { row.skipFixedBreaks = skip }
         if input.hasCredit { row.creditSeconds = input.creditSeconds }
         if input.hasNote { row.note = input.note }
+        if input.hasSchoolLessonCount { row.schoolLessonCount = input.schoolLessonCount }
         if row.mark == "none" { row.creditSeconds = nil }
         try await row.save(on: scope.db)
         return try await evaluate(date)
@@ -103,12 +111,18 @@ struct AccountService: Sendable {
         return try TimeEngine.accountBalance(accountStart: start, asOf: end, today: today, openingSeconds: opening?.seconds ?? 0,
             evaluations: evaluations, adjustments: corrections)
     }
-    /// First day of the time account: the opening balance date, else the first work model, else the first live segment,
-    /// else the earliest correction. Shared by the balance and the statistics series.
+    /// First day of the time account: the opening balance date, else the first work model or live segment, moved back to
+    /// the earliest stored adjustment if that lies earlier. Shared by the balance and the statistics series.
     func accountStart(snapshot: TimeEvaluationSnapshot, adjustments: [AdjustmentRecord], calendar: Calendar) throws -> LocalDate? {
         let firstSegmentDate = snapshot.segments.first { !$0.voided }.map { LocalDate.local($0.startedAt, calendar: calendar) }
         let opening = adjustments.first { $0.kind == "opening" }
-        return try opening.map { try LocalDate($0.date) } ?? snapshot.models.first?.validFrom ?? firstSegmentDate ?? adjustments.map { try LocalDate($0.date) }.min()
+        if let opening { return try LocalDate(opening.date) }
+        // Without an opening balance every stored adjustment must stay inside the account range, so the start is the
+        // earlier of the base start (first model, else first live segment) and the earliest adjustment. Days before
+        // the first model have Soll 0. Segments before the first model keep being ignored as before.
+        let base = snapshot.models.first?.validFrom ?? firstSegmentDate
+        let earliestAdjustment = try adjustments.map { try LocalDate($0.date) }.min()
+        return [base, earliestAdjustment].compactMap { $0 }.min()
     }
     func adjust(_ input: AdjustmentInput) async throws -> TimeAccountResult {
         try validateReason(input.reason)
@@ -117,8 +131,29 @@ struct AccountService: Sendable {
             throw APIError(.conflict, "conflict")
         }
         let row = AdjustmentRecord(); row.accountId = scope.accountId; row.kind = input.kind; row.date = input.date.description
-        row.seconds = input.seconds; row.reason = input.reason; row.opening = input.kind == "opening" ? 1 : nil
+        row.seconds = input.seconds; row.reason = input.reason; row.opening = input.kind == "opening" ? 1 : nil; row.createdAt = Date()
         try await row.create(on: scope.db)
+        return try await balance()
+    }
+    func listAdjustments(limit: Int, offset: Int) async throws -> AdjustmentPage {
+        guard (1...100).contains(limit), (0...100_000).contains(offset) else { throw APIError.invalid }
+        let query = AdjustmentRecord.query(on: scope.db).filter(\.$accountId == scope.accountId)
+        let total = try await query.count()
+        let rows = try await AdjustmentRecord.query(on: scope.db).filter(\.$accountId == scope.accountId)
+            .sort(\.$createdAt, .descending).sort(\.$id, .descending).range(offset..<(offset + limit)).all()
+        let items = try rows.map { row in
+            guard let createdAt = row.createdAt else { throw APIError.invalid }
+            return try AdjustmentDTO(id: row.requireID(), kind: row.kind, date: row.date, seconds: row.seconds,
+                                     reason: row.reason, createdAt: createdAt)
+        }
+        return .init(items: items, total: total, limit: limit, offset: offset)
+    }
+    func deleteAdjustment(_ id: UUID) async throws -> TimeAccountResult {
+        guard let row = try await AdjustmentRecord.query(on: scope.db).filter(\.$accountId == scope.accountId)
+            .filter(\.$id == id).first() else { throw APIError.missing }
+        try await row.delete(on: scope.db)
+        try await AccountAuditRecord(action: "time_adjustment.deleted", actor: scope.accountId,
+                                     target: scope.accountId, detail: id.uuidString).create(on: scope.db)
         return try await balance()
     }
 }
@@ -147,7 +182,7 @@ struct SuggestionService: Sendable {
             let segment = try await scope.segments.record(segmentId)
             guard segment.endedAt == nil, segment.voidedAt == nil,
                   let end = input.endedAt ?? suggestion.proposedEndedAt else { throw APIError(.conflict, "suggestion_resolved") }
-            var next = try segment.dto(); next.endedAt = end
+            var next = try segment.dto(); next.endedAt = end; next.needsReview = false
             if let start = input.startedAt { next.startedAt = start }
             value = try await scope.segments.revise(segment, value: next, reason: "End suggestion accepted")
         } else {
@@ -162,6 +197,13 @@ struct SuggestionService: Sendable {
     func reject(_ id: UUID) async throws {
         let row = try await record(id)
         guard row.resolvedAt == nil else { throw APIError(.conflict, "suggestion_resolved") }
+        if row.payload.type == "end", let segmentId = row.payload.segmentId {
+            let segment = try await scope.segments.record(segmentId)
+            if segment.needsReview, segment.voidedAt == nil {
+                var next = try segment.dto(); next.needsReview = false
+                _ = try await scope.segments.revise(segment, value: next, reason: "End suggestion rejected")
+            }
+        }
         row.resolvedAt = Date(); try await row.update(on: scope.db)
     }
 }
