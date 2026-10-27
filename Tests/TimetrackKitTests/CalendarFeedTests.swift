@@ -127,6 +127,28 @@ extension AuthTests {
 
     // MARK: Content
 
+    /// Regression: with the PWA bundle mounted the static middleware must not answer /ics/... with the SPA shell
+    /// (the browser then showed "page not found" and calendar clients received HTML).
+    func testFeedIsNotShadowedByThePWAShell() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("pwa-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try "<!doctype html><title>shell</title>".write(to: directory.appendingPathComponent("index.html"), atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try await withApp(environment: ["PWA_STATIC_DIR": directory.path]) { app, auth in
+            let (context, _) = try await registered(auth, db: app.db)
+            try await timeRequest(app, context, .POST, "work-models", modelBody("2026-01-01"), status: .created)
+            let feed = try await createFeed(app, context)
+            let response = try await fetchFeed(app, feed.token)
+            XCTAssertEqual(response.status, .ok)
+            XCTAssertTrue(response.headers.first(name: .contentType)?.hasPrefix("text/calendar") == true, response.headers.description)
+            assertValidCalendar(response)
+            // An unknown token stays a real 404 (not the SPA shell with 200).
+            let unknown = try await app.testable().sendRequest(.GET, "/ics/" + Secrets.token() + ".ics")
+            XCTAssertEqual(unknown.status, .notFound)
+            XCTAssertFalse(unknown.body.string.contains("<title>shell</title>"))
+        }
+    }
+
     func testCalendarFeedContentIsValidAndIsolatedPerAccount() async throws {
         try await withApp { app, auth in
             let (context, _) = try await registered(auth, db: app.db)
