@@ -27,7 +27,7 @@ struct DayService: Sendable {
     /// absences by date); without one the complete history is loaded (account balance, exports of long ranges).
     /// `models` hands in the already loaded (and converted) work models of this request.
     func snapshot(window: ClosedRange<LocalDate>? = nil, includeSegments: Bool = true,
-                  models loaded: [EngineWorkModel]? = nil) async throws -> TimeEvaluationSnapshot {
+                  models loaded: [EngineWorkModel]? = nil, planning knownPlanning: Bool? = nil) async throws -> TimeEvaluationSnapshot {
         let models: [EngineWorkModel]
         if let loaded { models = loaded } else { models = try await scope.models.list().map { try $0.engine() } }
         // Legal weekly and rest warnings need the complete surrounding week and preceding day.
@@ -41,7 +41,9 @@ struct DayService: Sendable {
                 creditSeconds: row.creditSeconds, skipFixedBreaks: row.skipFixedBreaks, note: row.note,
                 schoolLessonCount: row.schoolLessonCount))
         })
-        guard try await scope.modules.enabled(.planning, account: scope.accountId, on: scope.db) else {
+        let planningOn: Bool
+        if let knownPlanning { planningOn = knownPlanning } else { planningOn = try await scope.modules.enabled(.planning, account: scope.accountId, on: scope.db) }
+        guard planningOn else {
             return .init(models: models, segments: segments, preferences: preferences, planningEnabled: false)
         }
         let settings = try await scope.vacation.settings()

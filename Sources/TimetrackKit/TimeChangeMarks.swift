@@ -51,12 +51,15 @@ enum TimeChangeTracker {
     static func touch(account: UUID, months: Set<String>, on db: any Database) async throws {
         for month in months.sorted() {
             let now = Int(Date().timeIntervalSince1970 * 1000)
-            if let row = try await TimeChangeMark.query(on: db).filter(\.$accountId == account).filter(\.$month == month).first() {
-                row.revision = max(row.revision + 1, now); try await row.update(on: db)
-            } else {
-                let row = TimeChangeMark(); row.accountId = account; row.month = month; row.revision = now
-                try await row.create(on: db)
+            func bump() async throws -> Bool {
+                guard let row = try await TimeChangeMark.query(on: db).filter(\.$accountId == account).filter(\.$month == month).first() else { return false }
+                row.revision = max(row.revision + 1, now); try await row.update(on: db); return true
             }
+            if try await bump() { continue }
+            let row = TimeChangeMark(); row.accountId = account; row.month = month; row.revision = now
+            // Batch creates run their model middleware concurrently: a racing insert of the same month loses on the
+            // unique key and falls back to bumping the row the winner created.
+            do { try await row.create(on: db) } catch { if try await !bump() { throw error } }
         }
     }
 

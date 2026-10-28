@@ -74,22 +74,26 @@ extension AccountService {
         let checkpointDay = first.addingDays(-first.day)
         var window = checkpointDay.addingDays(1)...max(last, checkpointDay.addingDays(1))
         if let also { window = min(window.lowerBound, also.lowerBound)...max(window.upperBound, also.upperBound) }
-        let snapshot = try await scope.days.snapshot(window: window, models: models)
-        let carried = BalanceInputs(snapshot: snapshot, adjustments: adjustments, carry: nil, today: today)
-        guard let start = try accountStart(snapshot: snapshot, adjustments: adjustments, calendar: calendar) else { return carried }
-        // The account starts after the checkpoint: nothing to carry, the window contains every day of the account.
-        guard start <= checkpointDay else { return carried }
-        let key = BalanceCheckpointCache.Key(account: scope.accountId, through: checkpointDay, start: start, planning: snapshot.planningEnabled)
+        let planning = try await scope.modules.enabled(.planning, account: scope.accountId, on: scope.db)
+        // The account start only needs the work models and adjustments (the first segment matters only without models).
+        let probe = TimeEvaluationSnapshot(models: models, segments: [], preferences: [:])
+        guard let start = try accountStart(snapshot: probe, adjustments: adjustments, calendar: calendar),
+              start <= checkpointDay else {
+            // No account yet, or it starts after the checkpoint: the window contains every day of the account.
+            return .init(snapshot: try await scope.days.snapshot(window: window, models: models, planning: planning),
+                         adjustments: adjustments, carry: nil, today: today)
+        }
+        let key = BalanceCheckpointCache.Key(account: scope.accountId, through: checkpointDay, start: start, planning: planning)
         let fingerprint = try await TimeChangeTracker.fingerprint(account: scope.accountId, through: checkpointDay, on: scope.db)
         if let hit = await BalanceCheckpointCache.shared.lookup(key, fingerprint: fingerprint) {
-            return .init(snapshot: snapshot, adjustments: adjustments, carry: hit, today: today)
+            return .init(snapshot: try await scope.days.snapshot(window: window, models: models, planning: planning),
+                         adjustments: adjustments, carry: hit, today: today)
         }
-        let history = try await scope.days.snapshot(models: models)
-        guard let carry = try checkpoint(history, start: start, through: checkpointDay, now: now) else {
-            return .init(snapshot: history, adjustments: adjustments, carry: nil, today: today)
-        }
-        await BalanceCheckpointCache.shared.store(key, fingerprint: fingerprint, carry: carry)
-        return .init(snapshot: snapshot, adjustments: adjustments, carry: carry, today: today)
+        // Miss: the complete history is needed to build the checkpoint and also serves as the snapshot of this request.
+        let history = try await scope.days.snapshot(models: models, planning: planning)
+        let carry = try checkpoint(history, start: start, through: checkpointDay, now: now)
+        if let carry { await BalanceCheckpointCache.shared.store(key, fingerprint: fingerprint, carry: carry) }
+        return .init(snapshot: history, adjustments: adjustments, carry: carry, today: today)
     }
 
     /// Evaluates every day from the account start through `through` over the complete history. nil when a still running

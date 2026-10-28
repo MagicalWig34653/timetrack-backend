@@ -12,17 +12,20 @@ Stand: 28.10.2026, Branch `w4-week-perf` (Basis main 9c21fe0), nicht gemergt. Ke
 - Keine neuen Indizes nötig: `idx_work_segments_account_started` (X1) deckt die Fensterabfragen ab.
 
 ## Messung (SQLite in-memory, 1466 Segmente, 35 Abwesenheiten, 26 Anpassungen, 59 Tagesvorgaben, ca. 3 Jahre; Median von 5, `WeekPerfBenchmarkTests`)
-| Aufruf | vorher | nachher |
+| Aufruf | vorher | nachher (letzter Lauf) |
 |---|---|---|
-| Woche aktuell | 10 Stmts, 146,6 ms | 11 Stmts, 28,5 ms |
-| Woche alt (2024-W20) | 10 Stmts, 100,2 ms | 11 Stmts, 27,8 ms |
-| Kontostand | 9 Stmts, 121,8 ms | 10 Stmts, 20,2 ms |
-| Statistik 12 Monate (Monat) | 9 Stmts, 116,0 ms | 10 Stmts, 89,7 ms (365 Tage werden ohnehin ausgewertet) |
-| Tage (7) | 8 Stmts, 3,4 ms | 8 Stmts, 12,1 ms (Rauschen, unverändert; Lauf nach Aufwärmen) |
-Die eine zusätzliche Anweisung ist die Marken-Abfrage. Die erste Anfrage nach einer Änderung baut den Zwischenstand neu (einmalig voller Preis wie vorher). Die Zeit hängt nun von Fenstergröße statt Historie ab.
+| Woche aktuell | 10 Stmts, 146,6 ms | 11 Stmts, 8,3 ms |
+| Woche alt (2024-W20) | 10 Stmts, 100,2 ms | 11 Stmts, 9,1 ms |
+| Kontostand | 9 Stmts, 121,8 ms | 10 Stmts, 7,3 ms |
+| Statistik 12 Monate (Monat) | 9 Stmts, 116,0 ms | 10 Stmts, 43,3 ms (365 Tage werden ohnehin ausgewertet) |
+| Tage (7), unverändert | 8 Stmts, 3,4 ms | 8 Stmts, 3,5 ms |
+Hinweis: "vorher" und "nachher" wurden an verschiedenen Zeitpunkten gemessen (Rechnerlast unterschiedlich; ein früherer Nachher-Lauf unter Last gab 28,5/27,8/20,2/89,7 ms). Verlässlich sind die Größenordnung und die Unabhängigkeit von der Historie. Die eine zusätzliche Anweisung ist die Marken-Abfrage. Die erste Anfrage nach einer Änderung baut den Zwischenstand neu (einmalig voller Preis wie vorher; die volle Historie dient dann zugleich als Snapshot, ohne zweiten Ladevorgang). Kaltes Konto-Statement-Budget: 10 (Testgrenze 12 unverändert). Die Zeit hängt nun von Fenstergröße statt Historie ab.
 
 ## Tests
 `WeekPerfEquivalenceTests`: (1) 5 zufällige Historien (Seeds, mit/ohne Eröffnungsstand, Modellwechsel, Rechtsprofil Erwachsene/Jugendliche, laufender Abschnitt, vergessener Timer in der Vergangenheit), Wochen (Monatsgrenzen, Zufallswochen), Kontostände (as-of beliebig, Zukunft), Statistik (Tag/Woche/Monat, roh/bewertet), Tage; je mit zwei anderen "heute"-Zeitpunkten und Cache-Wiederverwendung: 625 Vergleiche, byte-gleiches JSON gegen die Auswertung der Gesamthistorie. (2) Schreibzugriffe (Segment neu/verschoben/storniert, Anpassung, Tagesvorgabe, Abwesenheit, Kalendertag, Arbeitsmodell) invalidieren. (3) Statement-Budget und Cache-Wiederverwendung. Hilfen: `WeekPerfSupport.swift`; Benchmark `WeekPerfBenchmarkTests`.
+
+## Korrektur nach Lead-Review
+Der erste Commit riss 47 Tests: Sammel-`create` (Import, 50er-Blöcke) führt die Middleware nebenläufig aus; zwei Marken-Inserts desselben Monats kollidierten auf dem Unique-Schlüssel (500 `not_ready`). `touch` fällt jetzt bei Kollision auf das Erhöhen der vorhandenen Marke zurück. Das Budget-Problem (17 > 12) kam von einem zusätzlichen Fenster-Snapshot im Cache-Miss; Kontostart, Planungsmodul und Marke werden nun vor dem Laden bestimmt, bei Miss wird nur die volle Historie geladen. Voller Lauf: 445 Tests, 42 übersprungen (MariaDB/Bench), 0 Fehler.
 
 ## Offen / ungeprüft
 - MariaDB nicht ausgeführt (nur SQLite). Middleware nutzt nur Fluent-Standardabfragen; Migration `unique(account_id, month)` ist portabel, aber ungetestet auf MariaDB.
