@@ -110,9 +110,16 @@ struct TimeWeekService: Sendable {
     let scope: TimeServices
 
     func week(_ week: ISOWeek, now: Date = Date()) async throws -> TimeWeekDTO {
-        // One load of the complete history serves the seven days and both account balances (constant statement count).
-        let snapshot = try await scope.days.snapshot()
-        let adjustments = try await AdjustmentRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).all()
+        // W4: one windowed snapshot (the balance days after the last month-end checkpoint plus the week) serves the seven
+        // days and both account balances; the balance before that window comes from a cached checkpoint.
+        let inputs = try await scope.account.balanceInputs(anchor: week.monday, through: week.sunday,
+                                                           also: week.monday...week.sunday, now: now)
+        return try await compose(week, inputs: inputs, now: now)
+    }
+
+    /// The week over already loaded inputs; the equivalence tests feed it the complete history without a carry as the oracle.
+    func compose(_ week: ISOWeek, inputs: BalanceInputs, now: Date) async throws -> TimeWeekDTO {
+        let snapshot = inputs.snapshot, adjustments = inputs.adjustments
         let plans = snapshot.planningEnabled
             ? Dictionary(try await scope.plans.rows(from: week.monday, to: week.sunday).map { ($0.date, $0) }, uniquingKeysWith: { first, _ in first })
             : [:]
@@ -128,8 +135,8 @@ struct TimeWeekService: Sendable {
                             holidayName: prepared.holidayName(on: date), companyDayTreatment: prepared.companyDayTreatment(on: date)))
         }
         let accountService = scope.account
-        let before = try accountService.balance(snapshot: snapshot, adjustments: adjustments, asOf: week.monday.addingDays(-1), now: now)
-        let after = try accountService.balance(snapshot: snapshot, adjustments: adjustments, asOf: week.sunday, now: now)
+        let before = try accountService.balance(snapshot: snapshot, adjustments: adjustments, asOf: week.monday.addingDays(-1), now: now, carry: inputs.carry)
+        let after = try accountService.balance(snapshot: snapshot, adjustments: adjustments, asOf: week.sunday, now: now, carry: inputs.carry)
         return .init(week: week.label, from: week.monday, to: week.sunday, days: days,
                      summary: summary(days, before: before, after: after, calendar: calendar))
     }

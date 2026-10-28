@@ -30,6 +30,10 @@ Zahlen unten sind die zuletzt vom Lead selbst gemessenen (Stand der Pakete P2/A8
 | GitHub (öffentlich) | Repos mit Workflows (W1), GitHub-Pages-Website aus `site/` (Pages-Lauf grün), Dependabot-Pull-Requests offen (Stand 17.10.: Backend 2, PWA 3, Apple 1) |
 | TestFlight | Archiv und Export lokal mit `scripts/testflight.sh` im Apple-Repo bestätigt; **Upload steht aus**, weil er auf die AASA-Auslieferung der Produktionsdomain wartet |
 
+## Paket W4 (Wochen-/Konto-/Statistik-Performance, 28.10.2026, Lead-Prüfung offen)
+
+Branch `w4-week-perf`: Kontostand-Zwischenstände je Monatsende mit DB-Änderungsmarken (Migration `w4.create_time_change_marks`), Fenster-Snapshot für Woche/Konto/Statistik; Woche 147 -> 29 ms, Konto 122 -> 20 ms bei 3 Jahren Historie, Antworten inhaltsgleich (625 Äquivalenzvergleiche), Vertrag unverändert. MariaDB nicht geprüft (`docs/handoffs/W4-perf.md`).
+
 ## Paket W3 (stornierte Abschnitte, Statistik, 23.10.2026, Lead-Prüfung offen)
 
 Branch `worktree-agent-ac1cefa377b418f8e`: Liste, Wiederherstellen und endgültiges Löschen (einzeln und gesammelt mit `dryRun`) stornierter Zeitabschnitte, MCP nur Liste und Wiederherstellen; Statistikreihe `GET /time/statistics` (Tag/Woche/Monat) für Diagramme (Vertrag v0.28.0). PWA-/Apple-Oberflächen fehlen noch (`docs/handoffs/W3-cancelled-statistics.md`).

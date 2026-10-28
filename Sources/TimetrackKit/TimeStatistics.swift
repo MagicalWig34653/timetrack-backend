@@ -53,8 +53,15 @@ struct StatisticsService: Sendable {
     func series(from: LocalDate, to: LocalDate, granularity: StatisticsGranularity, basis: StatisticsBasis,
                 now: Date = Date()) async throws -> TimeStatisticsDTO {
         try LocalDate.checkedRange(from: from, to: to, maxDays: Self.maxDays)
-        let snapshot = try await scope.days.snapshot()
-        let adjustments = try await AdjustmentRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).all()
+        // W4: windowed snapshot after the last month-end checkpoint before `from`; the cumulative balance starts from it.
+        let inputs = try await scope.account.balanceInputs(anchor: from, through: to, also: from...to, now: now)
+        return try series(from: from, to: to, granularity: granularity, basis: basis, inputs: inputs, now: now)
+    }
+
+    /// The series over already loaded inputs; the equivalence tests feed it the complete history without a carry as the oracle.
+    func series(from: LocalDate, to: LocalDate, granularity: StatisticsGranularity, basis: StatisticsBasis,
+                inputs: BalanceInputs, now: Date) throws -> TimeStatisticsDTO {
+        let snapshot = inputs.snapshot, adjustments = inputs.adjustments
         let timezone = snapshot.models.last?.timezone ?? "Europe/Berlin"
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: timezone)!
@@ -71,6 +78,12 @@ struct StatisticsService: Sendable {
         var cumulative: [LocalDate: Int] = [:]
         var total = opening
         var date = min(start ?? from, from)
+        if let carry = inputs.carry, let start, carry.through >= start, carry.through < from {
+            // Days up to the checkpoint are folded into one summand (all of them lie before today).
+            total += carry.evaluationSeconds + (correctionsByDay.filter { $0.key >= start && $0.key <= carry.through }.values.reduce(0, +))
+            cumulative[carry.through] = total
+            date = carry.through.addingDays(1)
+        }
         while date <= to {
             let day = try prepared.evaluate(date, now: now)
             days[date] = day

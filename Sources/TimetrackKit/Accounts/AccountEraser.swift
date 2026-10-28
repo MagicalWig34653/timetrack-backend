@@ -67,7 +67,7 @@ enum AccountEraser {
         // Time data. Segments and plan days reference places.
         byColumn(RevisionRecord.self), byColumn(AutomationEventRecord.self), byColumn(TimerEventRecord.self), byColumn(SuggestionRecord.self),
         byColumn(SegmentRecord.self), byColumn(PlanDayRecord.self), byColumn(PlaceRecord.self), byColumn(DayPreferenceRecord.self),
-        byColumn(AdjustmentRecord.self), byColumn(WorkModelRecord.self), byColumn(DeviceTokenRecord.self), byColumn(TriggerLinkRecord.self), byColumn(CalendarFeedRecord.self),
+        byColumn(AdjustmentRecord.self), byColumn(TimeChangeMark.self), byColumn(WorkModelRecord.self), byColumn(DeviceTokenRecord.self), byColumn(TriggerLinkRecord.self), byColumn(CalendarFeedRecord.self),
         // Reports.
         byColumn(ReportSourceRecord.self), byColumn(ReportEntryRecord.self), byColumn(ReportWeekStatusRecord.self), byColumn(LearningFieldRecord.self),
         // Absences, vacation, calendar, shares in both directions.

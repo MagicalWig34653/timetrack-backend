@@ -25,8 +25,11 @@ struct DayService: Sendable {
     /// Loads the inputs of the day evaluation. With a `window` only rows that can influence those days are read
     /// (segments by start instant with a safety margin for time zone and day-boundary shifts, preferences and
     /// absences by date); without one the complete history is loaded (account balance, exports of long ranges).
-    func snapshot(window: ClosedRange<LocalDate>? = nil, includeSegments: Bool = true) async throws -> TimeEvaluationSnapshot {
-        let models = try await scope.models.list().map { try $0.engine() }
+    /// `models` hands in the already loaded (and converted) work models of this request.
+    func snapshot(window: ClosedRange<LocalDate>? = nil, includeSegments: Bool = true,
+                  models loaded: [EngineWorkModel]? = nil) async throws -> TimeEvaluationSnapshot {
+        let models: [EngineWorkModel]
+        if let loaded { models = loaded } else { models = try await scope.models.list().map { try $0.engine() } }
         // Legal weekly and rest warnings need the complete surrounding week and preceding day.
         let expanded = window.map { $0.lowerBound.addingDays(-7)...$0.upperBound.addingDays(7) }
         let segments = includeSegments ? try await scope.segments.all(window: expanded) : []
@@ -80,13 +83,15 @@ struct DayService: Sendable {
 struct AccountService: Sendable {
     let scope: TimeServices
     func balance(asOf: LocalDate? = nil, now: Date = Date()) async throws -> TimeAccountResult {
-        let snapshot = try await scope.days.snapshot()
-        let adjustments = try await AdjustmentRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).all()
-        return try balance(snapshot: snapshot, adjustments: adjustments, asOf: asOf, now: now)
+        // W4: only the days after the last month-end checkpoint are loaded and evaluated (see BalanceCheckpoints.swift).
+        let inputs = try await balanceInputs(anchor: asOf, through: asOf, now: now)
+        return try balance(inputs: inputs, asOf: asOf, now: now)
     }
     /// Balance over already loaded inputs, so a what-if evaluation (work model preview) can reuse one load for
-    /// several model sets without further statements.
-    func balance(snapshot: TimeEvaluationSnapshot, adjustments: [AdjustmentRecord], asOf: LocalDate? = nil, now: Date = Date()) throws -> TimeAccountResult {
+    /// several model sets without further statements. With a `carry` the snapshot only has to contain the days after
+    /// `carry.through`; the days up to it are represented by their precomputed delta sum.
+    func balance(snapshot: TimeEvaluationSnapshot, adjustments: [AdjustmentRecord], asOf: LocalDate? = nil, now: Date = Date(),
+                 carry: BalanceCarry? = nil) throws -> TimeAccountResult {
         let models = snapshot.models
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: models.last?.timezone ?? "Europe/Berlin")!
@@ -95,7 +100,8 @@ struct AccountService: Sendable {
         let opening = adjustments.first { $0.kind == "opening" }
         guard let start = try accountStart(snapshot: snapshot, adjustments: adjustments, calendar: calendar) else { return .init(asOf: end, accountStart: nil, balanceSeconds: 0, openingSeconds: 0, adjustmentSeconds: 0, provisional: false) }
         let prepared = snapshot.prepared()
-        var evaluations: [DayEvaluationResult] = []; var date = start
+        let carried = carry.flatMap { $0.through >= start && $0.through <= end ? $0 : nil }
+        var evaluations: [DayEvaluationResult] = []; var date = carried.map { $0.through.addingDays(1) } ?? start
         while date <= end { evaluations.append(try prepared.evaluate(date, now: now)); date = date.addingDays(1) }
         let corrections = try adjustments.filter { $0.kind == "correction" }.map { try AccountAdjustment(date: LocalDate($0.date), seconds: $0.seconds) }
         // Reject unrepresentable totals before invoking the engine's integer reduction.
@@ -106,8 +112,17 @@ struct AccountService: Sendable {
             }
         }
         let correctionTotal = try sum(corrections.filter { $0.date >= start && $0.date <= end }.map(\.seconds))
-        let evaluationTotal = try sum(evaluations.map(\.deltaSeconds))
+        let evaluationTotal = try sum(evaluations.map(\.deltaSeconds) + [carried?.evaluationSeconds ?? 0])
         _ = try sum([opening?.seconds ?? 0, correctionTotal, evaluationTotal])
+        if let carried {
+            // Same reduction as `TimeEngine.accountBalance` with the carried days folded into one summand.
+            let adjustment = corrections.filter { $0.date >= start && $0.date <= end }.reduce(0) { saturatingAdd($0, $1.seconds) }
+            let delta = saturatingAdd(evaluations.reduce(0) { saturatingAdd($0, $1.deltaSeconds) }, carried.evaluationSeconds)
+            return TimeAccountResult(asOf: end, accountStart: start,
+                                     balanceSeconds: saturatingAdd(saturatingAdd(opening?.seconds ?? 0, adjustment), delta),
+                                     openingSeconds: opening?.seconds ?? 0, adjustmentSeconds: adjustment,
+                                     provisional: (start <= today && end == today) || carried.provisional || evaluations.contains { $0.provisional })
+        }
         return try TimeEngine.accountBalance(accountStart: start, asOf: end, today: today, openingSeconds: opening?.seconds ?? 0,
             evaluations: evaluations, adjustments: corrections)
     }

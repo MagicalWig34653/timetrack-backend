@@ -25,6 +25,9 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
         app.lifecycle.use(DatabaseStartupCheck(host: config.dbHost, port: config.dbPort, tls: config.dbTLS == .off ? "off" : "required", perLoop: config.dbPoolConnectionsPerLoop, timeout: config.dbPoolTimeoutSeconds))
         if config.dbKeepAliveSeconds > 0 { app.lifecycle.use(DatabaseKeepAlive(intervalSeconds: config.dbKeepAliveSeconds, connectionsPerLoop: config.dbPoolConnectionsPerLoop)) }
     }
+    // Change marks first: the middleware registered below writes to this table during every later data migration.
+    app.migrations.add(CreateTimeChangeMarks())
+    app.registerTimeChangeMarks(on: config.databaseDriver == .sqlite ? .sqlite : .mysql)
     for migration in StageOneSchema.migrations { app.migrations.add(migration) }
     app.migrations.add(CreateAuthLock())
     for migration in StageTwoSchema.migrations { app.migrations.add(migration) }
