@@ -74,6 +74,10 @@ extension AuthService {
             let account = current.account
             account.email = request.email; account.emailVerifiedAt = Date()
             try await account.update(on: tx)
+            // C3: the account e-mail is the recovery address; an active e-mail recovery follows the verified new address.
+            if let recovery = try await EmailRecovery.query(on: tx).filter(\.$accountId == id).first() {
+                recovery.email = request.email; recovery.verifiedAt = account.emailVerifiedAt; try await recovery.update(on: tx)
+            }
             try await AccountAuditRecord(action: "profile.email_changed", actor: id, target: id).create(on: tx)
             return .done
         }
@@ -93,6 +97,8 @@ extension AuthService {
             guard account.email != nil else { return }
             account.email = nil; account.emailVerifiedAt = nil
             try await account.update(on: tx)
+            // C3: without an account e-mail there is no recovery address; e-mail recovery is switched off.
+            try await EmailRecovery.query(on: tx).filter(\.$accountId == id).delete()
             try await AccountAuditRecord(action: "profile.email_removed", actor: id, target: id).create(on: tx)
         }
     }

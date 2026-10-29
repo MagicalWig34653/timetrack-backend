@@ -76,6 +76,7 @@ und keine Nutzerentscheidungen (siehe jeweilige Statuszeile). Nummer 0004 existi
 | 0027 | Abgang beendet fremd gestartete Timer; Auslöse-Links (`GET /t/<token>/…`) | Umsetzungsentscheidung (W1); Lead-Prüfung offen | [ADR-0027](decisions/ADR-0027-ausloese-links.md) |
 | 0028 | JArbSchG-Rechtsprofil und Berufsschulgutschrift | R2-Worktree; fachliche Prüfung offen | [ADR-0028](decisions/ADR-0028-jugendarbeitsschutzprofile.md) |
 | 0031 | Mehrere Planblöcke pro Tag, Alt-API und Migration | Umsetzungsentscheidung (P13); Prüfung im Worktree | [ADR-0031](decisions/ADR-0031-planbloecke.md) |
+| 0032 | Abwesenheitsstatus je Art, Zeitkonto ohne laufenden Tag, Konto-E-Mail = Recovery-Adresse | Umsetzungsentscheidung (C3); Prüfung im Worktree | [ADR-0032](decisions/ADR-0032-abwesenheitsstatus-zeitkonto-heute-recovery-mail.md) |
 
 ## Namensgebung und Kennungen (Entscheidung 17.10.2026)
 

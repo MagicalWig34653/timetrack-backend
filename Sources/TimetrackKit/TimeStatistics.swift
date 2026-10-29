@@ -13,12 +13,12 @@ struct TimeStatisticsBucket: Encodable, Sendable {
     var label: String
     /// First and last day of the bucket inside the requested range (edge buckets can be partial).
     var from: LocalDate; var to: LocalDate; var days = 0
-    /// Soll of all days of the bucket and of the days up to today.
+    /// Soll of all days of the bucket and of the completed days (through yesterday; the running current day is not included).
     var targetSeconds = 0; var targetToDateSeconds = 0
     /// Ist according to `basis` (without credit), plus the pieces it is made of.
     var actualSeconds = 0; var creditSeconds = 0
     var evaluatedWorkSeconds = 0; var rawWorkSeconds = 0; var roundingSeconds = 0
-    /// Differenz = Ist + credit - Soll, summed over the days up to today only (basis-dependent).
+    /// Differenz = Ist + credit - Soll, summed over the completed days only (through yesterday, basis-dependent).
     var deltaSeconds = 0
     var overtimeSeconds = 0; var undertimeSeconds = 0
     /// Cumulative Zeitkonto balance as of `balanceAsOf` (bucket end, at most today); always the official evaluated balance.
@@ -44,6 +44,10 @@ struct TimeStatisticsDTO: Encodable, Sendable {
     /// Zeitkonto balance at the end of the day before `from` (chart baseline); nil before the account starts.
     var openingBalanceSeconds: Int?
     var buckets: [TimeStatisticsBucket]; var totals: Totals
+    /// Always false: the running current day is in no `deltaSeconds`, `targetToDateSeconds` or cumulative balance (C3, ADR-0032).
+    var includesToday = false
+    /// Delta (Ist + credit - Soll, official evaluation) of the running current day; nil when today is outside the range.
+    var todayDeltaSeconds: Int?
 }
 
 struct StatisticsService: Sendable {
@@ -88,7 +92,9 @@ struct StatisticsService: Sendable {
             let day = try prepared.evaluate(date, now: now)
             days[date] = day
             if let start, date >= start {
-                if date <= today { total += day.deltaSeconds + (correctionsByDay[date] ?? 0) }
+                // The current day's delta stays out until the day is over; corrections dated today count at once.
+                if date < today { total += day.deltaSeconds + (correctionsByDay[date] ?? 0) }
+                else if date == today { total += correctionsByDay[date] ?? 0 }
                 cumulative[date] = total
             }
             date = date.addingDays(1)
@@ -125,7 +131,8 @@ struct StatisticsService: Sendable {
             totals.legalWarningDays += bucket.legalWarningDays; totals.breakHintDays += bucket.breakHintDays
         }
         return .init(from: from, to: to, granularity: granularity.rawValue, basis: basis.rawValue, timezone: timezone, accountStart: start,
-                     openingBalanceSeconds: baseline, buckets: buckets, totals: totals)
+                     openingBalanceSeconds: baseline, buckets: buckets, totals: totals,
+                     todayDeltaSeconds: start.flatMap { $0 <= today ? days[today]?.deltaSeconds : nil })
     }
 
     /// Bucket key: the day itself, the ISO week ("2026-W44") or the calendar month ("2026-10").
@@ -141,7 +148,8 @@ struct StatisticsService: Sendable {
     }
 
     static func add(_ bucket: inout TimeStatisticsBucket, day: DayEvaluationResult, view: TimeWeekDayDTO, basis: StatisticsBasis, now: Date) {
-        let past = !view.isFuture
+        // C3: the running current day is neither "past" nor future for the sums; it is reported separately.
+        let past = !view.isFuture && !view.isToday
         // Raw basis only removes the rounding of first start / last end; credit, fixed breaks and marks stay.
         let rounding = day.startAdjustSeconds + day.endAdjustSeconds
         let actual = basis == .raw ? day.evaluatedWorkSeconds - rounding : day.evaluatedWorkSeconds

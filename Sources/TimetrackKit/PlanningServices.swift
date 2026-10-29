@@ -225,10 +225,10 @@ struct AbsenceService: Sendable {
         do { try VacationEngine.validateNoOverlap(others + [candidate]) }
         catch VacationEngineError.absenceOverlap { throw APIError(.conflict, "absence_overlap") }
     }
-    private func apply(_ input: AbsenceInputDTO, to row: AbsenceRecord) {
+    private func apply(_ input: AbsenceInputDTO, status: AbsenceStatus, to row: AbsenceRecord) {
         row.kind = input.kind.rawValue; row.startDate = input.startDate.description; row.endDate = input.endDate.description
         row.halfDayStart = input.halfDayStart ?? false; row.halfDayEnd = input.halfDayEnd ?? false
-        row.status = input.status.rawValue; row.note = input.note; row.documentStatus = input.documentStatus ?? "not_needed"
+        row.status = status.rawValue; row.note = input.note; row.documentStatus = input.documentStatus ?? "not_needed"
         row.documentSubmittedOn = input.documentSubmittedOn?.description
         row.documentReferenceStart = input.documentReferenceStart?.description
         row.documentReferenceEnd = input.documentReferenceEnd?.description
@@ -236,8 +236,9 @@ struct AbsenceService: Sendable {
     }
     func create(_ input: AbsenceInputDTO) async throws -> AbsenceDTO {
         try validate(input)
+        let status = try AbsenceSemantics.normalise(kind: input.kind, status: input.status ?? AbsenceSemantics.defaultStatus(for: input.kind))
         let row = AbsenceRecord(); row.id = UUID(); row.accountId = scope.accountId; row.version = 1; row.createdAt = Date()
-        apply(input, to: row)
+        apply(input, status: status, to: row)
         let candidate = try row.engine()
         try await ensureNoOverlap(candidate)
         let counted = try await counter().count(candidate)
@@ -248,7 +249,8 @@ struct AbsenceService: Sendable {
         let row = try await record(id)
         guard version == row.version else { throw APIError(.preconditionFailed, "stale_version") }
         try validate(input)
-        apply(input, to: row); row.version += 1
+        let status = try AbsenceSemantics.normalise(kind: input.kind, status: input.status ?? AbsenceSemantics.defaultStatus(for: input.kind))
+        apply(input, status: status, to: row); row.version += 1
         let candidate = try row.engine()
         try await ensureNoOverlap(candidate)
         let counted = try await counter().count(candidate)

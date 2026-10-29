@@ -41,4 +41,5 @@ actor RecordingMailSender: MailSender {
     private var messages: [(String, String)] = []
     func sendCode(_ code: String, to address: String) { messages.append((address, code)) }
     func lastCode() -> String { messages.last!.1 }
+    func lastAddress() -> String { messages.last!.0 }
 }

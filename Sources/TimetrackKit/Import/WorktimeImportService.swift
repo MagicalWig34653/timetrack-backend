@@ -74,8 +74,9 @@ extension ImportService {
                 continue
             }
             if effectiveAction.isAbsence {
-                let status: AbsenceStatus = day.date < today ? .taken : .approved
                 let kind = AbsenceKind(rawValue: effectiveAction.rawValue)!
+                // C3 (ADR-0032): only vacation has the approval workflow; sick days and exemptions are recorded facts.
+                let status: AbsenceStatus = kind != .vacation ? .recorded : day.date < today ? .taken : .approved
                 var merge = false
                 if let previous = absences.last, previous.kind == kind,
                    previous.from.distance(to: day.date) < PlanningLimits.absenceDays {
@@ -123,7 +124,7 @@ extension ImportService {
         var acceptedAbsences: [WorktimeAbsence] = []
         for absence in absences {
             if !(absence.note?.fitsColumn(500) ?? true) { errors += absence.rows.map { .init(row: $0, code: "note_too_long") }; continue }
-            if activeAbsences.contains(where: { $0.kind == absence.kind.rawValue && $0.startDate == absence.from.description && $0.endDate == absence.to.description && !$0.halfDayStart && !$0.halfDayEnd && $0.note == absence.note && ["approved", "taken"].contains($0.status) }) { duplicates += 1; continue }
+            if activeAbsences.contains(where: { $0.kind == absence.kind.rawValue && $0.startDate == absence.from.description && $0.endDate == absence.to.description && !$0.halfDayStart && !$0.halfDayEnd && $0.note == absence.note && ["approved", "taken", "recorded"].contains($0.status) }) { duplicates += 1; continue }
             if activeAbsences.contains(where: { $0.startDate <= absence.to.description && $0.endDate >= absence.from.description }) || segmentOverlaps(absence.from, absence.to) {
                 errors += absence.rows.map { .init(row: $0, code: "overlap") }; continue
             }

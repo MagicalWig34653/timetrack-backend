@@ -1,8 +1,9 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.35.0
+  version: 0.36.0
   description: |
+    v0.36.0 (C3, ADR-0032): (a) Abwesenheitsstatus je Art. Nur Urlaub (`vacation`) hat den Antragsablauf planned/requested/approved/rejected/cancelled/taken. Krank (`sick`) und Freistellung (`excused`) kennen nur den neuen Status `recorded` (erfasst) und `cancelled`; Sonstiges (`other`) kennt `planned`, `recorded`, `cancelled`. `Absence.status` kann jetzt `recorded` sein (Clients müssen den Wert tolerieren). `AbsenceInput.status` ist optional (Standard: Urlaub `planned`, sonst `recorded`). Ältere Clients, die für sick/excused planned/requested/approved/taken senden, werden angenommen und normalisiert (-> `recorded`; bei other requested -> planned, approved/taken -> recorded); `rejected` für sick/excused/other und `recorded` für vacation sind 400 `absence_status_invalid_for_kind`. Migration c3.allow_recorded_absence_status und c3.normalise_absence_statuses (bestehende Zeilen werden normalisiert, der alte Status bleibt in `absences.legacy_status`). ICS: Krank/Freigestellt ohne Statuszusatz, ausdrückliche Tagesmarkierungen (Urlaub, Krank, Freigestellt, Berufsschultag) und erfasste Berufsschultage erscheinen im Abo. MCP `create_absence`: `status` optional, `recorded` erlaubt. (b) Zeitkonto ohne den laufenden Tag: `TimeAccount.balanceSeconds`, `TimeWeek.summary.accountBalance*`, die kumulierten Salden und Summen der Statistik zählen die Tagesdifferenzen nur bis gestern; neue Felder `includesToday` (immer false) und `todayDeltaSeconds` (Differenz des laufenden Tages, null wenn asOf vor heute liegt oder das Konto noch nicht begonnen hat) an TimeAccount, TimeWeek.summary und TimeStatistics. `TimeWeek.summary.balanceSeconds`/`targetToDateSeconds` und die Statistik-Differenzen enthalten den heutigen Tag ebenfalls nicht mehr. Kontoanpassungen mit Datum heute zählen sofort. `provisional` ist beim Konto nur noch gesetzt, wenn ein Tag bis gestern vorläufig ist. (c) Die Konto-E-Mail ist die einzige Adresse für E-Mail-Codes der Wiederherstellung: `PUT /me/recovery/email` braucht keinen Body mehr (204 = sofort aktiv bei bestätigter Konto-Adresse, 202 = Code an die Konto-Adresse gesendet; Body `email` ist veraltet: gleich der Konto-Adresse oder, wenn diese fehlt oder unbestätigt ist, neue Konto-Adresse nach Code-Bestätigung; abweichend von einer bestätigten Konto-Adresse 409 `recovery_email_must_be_account_email`; ohne Konto-Adresse und ohne Body 409 `account_email_missing`). `GET /me/recovery` `email` ergänzt `accountEmail` und `usesAccountEmail`; `verified` bedeutet: Konto-Adresse bestätigt. Entfernen der Konto-Adresse und Wechsel wirken auf die Wiederherstellung (aus bzw. neue Adresse). Migration c3.account_email_is_recovery_email.
     v0.35.0 (P13): Plantage enthalten geordnete, überschneidungsfreie Blöcke mit start/end/kind und optional placeId/note. Neue Schreibfelder haben Vorrang vor den alten Zeitfeldern; alte Felder bleiben les- und schreibbar und werden aus Blöcken abgeleitet. Planfreigaben zeigen Blöcke ohne Ort/Notiz. Neue Fehlercodes (400): plan_blocks_invalid, plan_blocks_overlap, plan_kind_invalid, plan_note_invalid.
     v0.29.0 (R2): Rechtsprofile, Berufsschulstunden und informative Warnungen; keine Rechtsberatung.
     Vertrag Etappe 1 (Konten, Passkeys, Einladungen, Recovery). Maßgeblich für Backend (C1/C2) und
@@ -342,12 +343,17 @@ paths:
     put:
       operationId: enableEmailRecovery
       summary: Wiederherstellung per E-Mail einrichten
-      description: Startet Verifikation der Adresse; 409/501 wenn Server ohne Mailversand konfiguriert ist.
+      description: |
+        Schaltet die Wiederherstellung per E-Mail ein (frische Sitzung). Codes gehen immer an die Konto-E-Mail (ADR-0032); es gibt keine getrennte Recovery-Adresse mehr.
+        Ohne Body und bei bestätigter Konto-E-Mail ist die Wiederherstellung sofort aktiv (204). Sonst wird ein Code an die Konto-E-Mail gesendet (202) und mit
+        `/me/recovery/email/verify` bestätigt. Der Body `email` ist veraltet: gleich der bestätigten Konto-Adresse (alter Zweischritt, 202); fehlt die Konto-Adresse oder ist sie unbestätigt,
+        wird die angegebene Adresse nach Code-Bestätigung zur Konto-E-Mail; abweichend von einer bestätigten Konto-Adresse 409 `recovery_email_must_be_account_email`.
+        409 `account_email_missing` ohne Konto-Adresse und ohne Body; 409 `email_taken`; 501 wenn der Server ohne Mailversand konfiguriert ist.
       security: [ { session: [], csrf: [] } ]
       requestBody:
-        required: true
-        content: { application/json: { schema: { type: object, required: [email], properties: { email: { type: string, format: email } } } } }
-      responses: { '202': { description: Verifikationscode versendet }, '501': { $ref: '#/components/responses/NotImplemented' } }
+        required: false
+        content: { application/json: { schema: { type: object, properties: { email: { type: string, format: email, deprecated: true } } } } }
+      responses: { '202': { description: Verifikationscode an die Konto-E-Mail gesendet }, '204': { description: sofort aktiv }, '409': { $ref: '#/components/responses/Conflict' }, '501': { $ref: '#/components/responses/NotImplemented' } }
     delete:
       operationId: disableEmailRecovery
       summary: Wiederherstellung per E-Mail abschalten
@@ -357,6 +363,7 @@ paths:
     post:
       operationId: verifyRecoveryEmail
       summary: Wiederherstellungsadresse bestätigen
+      description: Bestätigt den Code; bestätigt dabei auch die Konto-E-Mail (die einzige Adresse für Codes).
       security: [ { session: [], csrf: [] } ]
       requestBody:
         required: true
@@ -570,7 +577,7 @@ paths:
     delete:
       operationId: removeProfileEmail
       summary: E-Mail-Adresse entfernen
-      description: Entfernt die Adresse und eine offene Änderung. Frische Sitzung nötig. Eine getrennt eingerichtete Recovery-E-Mail (`/me/recovery/email`) bleibt unberührt.
+      description: Entfernt die Adresse und eine offene Änderung. Frische Sitzung nötig. Die Wiederherstellung per E-Mail wird dabei abgeschaltet (die Konto-E-Mail ist die Recovery-Adresse, ADR-0032).
       security: [ { session: [], csrf: [] } ]
       responses: { '204': { description: entfernt }, '403': { $ref: '#/components/responses/Forbidden' } }
   /api/v1/me/profile/email/verify:
@@ -820,7 +827,7 @@ paths:
       description: |
         Nur lesend (v0.28.0, W3). Gruppiert die Tagesbewertung (dieselben Werte wie /time/days und /time/weeks) je Tag, ISO-Woche oder Monat: Soll, Ist, Differenz, Überstunden, kumulierter Zeitkontostand, Zeit je Art (Arbeit/Schule/Fahrt), Abwesenheitstage und Pausen.
         `basis=evaluated` (Standard) folgt den Kontoregeln (Rundung, feste Pausen); `basis=raw` entfernt nur die Rundung von erstem Beginn/letztem Ende (Gutschriften, feste Pausen und Markierungen bleiben). Der kumulierte Zeitkontostand ist immer der offizielle (bewertete) Stand von GET /time/account.
-        Differenz/Überstunden/Unterzeit zählen nur Tage bis heute; Soll gesamt und bis heute getrennt. Randbuckets enthalten nur Tage innerhalb von from..to. Höchstens 1100 Tage (sonst 400 range_too_large). Rechtsprofile und Bewertungsregeln bleiben unberührt.
+        Differenz/Überstunden/Unterzeit zählen nur abgeschlossene Tage (bis gestern, der laufende Tag steht getrennt in `todayDeltaSeconds`; v0.36.0); Soll gesamt und bis heute getrennt. Randbuckets enthalten nur Tage innerhalb von from..to. Höchstens 1100 Tage (sonst 400 range_too_large). Rechtsprofile und Bewertungsregeln bleiben unberührt.
       security: [ { session: [] } ]
       parameters:
         - { name: from, in: query, required: true, schema: { type: string, format: date } }
@@ -847,7 +854,8 @@ paths:
     get:
       operationId: getTimeAccount
       summary: Zeitkonto abrufen
-      description: Zeitkontosaldo bis einschließlich asOf (Standard heute); heutiger Tag ist vorläufig.
+      description: |
+        Zeitkontosaldo bis asOf (Standard heute). Der laufende Tag zählt nicht mit (v0.36.0, ADR-0032): die Tagesdifferenzen gelten bis gestern, damit der Saldo im Lauf des Tages nicht fällt. Die Differenz von heute steht getrennt in `todayDeltaSeconds`. Kontoanpassungen mit Datum heute zählen sofort.
       security: [ { session: [] } ]
       parameters: [ { name: asOf, in: query, schema: { type: string, format: date } } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/TimeAccount' } } } } }
@@ -1006,7 +1014,7 @@ paths:
         Ohne Anmeldung: das Token im Pfad (`<token>.ics`) ist die einzige Berechtigung (siehe docs/ARCHITEKTUR.md). Liefert nur Daten des besitzenden Kontos
         als RFC-5545-Kalender (CRLF, Zeilenfaltung bei 75 Oktetten, stabile UIDs `<art>-<id>@<Host der PUBLIC_BASE_URL>`, DTSTAMP, ganztägige Termine als
         `VALUE=DATE` mit exklusivem DTEND). Fenster: 60 Tage zurück bis 400 Tage voraus. Inhalte laut `include` des Abos; Abwesenheiten tragen den Status im Titel
-        (`Urlaub (genehmigt)`, `Urlaub (geplant)`, `Urlaub (beantragt)`, `Krank (genommen)`), Notizen und Orte werden nie ausgegeben. Abwesenheiten, Feiertage und Plan
+        (`Urlaub (genehmigt)`, `Urlaub (geplant)`, `Urlaub (beantragt)`; Krank, Freigestellt und Sonstiges ohne Statuszusatz: `Krank`, `Freigestellt`, `Abwesenheit`), ausdrückliche Tagesmarkierungen und Berufsschultage als eigene ganztägige Termine (`Urlaub`, `Krank`, `Freigestellt`, `Berufsschule`), Notizen und Orte werden nie ausgegeben. Abwesenheiten, Feiertage und Plan
         entfallen bei abgeschaltetem Modul planning. `ETag` (Hash des Inhalts) mit `If-None-Match` und 304; `Last-Modified` ist informativ;
         `Cache-Control: private, max-age=900, must-revalidate`.
       security: []
@@ -2048,7 +2056,7 @@ components:
       properties:
         recoveryCodes: { type: object, required: [active], properties: { active: { type: boolean }, remaining: { type: integer } } }
         fallbackPassword: { type: object, required: [active], properties: { active: { type: boolean } } }
-        email: { type: object, required: [available, active], properties: { available: { type: boolean, description: false wenn Server ohne Mailversand }, active: { type: boolean }, verified: { type: boolean } } }
+        email: { type: object, required: [available, active], properties: { available: { type: boolean, description: false wenn Server ohne Mailversand }, active: { type: boolean }, verified: { type: boolean, description: Konto-E-Mail bestätigt }, accountEmail: { type: [string, 'null'], description: 'Adresse, an die Codes gehen (die Konto-E-Mail, ADR-0032)' }, usesAccountEmail: { type: boolean, description: immer true } } }
     Invitation:
       type: object
       required: [id, createdAt, expiresAt, status]
@@ -2229,6 +2237,8 @@ components:
         timezone: { type: string }
         accountStart: { type: [string, 'null'], format: date }
         openingBalanceSeconds: { type: [integer, 'null'], description: Zeitkontostand am Ende des Vortags von `from` (Basislinie); null vor Kontobeginn }
+        includesToday: { type: boolean, description: 'immer false: der laufende Tag ist in keiner Differenz, Soll-bis-heute-Summe und keinem kumulierten Saldo' }
+        todayDeltaSeconds: { type: [integer, 'null'], description: 'Differenz des laufenden Tages (offizielle Bewertung); null wenn heute außerhalb von from..to liegt' }
         buckets: { type: array, items: { $ref: '#/components/schemas/StatisticsBucket' } }
         totals:
           type: object
@@ -2262,7 +2272,7 @@ components:
         legalWarningDays: { type: integer, description: Tage mit Rechtsprofil-Hinweis }
         breakHintDays: { type: integer, description: Tage mit Pausenhinweis }
         targetSeconds: { type: integer, description: Soll aller Tage des Buckets }
-        targetToDateSeconds: { type: integer, description: Soll der Tage bis heute }
+        targetToDateSeconds: { type: integer, description: Soll der abgeschlossenen Tage (bis gestern) }
         actualSeconds: { type: integer, description: Ist nach basis (ohne Gutschrift) }
         creditSeconds: { type: integer }
         evaluatedWorkSeconds: { type: integer }
@@ -2323,6 +2333,8 @@ components:
         openingSeconds: { type: integer }
         adjustmentSeconds: { type: integer }
         provisional: { type: boolean }
+        includesToday: { type: boolean, description: 'immer false: Soll und Ist des laufenden Tages sind nicht im Saldo' }
+        todayDeltaSeconds: { type: [integer, 'null'], description: 'Differenz des laufenden Tages (Ist + Gutschrift - Soll); null wenn asOf vor heute liegt oder das Konto noch nicht begonnen hat' }
     Suggestion:
       type: object
       required: [id, type, createdAt]
@@ -2481,14 +2493,14 @@ components:
         remainingAfter: { type: number, description: Resttage des Jahres von start nach diesem Vorschlag (negativ möglich) }
     AbsenceInput:
       type: object
-      required: [kind, startDate, endDate, status]
+      required: [kind, startDate, endDate]
       properties:
         kind: { type: string, enum: [vacation, sick, excused, other], description: excused = bezahlt frei ohne Urlaubsverbrauch (ADR-0013) }
         startDate: { type: string, format: date }
         endDate: { type: string, format: date }
         halfDayStart: { type: boolean, default: false, description: erster Tag nur halber Tag }
         halfDayEnd: { type: boolean, default: false, description: letzter Tag nur halber Tag }
-        status: { type: string, enum: [planned, requested, approved, rejected, cancelled, taken] }
+        status: { type: string, enum: [planned, requested, approved, rejected, cancelled, taken, recorded], description: 'Optional (Standard planned für vacation, sonst recorded). Nur vacation: planned, requested, approved, rejected, cancelled, taken. sick und excused: recorded, cancelled. other: planned, recorded, cancelled. Ältere Werte werden normalisiert (ADR-0032), siehe Vertrag 0.36.0.' }
         note: { type: [string, 'null'], maxLength: 500 }
         documentStatus: { type: string, enum: [not_needed, pending, submitted], default: not_needed }
         documentSubmittedOn: { type: [string, 'null'], format: date }
@@ -2622,13 +2634,15 @@ components:
         days: { type: array, items: { $ref: '#/components/schemas/TimeWeekDay' }, minItems: 7, maxItems: 7 }
         summary:
           type: object
-          required: [targetSeconds, targetToDateSeconds, workSeconds, creditSeconds, balanceSeconds, plannedSeconds, accountBalanceBeforeSeconds, accountBalanceAfterSeconds, accountBalanceAsOf, vacationDays, sickDays, schoolDays, holidayDays, workDays, travelSeconds, breakSeconds, averageStart, averageEnd, longestDay, provisional]
+          required: [targetSeconds, targetToDateSeconds, workSeconds, creditSeconds, balanceSeconds, includesToday, todayDeltaSeconds, plannedSeconds, accountBalanceBeforeSeconds, accountBalanceAfterSeconds, accountBalanceAsOf, vacationDays, sickDays, schoolDays, holidayDays, workDays, travelSeconds, breakSeconds, averageStart, averageEnd, longestDay, provisional]
           properties:
             targetSeconds: { type: integer }
-            targetToDateSeconds: { type: integer, description: Soll der Tage bis einschließlich heute }
+            targetToDateSeconds: { type: integer, description: Soll der abgeschlossenen Tage (bis gestern, ohne den laufenden Tag) }
             workSeconds: { type: integer }
             creditSeconds: { type: integer }
-            balanceSeconds: { type: integer, description: Summe der Tagessalden bis heute }
+            balanceSeconds: { type: integer, description: Summe der Tagessalden der abgeschlossenen Tage (bis gestern) }
+            includesToday: { type: boolean, description: 'immer false' }
+            todayDeltaSeconds: { type: [integer, 'null'], description: 'Saldo des laufenden Tages; null wenn die Woche heute nicht enthält' }
             plannedSeconds: { type: [integer, 'null'], description: null ohne jeden geplanten Tag }
             accountBalanceBeforeSeconds: { type: integer }
             accountBalanceAfterSeconds: { type: integer }

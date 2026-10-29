@@ -325,10 +325,17 @@ public struct AccountAdjustment: Equatable, Sendable {
     public init(date: LocalDate, seconds: Int) { self.date = date; self.seconds = seconds }
 }
 public struct TimeAccountResult: Equatable, Encodable, Sendable {
+    /// Requested date, at most today. The day deltas count through `asOf`, but never the still running current day (C3).
     public let asOf: LocalDate
     public let accountStart: LocalDate?
     public let balanceSeconds: Int
     public let openingSeconds: Int
     public let adjustmentSeconds: Int
     public let provisional: Bool
+    /// Always false: neither Soll nor Ist of the current day are part of `balanceSeconds`, so the balance does not drop while the
+    /// day is still running. Account adjustments dated today are included (they are explicit entries, not a running day).
+    public var includesToday = false
+    /// Delta (Ist + credit - Soll) of the running current day, shown separately; nil when `asOf` lies before today or the
+    /// account has not started yet.
+    public var todayDeltaSeconds: Int? = nil
 }

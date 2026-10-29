@@ -221,7 +221,7 @@ persönliche Tokens, Grants; Anbindung in echtem ChatGPT/Claude **nicht geprüft
 Profil (Anzeigename, E-Mail-Adresse mit Bestätigungscode, Handle nur lesend): **umgesetzt** (P1, ADR-0019; Lead-Prüfung offen).
 
 Kontowiederherstellung: **umgesetzt** – Recovery-Codes, Rückfallpasswort (Argon2id), E-Mail-Code (nur bei konfiguriertem SMTP;
-real nur gegen Mailpit/Fake geprüft), kombinierbar.
+real nur gegen Mailpit/Fake geprüft), kombinierbar. Seit C3 (ADR-0032) geht der E-Mail-Code an die Konto-E-Mail (keine getrennte Recovery-Adresse).
 
 Kontowiederherstellung beim Einrichten vom Nutzer wählbar: E-Mail-Codes, Rückfallpasswort oder
 Recovery-Codes. Passkeys bleiben primäre Anmeldung. Vorschlag: mehrere Wiederherstellungswege

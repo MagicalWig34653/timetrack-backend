@@ -183,10 +183,30 @@ struct ICSEvent {
 enum CalendarFeedBuilder {
     static let calendarName = "Timetrack"
 
+    /// Title of an absence event. Only vacation carries its request state; sick days and exemptions are plain facts
+    /// ("Krank", never "Krank (genehmigt)"), see ADR-0032.
     static func absenceLabel(kind: String, status: String) -> String {
-        let name = ["vacation": "Urlaub", "sick": "Krank", "excused": "Freistellung"][kind] ?? "Abwesenheit"
-        let state = ["planned": "geplant", "requested": "beantragt", "approved": "genehmigt", "taken": "genommen"][status] ?? status
-        return "\(name) (\(state))"
+        switch kind {
+        case "vacation":
+            let state = ["planned": "geplant", "requested": "beantragt", "approved": "genehmigt", "taken": "genommen"][status] ?? status
+            return "Urlaub (\(state))"
+        case "sick": return "Krank"
+        case "excused": return "Freigestellt"
+        default: return status == "planned" ? "Abwesenheit (geplant)" : "Abwesenheit"
+        }
+    }
+
+    /// Statuses that appear in the feed; rejected and cancelled entries do not.
+    static let visibleAbsenceStatuses: Set<String> = ["planned", "requested", "approved", "taken", "recorded"]
+
+    static func dayMarkLabel(_ mark: DayMarkKind) -> String? {
+        switch mark {
+        case .vacation: "Urlaub"
+        case .sick: "Krank"
+        case .excused: "Freigestellt"
+        case .schoolCredit: "Berufsschule"
+        case .none, .holiday: nil
+        }
     }
 
     static func planBlockLabel(_ kind: String) -> String {
@@ -208,25 +228,47 @@ enum CalendarFeedBuilder {
         calendar.timeZone = models.last?.timezone.flatMap { TimeZone(identifier: $0) } ?? TimeZone(identifier: "Europe/Berlin")!
         let today = LocalDate.local(now, calendar: calendar)
         let from = today.addingDays(-CalendarFeedRules.pastDays), to = today.addingDays(CalendarFeedRules.futureDays)
-        let snapshot = try await scope.days.snapshot(window: from...today, includeSegments: wantsTracked)
+        // The window reaches into the future so that explicit day marks (sick, exempt, school) planned ahead are visible; segments only exist up to today.
+        let snapshot = try await scope.days.snapshot(window: from...to, includeSegments: wantsTracked)
         let planning = snapshot.planningEnabled
         var events: [ICSEvent] = []
         var modified = feed.createdAt
 
+        var absenceDays = Set<String>()
+        var schoolDays = Set<String>()
         if planning, options.contains("absences") {
             let rows = try await AbsenceRecord.query(on: scope.db).filter(\.$accountId == scope.accountId)
                 .filter(\.$startDate <= to.description).filter(\.$endDate >= from.description).sort(\.$startDate).all()
-            for row in rows where ["planned", "requested", "approved", "taken"].contains(row.status) {
+            for row in rows where visibleAbsenceStatuses.contains(row.status) {
                 let start = try LocalDate(row.startDate), end = try LocalDate(row.endDate)
                 var notes: [String] = []
                 if row.halfDayStart { notes.append(start == end ? "Halber Tag" : "Erster Tag halb") }
                 if row.halfDayEnd, start != end { notes.append("Letzter Tag halb") }
                 modified = max(modified, row.updatedAt)
+                if row.kind != "other" { var cursor = start; while cursor <= end { absenceDays.insert(cursor.description); cursor = cursor.addingDays(1) } }
                 events.append(.init(uid: "absence-\(try row.requireID().uuidString.lowercased())@\(host)", start: start, end: end,
                                     summary: absenceLabel(kind: row.kind, status: row.status),
                                     description: notes.isEmpty ? nil : notes.joined(separator: ". "), category: "Abwesenheit",
-                                    transparent: false, status: row.status == "approved" || row.status == "taken" ? "CONFIRMED" : "TENTATIVE",
+                                    transparent: false, status: ["approved", "taken", "recorded"].contains(row.status) ? "CONFIRMED" : "TENTATIVE",
                                     stamp: row.updatedAt))
+            }
+        }
+
+        // C3: explicit day marks (vacation, sick, exempt, school day) that no absence entry already shows. Notes and places never leave the account.
+        if options.contains("absences") {
+            let marked = snapshot.preferences.compactMap { key, value -> (LocalDate, DayMarkKind)? in
+                guard dayMarkLabel(value.mark) != nil, !absenceDays.contains(key), let date = try? LocalDate(key), date >= from, date <= to else { return nil }
+                return (date, value.mark)
+            }.sorted { $0.0 < $1.0 }
+            var index = 0
+            while index < marked.count {
+                let (first, mark) = marked[index]
+                var last = first
+                while index + 1 < marked.count, marked[index + 1].1 == mark, marked[index + 1].0 == last.addingDays(1) { index += 1; last = marked[index].0 }
+                if mark == .schoolCredit { var cursor = first; while cursor <= last { schoolDays.insert(cursor.description); cursor = cursor.addingDays(1) } }
+                events.append(.init(uid: "daymark-\(first)-\(mark.rawValue)@\(host)", start: first, end: last, summary: dayMarkLabel(mark)!, description: nil,
+                                    category: mark == .schoolCredit ? "Berufsschule" : "Abwesenheit", transparent: false, status: "CONFIRMED", stamp: feed.createdAt))
+                index += 1
             }
         }
 
@@ -267,12 +309,19 @@ enum CalendarFeedBuilder {
             let prepared = snapshot.prepared()
             var date = from
             while date <= today {
-                if let result = try? prepared.evaluate(date, now: now), result.evaluatedWorkSeconds > 0 {
-                    var lines = ["Arbeitszeit (bewertet): " + hours(result.evaluatedWorkSeconds)]
-                    if result.rawWorkSeconds != result.evaluatedWorkSeconds { lines.append("Rohzeit: " + hours(result.rawWorkSeconds)) }
-                    events.append(.init(uid: "tracked-\(date)@\(host)", start: date, end: date, summary: "Erfasst: " + hours(result.evaluatedWorkSeconds),
-                                        description: lines.joined(separator: "\n"), category: "Zeiterfassung", transparent: true,
-                                        status: "CONFIRMED", stamp: feed.createdAt))
+                if let result = try? prepared.evaluate(date, now: now) {
+                    // C3: a school day shows even when the work time of the day is 0 (credit only).
+                    if !schoolDays.contains(date.description), result.mark == .schoolCredit || result.segments.contains(where: { $0.kind == .school }) {
+                        events.append(.init(uid: "school-\(date)@\(host)", start: date, end: date, summary: "Berufsschule", description: nil,
+                                            category: "Berufsschule", transparent: false, status: "CONFIRMED", stamp: feed.createdAt))
+                    }
+                    if result.evaluatedWorkSeconds > 0 {
+                        var lines = ["Arbeitszeit (bewertet): " + hours(result.evaluatedWorkSeconds)]
+                        if result.rawWorkSeconds != result.evaluatedWorkSeconds { lines.append("Rohzeit: " + hours(result.rawWorkSeconds)) }
+                        events.append(.init(uid: "tracked-\(date)@\(host)", start: date, end: date, summary: "Erfasst: " + hours(result.evaluatedWorkSeconds),
+                                            description: lines.joined(separator: "\n"), category: "Zeiterfassung", transparent: true,
+                                            status: "CONFIRMED", stamp: feed.createdAt))
+                    }
                 }
                 date = date.addingDays(1)
             }

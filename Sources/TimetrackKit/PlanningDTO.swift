@@ -88,7 +88,9 @@ struct AbsenceInputDTO: Decodable, Sendable {
     var endDate: LocalDate
     var halfDayStart: Bool?
     var halfDayEnd: Bool?
-    var status: AbsenceStatus
+    /// Optional since C3 (ADR-0032): omitted = `planned` for vacation, `recorded` for the other kinds. Older clients that send
+    /// the vacation workflow for sick/excused/other get a normalised status (`AbsenceSemantics.normalise`).
+    var status: AbsenceStatus?
     var note: String?
     var documentStatus: String?
     var documentSubmittedOn: LocalDate?

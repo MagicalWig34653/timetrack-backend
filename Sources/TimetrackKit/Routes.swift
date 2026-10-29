@@ -128,9 +128,11 @@ func registerRoutes(_ app: Application, service: AuthService) {
         try await service.fallbackPassword(nil, context: req.authContext, on: req.db); return .noContent
     }
     api.put("me", "recovery", "email") { req async throws -> HTTPStatus in
-        struct Input: Content { let email: String }
+        // C3: the body is optional and deprecated; codes always go to the account e-mail (204: active at once, 202: code mailed).
+        struct Input: Content { let email: String? }
         try await limit(req)
-        try await service.enableEmail(req.content.decode(Input.self).email, context: req.authContext, on: req.db); return .accepted
+        let input = req.body.data == nil ? Input(email: nil) : try req.content.decode(Input.self)
+        return try await service.enableEmail(input.email, context: req.authContext, on: req.db) ? .noContent : .accepted
     }
     api.delete("me", "recovery", "email") { req async throws -> HTTPStatus in
         try await service.disableEmail(req.authContext, on: req.db); return .noContent

@@ -52,6 +52,9 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
     app.migrations.add(AddLegalWorkProfile())
     app.migrations.add(AddCompanyDays())
     app.migrations.add(AddAdjustmentCreatedAt())
+    app.migrations.add(AllowRecordedAbsenceStatus())
+    app.migrations.add(NormaliseAbsenceStatuses())
+    app.migrations.add(UnifyRecoveryEmail())
     // Fluent installs the migrate command, including --revert and the global --yes flag.
     // Do not auto-apply migrations before explicit migrate/revert commands.
     if config.autoMigrate && !app.environment.arguments.contains("migrate") {

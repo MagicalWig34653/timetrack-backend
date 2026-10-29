@@ -230,16 +230,20 @@ enum McpTools {
 
         // schedule:write
         write("create_absence", "Create absence", "schedule:write",
-              "Creates a vacation, sick or other absence with status planned or requested. Approval, rejection and cancellation are not available here. "
+              "Creates a vacation, sick or other absence. Vacation is planned or requested; sick days are recorded when they happen (never requested or approved); "
+              + "other absences are planned or recorded. Approval, rejection and cancellation are not available here. "
               + "Fails with an overlap error if the days are already covered.", idempotent: false,
               McpSchema.object(["kind": McpSchema.string("Absence kind", enumeration: ["vacation", "sick", "other"]),
                                 "startDate": McpSchema.date("First day"), "endDate": McpSchema.date("Last day"),
                                 "halfDayStart": McpSchema.boolean("First day counts as half day"), "halfDayEnd": McpSchema.boolean("Last day counts as half day"),
-                                "status": McpSchema.string("planned or requested", enumeration: ["planned", "requested"]),
+                                "status": McpSchema.string("Vacation: planned or requested. Sick and other: recorded (other also planned). Optional; defaults to planned for vacation and recorded otherwise",
+                                                           enumeration: ["planned", "requested", "recorded"]),
                                 "note": McpSchema.string("Optional note", maxLength: 200)],
-                               required: ["kind", "startDate", "endDate", "status"])) { ctx, args in
+                               required: ["kind", "startDate", "endDate"])) { ctx, args in
             let input = try decodeArguments(AbsenceInputDTO.self, args)
             guard input.kind != .excused else { throw APIError.invalid }
+            // Approval stays with the owner in the app: through MCP vacation can only be planned or requested.
+            if input.kind == .vacation, let status = input.status, status != .planned, status != .requested { throw APIError.invalid }
             return try McpJSON.encoding(await ctx.time.absences.create(input))
         },
         write("set_plan_day", "Set plan day", "schedule:write",

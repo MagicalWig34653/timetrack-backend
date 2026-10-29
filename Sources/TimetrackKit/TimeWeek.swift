@@ -68,11 +68,16 @@ struct TimeWeekDTO: Encodable, Sendable {
     struct LongestDay: Encodable, Sendable { var date: LocalDate; var seconds: Int }
     struct Summary: Encodable, Sendable {
         var targetSeconds: Int
-        /// Target of the days up to and including today (the whole target for a past week, 0 for a future week).
+        /// Target of the completed days, i.e. up to and including yesterday (the whole target for a past week, 0 for a future
+        /// week). The running current day is not included (C3, ADR-0032); see `todayDeltaSeconds`.
         var targetToDateSeconds: Int
         var workSeconds: Int; var creditSeconds: Int
-        /// Sum of the day balances up to today.
+        /// Sum of the day balances of the completed days (through yesterday); the current day is reported in `todayDeltaSeconds`.
         var balanceSeconds: Int
+        /// Always false: today's Soll and Ist are in neither `balanceSeconds`, `targetToDateSeconds` nor the account balances.
+        var includesToday = false
+        /// Balance of the running current day (Ist + credit - Soll); nil when the week does not contain today.
+        var todayDeltaSeconds: Int?
         var plannedSeconds: Int?
         var accountBalanceBeforeSeconds: Int; var accountBalanceAfterSeconds: Int; var accountBalanceAsOf: LocalDate
         /// Half-day vacation counts 0.5.
@@ -87,6 +92,7 @@ struct TimeWeekDTO: Encodable, Sendable {
             try c.encode(targetSeconds, forKey: .targetSeconds); try c.encode(targetToDateSeconds, forKey: .targetToDateSeconds)
             try c.encode(workSeconds, forKey: .workSeconds); try c.encode(creditSeconds, forKey: .creditSeconds)
             try c.encode(balanceSeconds, forKey: .balanceSeconds); try c.encode(plannedSeconds, forKey: .plannedSeconds)
+            try c.encode(includesToday, forKey: .includesToday); try c.encode(todayDeltaSeconds, forKey: .todayDeltaSeconds)
             try c.encode(accountBalanceBeforeSeconds, forKey: .accountBalanceBeforeSeconds)
             try c.encode(accountBalanceAfterSeconds, forKey: .accountBalanceAfterSeconds); try c.encode(accountBalanceAsOf, forKey: .accountBalanceAsOf)
             try c.encode(vacationDays, forKey: .vacationDays); try c.encode(sickDays, forKey: .sickDays)
@@ -100,6 +106,7 @@ struct TimeWeekDTO: Encodable, Sendable {
             case targetSeconds, targetToDateSeconds, workSeconds, creditSeconds, balanceSeconds, plannedSeconds
             case accountBalanceBeforeSeconds, accountBalanceAfterSeconds, accountBalanceAsOf, vacationDays, sickDays, schoolDays
             case holidayDays, workDays, travelSeconds, breakSeconds, averageStart, averageEnd, longestDay, provisional
+            case includesToday, todayDeltaSeconds
         }
     }
     var week: String; var from: LocalDate; var to: LocalDate
@@ -201,9 +208,10 @@ struct TimeWeekService: Sendable {
             total + (day.absences.contains { $0.kind == .vacation && $0.halfDay } ? 0.5 : 1)
         }
         return .init(targetSeconds: days.reduce(0) { $0 + $1.targetSeconds },
-                     targetToDateSeconds: days.filter { !$0.isFuture }.reduce(0) { $0 + $1.targetSeconds },
+                     targetToDateSeconds: days.filter { !$0.isFuture && !$0.isToday }.reduce(0) { $0 + $1.targetSeconds },
                      workSeconds: days.reduce(0) { $0 + $1.workSeconds }, creditSeconds: days.reduce(0) { $0 + $1.creditSeconds },
-                     balanceSeconds: days.reduce(0) { $0 + ($1.balanceSeconds ?? 0) },
+                     balanceSeconds: days.filter { !$0.isToday }.reduce(0) { $0 + ($1.balanceSeconds ?? 0) },
+                     todayDeltaSeconds: days.first { $0.isToday }?.balanceSeconds,
                      plannedSeconds: hasPlan ? days.reduce(0) { $0 + ($1.plannedSeconds ?? 0) } : nil,
                      accountBalanceBeforeSeconds: before.balanceSeconds, accountBalanceAfterSeconds: after.balanceSeconds, accountBalanceAsOf: after.asOf,
                      vacationDays: vacation, sickDays: days.filter { $0.mark == "sick" }.count,

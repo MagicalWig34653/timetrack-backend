@@ -6,10 +6,12 @@ public enum VacationEngineError: Error, Equatable, Sendable {
 }
 
 public enum AbsenceKind: String, Codable, Sendable { case vacation, sick, excused, other }
+/// `recorded` (C3, ADR-0032) is the neutral state of absences that are not requested or approved (sick, excused, other):
+/// the entry states what happened or was ordered. Only vacation uses the request workflow.
 public enum AbsenceStatus: String, Codable, Sendable {
-    case planned, requested, approved, rejected, cancelled, taken
+    case planned, requested, approved, rejected, cancelled, taken, recorded
     public var isActive: Bool { self != .rejected && self != .cancelled }
-    public var isBooked: Bool { self == .approved || self == .taken }
+    public var isBooked: Bool { self == .approved || self == .taken || self == .recorded }
 }
 
 /// One current version per ID; historical revisions must not be supplied to the engine.

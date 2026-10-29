@@ -265,8 +265,10 @@ final class TimeEngineTests: XCTestCase {
                 AccountAdjustment(date: try LocalDate("2026-10-11"), seconds: 99_999)])
         XCTAssertEqual(result.asOf, today)
         XCTAssertEqual(result.adjustmentSeconds, -600)
-        XCTAssertEqual(result.balanceSeconds, 3600 - 600 + 28_800 - 27_720 - 27_720)
-        XCTAssertTrue(result.provisional)
+        // C3: the running day (14.10.) is not part of the balance.
+        XCTAssertEqual(result.balanceSeconds, 3600 - 600 + 28_800 - 27_720)
+        XCTAssertFalse(result.includesToday)
+        XCTAssertFalse(result.provisional)
         let past = try TimeEngine.accountBalance(accountStart: day, asOf: day, today: today, evaluations: [evaluate([])])
         XCTAssertFalse(past.provisional)
         XCTAssertThrowsError(try TimeEngine.accountBalance(accountStart: day, asOf: day, today: today, evaluations: []))

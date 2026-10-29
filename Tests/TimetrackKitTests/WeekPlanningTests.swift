@@ -273,7 +273,8 @@ extension AuthTests {
         XCTAssertEqual(running.days.map(\.isFuture), [false, false, true, true, true, true, true])
         XCTAssertTrue(running.days[1].provisional); XCTAssertTrue(running.days[1].isToday); XCTAssertNil(running.days[4].balanceSeconds)
         XCTAssertTrue(running.summary.provisional)
-        XCTAssertEqual(running.summary.targetToDateSeconds, 2 * 27_720)
+        XCTAssertEqual(running.summary.targetToDateSeconds, 27_720) // C3: the running day (Tuesday) is not part of it
+        XCTAssertEqual(running.summary.includesToday, false)
         XCTAssertEqual(running.summary.targetSeconds, 138_600)
     }
 

@@ -223,7 +223,7 @@ extension AuthTests {
         let account = try object(await api(app, context, .GET, "time/account?asOf=2026-10-09"))
         XCTAssertEqual(account["balanceSeconds"] as? Int, -69300)
         // Planned absences leave the account untouched; deleting the booked ones restores the full deficit.
-        for absence in [full, sick] { try await api(app, context, .PUT, "absences/" + (absence["id"] as! String), absenceBody(absence["startDate"] as! String, kind: absence["kind"] as! String, status: "planned"), version: 1) }
+        for absence in [full, sick] { try await api(app, context, .PUT, "absences/" + (absence["id"] as! String), absenceBody(absence["startDate"] as! String, kind: absence["kind"] as! String, status: (absence["kind"] as! String) == "vacation" ? "planned" : "cancelled"), version: 1) }
         let after = try object(await api(app, context, .GET, "time/account?asOf=2026-10-09"))
         XCTAssertEqual(after["balanceSeconds"] as? Int, -69300 - 2 * 27720)
         // time/days keeps its 93-day limit.

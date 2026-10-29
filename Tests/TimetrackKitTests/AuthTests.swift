@@ -178,7 +178,7 @@ final class AuthTests: XCTestCase, @unchecked Sendable {
             let correct = await sender.lastCode()
             for _ in 0..<5 { await expect("unauthorized") { _ = try await service.recoveryComplete(.init(recoveryId: limited.recoveryId, proof: "wrong"), on: app.db) } }
             await expect("unauthorized") { _ = try await service.recoveryComplete(.init(recoveryId: limited.recoveryId, proof: correct), on: app.db) }
-            try await service.enableEmail("new@example.test", context: context, on: app.db)
+            try await service.enableEmail(nil, context: context, on: app.db)
             await expect("invalid_code") { try await service.verifyEmail(verification, context: context, on: app.db) }
             try await service.disableEmail(context, on: app.db)
             checkFalse(try await service.recoveryStatus(context, on: app.db).email.active)

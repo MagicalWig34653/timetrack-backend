@@ -98,13 +98,18 @@ struct AccountService: Sendable {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: models.last?.timezone ?? "Europe/Berlin")!
         let today = LocalDate.local(now, calendar: calendar)
-        let end = min(asOf ?? today, today)
+        // C3 (ADR-0032): `reported` is the requested date (at most today); the day deltas count only through `end`, which is
+        // never later than yesterday, so the still running current day does not move the balance (it is returned separately).
+        let reported = min(asOf ?? today, today)
+        let end = min(reported, today.addingDays(-1))
         let opening = adjustments.first { $0.kind == "opening" }
-        guard let start = try accountStart(snapshot: snapshot, adjustments: adjustments, calendar: calendar) else { return .init(asOf: end, accountStart: nil, balanceSeconds: 0, openingSeconds: 0, adjustmentSeconds: 0, provisional: false) }
+        guard let start = try accountStart(snapshot: snapshot, adjustments: adjustments, calendar: calendar) else { return .init(asOf: reported, accountStart: nil, balanceSeconds: 0, openingSeconds: 0, adjustmentSeconds: 0, provisional: false) }
         let prepared = snapshot.prepared()
         let carried = carry.flatMap { $0.through >= start && $0.through <= end ? $0 : nil }
         var evaluations: [DayEvaluationResult] = []; var date = carried.map { $0.through.addingDays(1) } ?? start
         while date <= end { evaluations.append(try prepared.evaluate(date, now: now)); date = date.addingDays(1) }
+        // Today is shown separately, only when the requested date reaches it and the account has started.
+        let todayDelta = reported == today && start <= today ? (try? prepared.evaluate(today, now: now))?.deltaSeconds : nil
         let corrections = try adjustments.filter { $0.kind == "correction" }.map { try AccountAdjustment(date: LocalDate($0.date), seconds: $0.seconds) }
         // Reject unrepresentable totals before invoking the engine's integer reduction.
         func sum(_ values: [Int]) throws -> Int {
@@ -113,20 +118,23 @@ struct AccountService: Sendable {
                 guard !overflow else { throw APIError.invalid }; return next
             }
         }
-        let correctionTotal = try sum(corrections.filter { $0.date >= start && $0.date <= end }.map(\.seconds))
+        let correctionTotal = try sum(corrections.filter { $0.date >= start && $0.date <= reported }.map(\.seconds))
         let evaluationTotal = try sum(evaluations.map(\.deltaSeconds) + [carried?.evaluationSeconds ?? 0])
         _ = try sum([opening?.seconds ?? 0, correctionTotal, evaluationTotal])
         if let carried {
             // Same reduction as `TimeEngine.accountBalance` with the carried days folded into one summand.
-            let adjustment = corrections.filter { $0.date >= start && $0.date <= end }.reduce(0) { saturatingAdd($0, $1.seconds) }
+            let adjustment = corrections.filter { $0.date >= start && $0.date <= reported }.reduce(0) { saturatingAdd($0, $1.seconds) }
             let delta = saturatingAdd(evaluations.reduce(0) { saturatingAdd($0, $1.deltaSeconds) }, carried.evaluationSeconds)
-            return TimeAccountResult(asOf: end, accountStart: start,
+            return TimeAccountResult(asOf: reported, accountStart: start,
                                      balanceSeconds: saturatingAdd(saturatingAdd(opening?.seconds ?? 0, adjustment), delta),
                                      openingSeconds: opening?.seconds ?? 0, adjustmentSeconds: adjustment,
-                                     provisional: (start <= today && end == today) || carried.provisional || evaluations.contains { $0.provisional })
+                                     provisional: carried.provisional || evaluations.contains { $0.provisional },
+                                     todayDeltaSeconds: todayDelta)
         }
-        return try TimeEngine.accountBalance(accountStart: start, asOf: end, today: today, openingSeconds: opening?.seconds ?? 0,
+        var result = try TimeEngine.accountBalance(accountStart: start, asOf: reported, today: today, openingSeconds: opening?.seconds ?? 0,
             evaluations: evaluations, adjustments: corrections)
+        result.todayDeltaSeconds = todayDelta
+        return result
     }
     /// First day of the time account: the opening balance date, else the first work model or live segment, moved back to
     /// the earliest stored adjustment if that lies earlier. Shared by the balance and the statistics series.

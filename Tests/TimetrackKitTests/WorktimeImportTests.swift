@@ -324,7 +324,7 @@ extension AuthTests {
         let absences = try list(await api(app, owner, .GET, "absences?from=2026-10-01&to=2026-10-31"))
         try await eq(absences.count, 3)
         try await eq(absences.first { $0["kind"] as? String == "excused" }?["countedHalfDays"] as? Int, 0)
-        try await eq(absences.first { $0["startDate"] as? String == "2026-10-14" }?["status"] as? String, "taken")
+        try await eq(absences.first { $0["startDate"] as? String == "2026-10-14" }?["status"] as? String, "recorded") // C3: no workflow for sick/excused
         try await eq(absences.first { $0["startDate"] as? String == "2026-10-16" }?["status"] as? String, "approved")
         let holidays = try list(await api(app, owner, .GET, "calendar/holidays?year=2026"))
         try await eq(holidays.filter { $0["source"] as? String == "custom" }.count, 1)

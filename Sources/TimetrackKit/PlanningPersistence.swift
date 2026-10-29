@@ -47,6 +47,8 @@ final class AbsenceRecord: Model, @unchecked Sendable {
     @Field(key: "half_day_start") var halfDayStart: Bool
     @Field(key: "half_day_end") var halfDayEnd: Bool
     @Field(key: "status") var status: String
+    /// C3: the status before the migration normalised it (sick/excused/other); nil for rows that were not changed.
+    @OptionalField(key: "legacy_status") var legacyStatus: String?
     @OptionalField(key: "note") var note: String?
     @Field(key: "document_status") var documentStatus: String
     @OptionalField(key: "document_submitted_on") var documentSubmittedOn: String?

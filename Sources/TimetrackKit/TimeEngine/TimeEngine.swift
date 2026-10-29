@@ -162,7 +162,9 @@ public enum TimeEngine {
     public static func accountBalance(accountStart: LocalDate, asOf: LocalDate, today: LocalDate,
                                       openingSeconds: Int = 0, evaluations: [DayEvaluationResult],
                                       adjustments: [AccountAdjustment] = []) throws -> TimeAccountResult {
-        let cutoff = min(asOf, today)
+        // C3: the current day is still running; its Soll and Ist stay out of the balance (it is shown separately).
+        let cutoff = min(asOf, today.addingDays(-1))
+        let reported = min(asOf, today)
         let included = evaluations.filter { $0.date >= accountStart && $0.date <= cutoff }
         guard Set(included.map(\.date)).count == included.count else { throw TimeEngineError.duplicateEvaluationDate }
         var date = accountStart
@@ -171,11 +173,11 @@ public enum TimeEngine {
             guard dates.contains(date) else { throw TimeEngineError.missingEvaluation(date) }
             date = date.addingDays(1)
         }
-        let adjustment = adjustments.filter { $0.date >= accountStart && $0.date <= cutoff }.reduce(0) { saturatingAdd($0, $1.seconds) }
-        return TimeAccountResult(asOf: cutoff, accountStart: accountStart,
+        let adjustment = adjustments.filter { $0.date >= accountStart && $0.date <= reported }.reduce(0) { saturatingAdd($0, $1.seconds) }
+        return TimeAccountResult(asOf: reported, accountStart: accountStart,
                                  balanceSeconds: saturatingAdd(saturatingAdd(openingSeconds, adjustment), included.reduce(0) { saturatingAdd($0, $1.deltaSeconds) }),
                                  openingSeconds: openingSeconds, adjustmentSeconds: adjustment,
-                                 provisional: (accountStart <= today && cutoff == today) || included.contains { $0.provisional })
+                                 provisional: included.contains { $0.provisional })
     }
 
     /// Builds every day (including empty workdays). The account time zone explicitly defines today's cutoff.
@@ -195,7 +197,7 @@ public enum TimeEngine {
         let prepared = TimeEvaluationSnapshot(models: models, segments: segments,
             preferences: Dictionary(uniqueKeysWithValues: preferences.map { ($0.key.description, $0.value) }),
             planningEnabled: false).prepared()
-        while date <= min(asOf, today) {
+        while date <= min(asOf, today.addingDays(-1)) {
             guard try selectModel(for: date, models: models) != nil else { throw TimeEngineError.missingModel(date) }
             evaluations.append(try prepared.evaluate(date, now: now))
             date = date.addingDays(1)

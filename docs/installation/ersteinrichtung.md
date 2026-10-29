@@ -47,7 +47,7 @@ Läuft das Backend nicht oder auf einem anderen Knoten, gibt es im Swarm eine Al
 
 - **Recovery-Codes:** einmal verwendbare Codes. Sie werden einmal angezeigt; speichere sie im Passwortmanager oder drucke sie aus.
 - **Rückfallpasswort:** ein langes Passwort, nur für den Notfall. Im Passwortmanager ablegen.
-- **E-Mail-Codes:** ein Code per E-Mail. Setzt voraus, dass der Server E-Mail versenden kann (SMTP, siehe unten) und deine Adresse bestätigt ist.
+- **E-Mail-Codes:** ein Code per E-Mail an deine **Konto-E-Mail-Adresse** (es gibt keine getrennte Wiederherstellungs-Adresse). Setzt voraus, dass der Server E-Mail versenden kann (SMTP, siehe unten) und die Konto-Adresse bestätigt ist; ist sie es noch nicht, bestätigst du sie beim Einschalten mit einem Code. Ändert oder entfernst du die Konto-Adresse später, gilt die neue Adresse bzw. die E-Mail-Wiederherstellung wird abgeschaltet.
 
 Lege später unter Einstellungen, Passkeys einen zweiten Passkey auf einem anderen Gerät an.
 
