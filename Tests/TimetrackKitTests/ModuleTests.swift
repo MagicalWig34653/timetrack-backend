@@ -8,7 +8,8 @@ extension AuthTests {
          (.planning, ["vacation/settings", "absences?from=2026-10-01&to=2026-10-31", "calendar/holidays?year=2026", "vacation/suggestions?from=2026-10-01&to=2026-10-31", "plan/days?from=2026-10-01&to=2026-10-31", "shares", "shares/incoming"]),
          (.transfer, ["export/time?from=2026-10-01&to=2026-10-02&format=csv", "import-templates", "admin/storage"]),
          (.automation, ["me/device-tokens", "me/trigger-links", "time/suggestions"]),
-         (.mcp, ["me/api-tokens", "me/oauth-grants"])]
+         (.mcp, ["me/api-tokens", "me/oauth-grants"]),
+         (.groups, ["groups/polls", "groups/orders", "groups/catalogs"])]
     }
     func setModules(_ app: Application, _ context: AuthContext, _ values: [String: Bool], server: Bool = false) async throws {
         try await api(app, context, .PUT, server ? "admin/modules" : "me/modules", ["modules": values])
@@ -17,7 +18,7 @@ extension AuthTests {
         let (a, _) = try await registered(auth, db: app.db)
         let b = try await second(app, auth, a)
         let defaults = try await api(app, a, .GET, "modules").content.decode([ModuleStatus].self)
-        XCTAssertEqual(defaults.count, 5); XCTAssertTrue(defaults.allSatisfy { $0.effective && !$0.lockedByOperator })
+        XCTAssertEqual(defaults.count, 6); XCTAssertTrue(defaults.allSatisfy { $0.effective && !$0.lockedByOperator })
         for (key, routes) in moduleRoutes {
             for route in routes { try await api(app, a, .GET, route) }
             try await setModules(app, a, [key.rawValue: false])
@@ -34,7 +35,7 @@ extension AuthTests {
             XCTAssertEqual(try errorCode(locked), "module_locked")
             try await setModules(app, a, [key.rawValue: true], server: true)
         }
-        try await eq(try await ModuleAudit.query(on: app.db).count(), 10)
+        try await eq(try await ModuleAudit.query(on: app.db).count(), 12)
         let audits = try await ModuleAudit.query(on: app.db).all()
         XCTAssertTrue(audits.allSatisfy { $0.actorId == a.account.id && $0.oldEnabled != $0.newEnabled })
         try await api(app, b, .GET, "admin/modules", nil, .forbidden)
@@ -53,7 +54,7 @@ extension AuthTests {
         XCTAssertThrowsError(try Configuration(environment: ["MODULES_DISABLED": "reports,unknown"])) { error in
             XCTAssertTrue(String(describing: error).contains("MODULES_DISABLED"))
         }
-        try await withApp(environment: ["MODULES_DISABLED": " reports,planning,transfer,automation,mcp "]) { app, auth in
+        try await withApp(environment: ["MODULES_DISABLED": " reports,planning,transfer,automation,mcp,groups "]) { app, auth in
             let (a, _) = try await registered(auth, db: app.db)
             let status = try await api(app, a, .GET, "modules").content.decode([ModuleStatus].self)
             XCTAssertTrue(status.allSatisfy { !$0.effective && !$0.serverEnabled && $0.accountEnabled && $0.lockedByOperator })
