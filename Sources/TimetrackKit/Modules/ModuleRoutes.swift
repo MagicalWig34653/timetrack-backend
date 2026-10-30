@@ -9,6 +9,8 @@ struct ModuleGuard: AsyncMiddleware {
         if parts.first == "mcp" || parts.first == "oauth" || (parts.first == ".well-known" && parts.dropFirst().first?.hasPrefix("oauth-") == true) { return [.mcp] }
         guard parts.starts(with: ["api", "v1"]), parts.count > 2 else { return [] }
         switch parts[2] {
+        case "groups": return [.groups]
+        case "public": return parts.dropFirst(3).first == "groups" ? [.groups] : []
         case "reports": return [.reports]
         case "vacation", "calendar", "plan", "shares": return [.planning]
         case "absences": return parts.count > 4 && parts[4] == "attachments" ? [.planning, .transfer] : [.planning]
@@ -31,7 +33,8 @@ struct ModuleGuard: AsyncMiddleware {
         if !keys.isEmpty {
             // Server visibility takes precedence; bearer account rejection remains 401 in authenticators.
             try await auth.modules.require(keys, account: nil, on: req.db)
-            if let token = req.cookies["tt_session"]?.string {
+            // Public link routes have no account context: a stale or foreign session cookie must not matter there.
+            if let token = req.cookies["tt_session"]?.string, !req.url.path.hasPrefix("/api/v1/public/") {
                 let context = try await auth.authenticate(token, for: req)
                 try context.normal()
                 try await auth.modules.require(keys, account: context.account.requireID(), on: req.db)

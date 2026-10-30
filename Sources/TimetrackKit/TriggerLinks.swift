@@ -285,7 +285,7 @@ func registerTriggerRoutes(_ app: Application, auth: AuthService) {
 // MARK: Log scrubbing
 
 public enum TriggerTokenScrubber {
-    private static let linkPattern = try! NSRegularExpression(pattern: "(/t/|/ics/)[A-Za-z0-9_-]{16,}")
+    private static let linkPattern = try! NSRegularExpression(pattern: "(/t/|/ics/|/g/|/api/v1/public/groups/)[A-Za-z0-9_-]{16,}")
     /// APNs device tokens (hex, 64 or more characters), PEM private keys and JWTs (provider tokens), see ADR-0030.
     private static let apnsPatterns: [(NSRegularExpression, String)] = [
         (try! NSRegularExpression(pattern: "(?<![0-9A-Za-z])[0-9a-fA-F]{64,}(?![0-9A-Za-z])"), "[redacted]"),
@@ -297,7 +297,7 @@ public enum TriggerTokenScrubber {
     /// handler as a second line of defence; the application itself never logs request paths or push tokens.
     public static func scrub(_ text: String) -> String {
         var result = text
-        if result.contains("/t/") || result.contains("/ics/") {
+        if result.contains("/t/") || result.contains("/ics/") || result.contains("/g/") || result.contains("/public/groups/") {
             result = linkPattern.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "$1[redacted]")
         }
         for (pattern, template) in apnsPatterns {

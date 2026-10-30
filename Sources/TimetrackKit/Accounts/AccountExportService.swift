@@ -64,6 +64,39 @@ struct AccountExportService: Sendable {
             ["id": .string(f.id?.uuidString ?? ""), "label": .string(f.label), "include": .array(f.options.map(JSONValue.string)),
              "createdAt": Self.iso(f.createdAt), "expiresAt": Self.iso(f.expiresAt), "revokedAt": Self.iso(f.revokedAt), "lastUsedAt": Self.iso(f.lastUsedAt)]
         })
+        // Groups module (G1): own polls, rounds and catalogs. Votes and entries carry the display names that participants typed;
+        // link tokens, their hashes and edit secrets are never exported.
+        let pollRows = try await GroupPollRecord.query(on: db).filter(\.$accountId == id).sort(\.$createdAt).all()
+        var pollExport: [[String: JSONValue]] = []
+        for poll in pollRows {
+            let pollId = try poll.requireID()
+            let dto = try await PollCore.dto(poll, on: db, now: Date(), owner: true)
+            pollExport.append(["id": .string(pollId.uuidString), "title": .string(poll.title), "description": Self.opt(poll.details), "kind": .string(poll.kind),
+                "choiceMode": .string(poll.choiceMode), "timeZone": Self.opt(poll.timeZone), "deadline": Self.iso(poll.deadline), "hideResults": .bool(poll.hideResults),
+                "closedAt": Self.iso(poll.closedAt), "finalOptionId": Self.uuid(poll.finalOptionId), "createdAt": Self.iso(poll.createdAt),
+                "options": .array(dto.options.map { .object(["id": .string($0.id.uuidString), "label": Self.opt($0.label), "date": Self.opt($0.date),
+                                                              "startTime": Self.opt($0.startTime), "endTime": Self.opt($0.endTime)]) }),
+                "votes": .array((dto.votes ?? []).map { vote in .object(["name": .string(vote.name), "createdAt": Self.iso(vote.createdAt),
+                    "answers": .array(vote.answers.map { .object(["optionId": .string($0.optionId.uuidString), "answer": .string($0.answer)]) })]) })])
+        }
+        try table("polls", pollExport)
+        let orderRows = try await GroupOrderRecord.query(on: db).filter(\.$accountId == id).sort(\.$createdAt).all()
+        var orderExport: [[String: JSONValue]] = []
+        for order in orderRows {
+            let entries = try await OrderCore.entries(try order.requireID(), on: db)
+            orderExport.append(["id": .string(order.id?.uuidString ?? ""), "title": .string(order.title), "note": Self.opt(order.note), "deadline": Self.iso(order.deadline),
+                "closedAt": Self.iso(order.closedAt), "catalogId": Self.uuid(order.catalogId), "createdAt": Self.iso(order.createdAt),
+                "entries": .array(entries.map { .object(["name": .string($0.name), "item": .string($0.item), "note": Self.opt($0.note),
+                    "quantity": .number(Double($0.quantity)), "priceCents": $0.priceCents.map { .number(Double($0)) } ?? .null, "createdAt": Self.iso($0.createdAt)]) })])
+        }
+        try table("orders", orderExport)
+        var catalogExport: [[String: JSONValue]] = []
+        for catalog in try await GroupCatalogRecord.query(on: db).filter(\.$accountId == id).sort(\.$name).all() {
+            let items = try await GroupCatalogItemRecord.query(on: db).filter(\.$catalogId == catalog.requireID()).sort(\.$position).all()
+            catalogExport.append(["id": .string(catalog.id?.uuidString ?? ""), "name": .string(catalog.name), "createdAt": Self.iso(catalog.createdAt),
+                "items": .array(items.map { .object(["name": .string($0.name), "priceCents": $0.priceCents.map { .number(Double($0)) } ?? .null]) })])
+        }
+        try table("catalogs", catalogExport)
         let absences = try await AbsenceRecord.query(on: db).filter(\.$accountId == id).sort(\.$startDate).all()
         try table("absences", absences.map { a in
             ["id": .string(a.id?.uuidString ?? ""), "kind": .string(a.kind), "startDate": .string(a.startDate), "endDate": .string(a.endDate),

@@ -2,7 +2,7 @@ import Fluent
 import Vapor
 
 public enum ModuleKey: String, Codable, CaseIterable, Sendable {
-    case reports, planning, transfer, automation, mcp
+    case reports, planning, transfer, automation, mcp, groups
 
     static func parseDisabled(_ value: String) throws -> Set<ModuleKey> {
         var keys = Set<ModuleKey>()
@@ -10,7 +10,7 @@ public enum ModuleKey: String, Codable, CaseIterable, Sendable {
             let name = part.trimmingCharacters(in: .whitespacesAndNewlines)
             if name.isEmpty { continue }
             guard let key = ModuleKey(rawValue: name) else {
-                throw ConfigurationError(key: "MODULES_DISABLED", reason: "unknown module; expected reports, planning, transfer, automation or mcp")
+                throw ConfigurationError(key: "MODULES_DISABLED", reason: "unknown module; expected reports, planning, transfer, automation, mcp or groups")
             }
             keys.insert(key)
         }

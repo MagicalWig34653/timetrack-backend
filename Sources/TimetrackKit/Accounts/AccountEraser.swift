@@ -68,6 +68,16 @@ enum AccountEraser {
         byColumn(RevisionRecord.self), byColumn(AutomationEventRecord.self), byColumn(TimerEventRecord.self), byColumn(SuggestionRecord.self),
         byColumn(SegmentRecord.self), byColumn(PlanDayRecord.self), byColumn(PlaceRecord.self), byColumn(DayPreferenceRecord.self),
         byColumn(AdjustmentRecord.self), byColumn(TimeChangeMark.self), byColumn(WorkModelRecord.self), byColumn(DeviceTokenRecord.self), byColumn(TriggerLinkRecord.self), byColumn(CalendarFeedRecord.self),
+        // Groups module: trees are deleted children first (answers, votes, options, entries, catalog items).
+        Wipe(schema: GroupPollRecord.schema) { id, db in
+            try await GroupPurge.polls(try await ids(GroupPollRecord.self, of: id, on: db), on: db)
+        },
+        Wipe(schema: GroupOrderRecord.schema) { id, db in
+            try await GroupPurge.orders(try await ids(GroupOrderRecord.self, of: id, on: db), on: db)
+        },
+        Wipe(schema: GroupCatalogRecord.schema) { id, db in
+            try await GroupPurge.catalogs(try await ids(GroupCatalogRecord.self, of: id, on: db), on: db)
+        },
         // Reports.
         byColumn(ReportSourceRecord.self), byColumn(ReportEntryRecord.self), byColumn(ReportWeekStatusRecord.self), byColumn(LearningFieldRecord.self),
         // Absences, vacation, calendar, shares in both directions.

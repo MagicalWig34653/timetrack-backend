@@ -61,7 +61,7 @@ enum ModuleMessages {
         case "module_disabled": "Dieses Modul ist deaktiviert."
         case "module_locked": "Dieses Modul ist durch den Server gesperrt."
         case "database_unavailable": "Der Server kann die Datenbank gerade nicht erreichen. Bitte gleich noch einmal versuchen."
-        default: MailDiagnosis.messages[code]
+        default: GroupMessages.german[code] ?? MailDiagnosis.messages[code]
         }
     }
 }

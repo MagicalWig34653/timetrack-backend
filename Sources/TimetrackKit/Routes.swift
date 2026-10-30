@@ -6,6 +6,7 @@ func registerRoutes(_ app: Application, service: AuthService) {
     registerTimeRoutes(app, auth: service)
     registerTriggerRoutes(app, auth: service)
     registerCalendarFeedRoutes(app, auth: service)
+    registerGroupRoutes(app, auth: service)
     registerPlanningRoutes(app, auth: service)
     registerExportRoutes(app, auth: service)
     registerImportRoutes(app, auth: service)

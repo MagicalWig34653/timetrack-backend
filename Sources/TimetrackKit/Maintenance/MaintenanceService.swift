@@ -41,6 +41,8 @@ struct MaintenanceService: Sendable {
             ("rate_limit_events", { try await self.rateLimitEvents(now) }),
             ("mcp_audit", { try await self.mcpAudit(now) }),
             ("push_subscriptions", { try await self.pushSubscriptions(now) }),
+            ("group_polls", { try await self.groupPolls(now) }),
+            ("group_orders", { try await self.groupOrders(now) }),
             ("import_jobs", { try await self.importJobs(now) }),
             ("stored_files", { try await self.storedFiles(now) }),
             ("blob_orphans", { try await self.blobOrphans() }),
@@ -138,6 +140,42 @@ struct MaintenanceService: Sendable {
     func mcpAudit(_ now: Date) async throws -> Int {
         let cutoff = now.addingTimeInterval(-Double(options.mcpAuditRetentionDays) * 86_400)
         return try await purge(McpAuditRecord.self) { $0.filter(\.$occurredAt < cutoff) }
+    }
+
+    // MARK: Groups (ADR-0033)
+
+    /// Polls and rounds that were closed (or whose deadline passed) more than `GROUPS_RETENTION_DAYS` ago, with all children.
+    /// Items that are still open without a deadline are never removed.
+    func groupPolls(_ now: Date) async throws -> Int {
+        let cutoff = now.addingTimeInterval(-Double(options.groupsRetentionDays) * 86_400)
+        var total = 0
+        for _ in 0..<MaintenanceRetention.maxRounds {
+            let ids = try await GroupPollRecord.query(on: db).group(.or) { or in
+                or.group(.and) { $0.filter(\.$closedAt != nil).filter(\.$closedAt < cutoff) }
+                or.group(.and) { $0.filter(\.$closedAt == nil).filter(\.$deadline != nil).filter(\.$deadline < cutoff) }
+            }.limit(MaintenanceRetention.batch).all().compactMap(\.id)
+            if ids.isEmpty { break }
+            try await GroupPurge.polls(ids, on: db)
+            total += ids.count
+            if ids.count < MaintenanceRetention.batch { break }
+        }
+        return total
+    }
+
+    func groupOrders(_ now: Date) async throws -> Int {
+        let cutoff = now.addingTimeInterval(-Double(options.groupsRetentionDays) * 86_400)
+        var total = 0
+        for _ in 0..<MaintenanceRetention.maxRounds {
+            let ids = try await GroupOrderRecord.query(on: db).group(.or) { or in
+                or.group(.and) { $0.filter(\.$closedAt != nil).filter(\.$closedAt < cutoff) }
+                or.group(.and) { $0.filter(\.$closedAt == nil).filter(\.$deadline != nil).filter(\.$deadline < cutoff) }
+            }.limit(MaintenanceRetention.batch).all().compactMap(\.id)
+            if ids.isEmpty { break }
+            try await GroupPurge.orders(ids, on: db)
+            total += ids.count
+            if ids.count < MaintenanceRetention.batch { break }
+        }
+        return total
     }
 
     // MARK: Push and imports

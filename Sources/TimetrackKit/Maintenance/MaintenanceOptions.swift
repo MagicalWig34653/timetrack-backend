@@ -7,6 +7,8 @@ public struct MaintenanceOptions: Sendable {
     public let intervalMinutes: Int
     /// Retention of `mcp_audit` rows in days.
     public let mcpAuditRetentionDays: Int
+    /// Closed or expired polls and order rounds are deleted this many days after closing (or after their deadline).
+    public let groupsRetentionDays: Int
     /// Open import jobs (uploaded/mapped) older than this many hours are marked `failed` and lose their file.
     public let importTimeoutHours: Int
     /// Storage objects without metadata are only removed once they are older than this many hours.
@@ -25,6 +27,7 @@ public struct MaintenanceOptions: Sendable {
         self.environment = environment
         intervalMinutes = try integer("MAINTENANCE_INTERVAL_MINUTES", 60, 0...10_080)
         mcpAuditRetentionDays = try integer("MCP_AUDIT_RETENTION_DAYS", 90, 1...3650)
+        groupsRetentionDays = try integer("GROUPS_RETENTION_DAYS", GroupLimits.defaultRetentionDays, 1...3650)
         importTimeoutHours = try integer("IMPORT_JOB_TIMEOUT_HOURS", 168, 1...8760)
         orphanGraceHours = try integer("STORAGE_ORPHAN_GRACE_HOURS", 168, 1...8760)
     }
