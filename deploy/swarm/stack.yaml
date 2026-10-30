@@ -83,7 +83,7 @@ services:
       PUSH_ALLOWED_HOSTS: ${PUSH_ALLOWED_HOSTS:-}               # OPTIONAL: replaces the built-in push-service allow-list (ADR-0011)
       NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-true}     # OPTIONAL: background reminder runner
       # ---- Modules and maintenance ----
-      MODULES_DISABLED: ${MODULES_DISABLED:-}                   # OPTIONAL: reports,planning,transfer,automation,mcp
+      MODULES_DISABLED: ${MODULES_DISABLED:-}                   # OPTIONAL: reports,planning,transfer,automation,mcp,groups
       MAINTENANCE_INTERVAL_MINUTES: ${MAINTENANCE_INTERVAL_MINUTES:-60}   # OPTIONAL: 0 = off (0..10080)
       MCP_AUDIT_RETENTION_DAYS: ${MCP_AUDIT_RETENTION_DAYS:-90}            # OPTIONAL (1..3650)
       IMPORT_JOB_TIMEOUT_HOURS: ${IMPORT_JOB_TIMEOUT_HOURS:-168}           # OPTIONAL (1..8760)

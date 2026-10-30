@@ -77,6 +77,7 @@ und keine Nutzerentscheidungen (siehe jeweilige Statuszeile). Nummer 0004 existi
 | 0028 | JArbSchG-Rechtsprofil und Berufsschulgutschrift | R2-Worktree; fachliche Prüfung offen | [ADR-0028](decisions/ADR-0028-jugendarbeitsschutzprofile.md) |
 | 0031 | Mehrere Planblöcke pro Tag, Alt-API und Migration | Umsetzungsentscheidung (P13); Prüfung im Worktree | [ADR-0031](decisions/ADR-0031-planbloecke.md) |
 | 0032 | Abwesenheitsstatus je Art, Zeitkonto ohne laufenden Tag, Konto-E-Mail = Recovery-Adresse | Umsetzungsentscheidung (C3); Prüfung im Worktree | [ADR-0032](decisions/ADR-0032-abwesenheitsstatus-zeitkonto-heute-recovery-mail.md) |
+| 0033 | Gruppenmodul: öffentliche Umfragen und Bestellrunden per Link (Token, Bearbeitungsschlüssel, Missbrauchsschutz, Aufbewahrung) | Umsetzungsentscheidung (G1); Prüfung im Worktree | [ADR-0033](decisions/ADR-0033-gruppenmodul.md) |
 
 ## Namensgebung und Kennungen (Entscheidung 17.10.2026)
 

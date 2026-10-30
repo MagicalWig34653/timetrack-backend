@@ -290,7 +290,7 @@ Verbindliche Beschreibung, Archivformat, Nachweise: [BETRIEB.md](BETRIEB.md) Abs
 
 ## 16. Modulschalter
 
-`MODULES_DISABLED` (kommagetrennt) sperrt Funktionen für alle Konten: `reports` (Berichte/Berichtsheft), `planning`, `transfer` (Import/Export), `automation`, `mcp`. Gesperrte Module verschwinden in der PWA und antworten auf der API mit einem Fehler; Benutzer können Module zusätzlich für sich selbst abschalten (ADR-0012). Beispiel: Nur ohne KI-Anbindung `MODULES_DISABLED=mcp`. Ungültige Namen verhindern den Start. Änderung: `.env`, neu ausrollen.
+`MODULES_DISABLED` (kommagetrennt) sperrt Funktionen für alle Konten: `reports` (Berichte/Berichtsheft), `planning`, `transfer` (Import/Export), `automation`, `mcp`, `groups` (öffentliche Umfragen und Bestellrunden per Link, ADR-0033). Gesperrte Module verschwinden in der PWA und antworten auf der API mit einem Fehler; Benutzer können Module zusätzlich für sich selbst abschalten (ADR-0012). Beispiel: Nur ohne KI-Anbindung `MODULES_DISABLED=mcp`. Ungültige Namen verhindern den Start. Änderung: `.env`, neu ausrollen.
 
 ## 17. Bekannte Lücken
 

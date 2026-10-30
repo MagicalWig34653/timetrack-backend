@@ -1,5 +1,9 @@
 # Arbeitsplan und Agent-Übergabe
 
+## G1 – Gruppenmodul Backend (30.10.2026)
+
+Claude-Agent, Worktree `../timetrack-backend-wt/g1`, Branch `g1-polls` (Basis main 5006d0d). Umfang: öffentliche Umfragen, Bestellrunden, Kataloge, Modul `groups`, Aufbewahrung, Export/Löschung, Vertrag 0.37.0, ADR-0033. Status: umgesetzt, Lead-Prüfung offen, nicht gemergt. Nächster Schritt: PWA-Paket (Route `/g/<token>`, Besitzerbereich, Service-Worker-Ausnahme, Modulschalter-Eintrag).
+
 ## P13 – Mehrere Planblöcke pro Tag (24.10.2026)
 
 Codex ist alleiniger Schreiber im Worktree `worktree-agent-a34fccae7f0e10f5a` auf gleichnamigem Branch. Umfang: Planmodell und Migration, REST-/MCP-Vertrag 0.29.0, Wochen- und Plan/Ist-Auswertung, Freigaben, Kontoexport, Tests und Dokumentation. API-Vertrag: `contracts/openapi.yaml`; Abnahme: Alt-Clients bleiben les-/schreibfähig, neue Blöcke validiert, Freigaben ohne Orte/Notizen, Migration erhält darstellbare Pausen, vollständige serielle Swift-Tests grün. Derzeit Umsetzung im Worktree, Integration und Client-Arbeit offen; Details `handoffs/P13.md`. Kein paralleler Schreiber in diesen Dateien. Nächster Schritt: Testfehler beheben, vollständige Testsuite ausführen, dann PWA-/Apple-Handoff übernehmen.

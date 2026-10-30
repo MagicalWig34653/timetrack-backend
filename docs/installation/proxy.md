@@ -172,6 +172,10 @@ Standard ist `X-Forwarded-For`. Das Backend liest die Liste **von rechts** und �
 - Traefik und Caddy setzen `X-Real-IP` nicht von sich aus zuverlässig; verwende dort `X-Forwarded-For`.
 - Steht davor ein weiterer Proxy (z. B. ein CDN), muss **jeder** vertrauenswürdige Hop den Header überschreiben oder `X-Forwarded-For` genutzt werden.
 
+### Gruppen-Links (`/g/…`, `/api/v1/public/groups/…`)
+
+Freigabelinks des Gruppenmoduls (ADR-0033) tragen ihr Geheimnis im Pfad `/g/<token>` (Seite) und `/api/v1/public/groups/<token>/…` (API). Wie bei den Auslöse-Links gilt: Zugriffsprotokolle des Proxys dürfen diese Pfade nicht im Klartext enthalten. Ein geleakter Link erlaubt Namenseinträge bis zu den Grenzen, aber keinen Zugriff auf Konten; der Besitzer kann den Link jederzeit erneuern.
+
 ### Auslöse-Links (`/t/…`) und Zugriffsprotokolle
 
 Auslöse-Links (ADR-0027) tragen ihr Geheimnis im Pfad `GET /t/<token>/<aktion>`. Das Backend protokolliert diesen Pfad nicht, ein Reverse Proxy normalerweise schon. Schwärzen Sie den Pfad `/t/` im Zugriffsprotokoll des Proxys oder protokollieren Sie ihn nicht (z. B. Traefik: `accessLog.filters`/Feldschwärzung für `RequestPath`; nginx: eigenes `log_format` ohne `$request_uri` für diesen `location /t/`). Wer Zugriff auf solche Protokolle hat, könnte sonst Links benutzen; ein Link lässt sich im Profil sofort widerrufen.

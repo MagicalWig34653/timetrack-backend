@@ -20,6 +20,7 @@ Offene fachliche Details jeweils vor dem betroffenen Schritt klären, nicht das 
 | 4e/4f Arbeitszeit-Tabelle, Designsprache | erledigt (Backend + PWA) | C21–C23, L18–L22 | Export nicht in Excel/LibreOffice geöffnet; Tabellenformat nur mit synthetischer Mappe belegt |
 | B Konten, Wartung, Betrieb, Profil, Darstellung | erledigt (Backend + PWA) | B1–B5, L23, P1, P2, D2 | Produktionsstack nie real getestet; echte E-Mail-Zustellung; Restore auf anderem Host |
 | 5 Native Apps | implementiert (A1–A8), Geräteprüfung offen | A1 Kern + macOS, A2 AASA, A3 iOS/iPadOS, A4/A5 watchOS + Komplikation, A6/A6b–d Design, Symbole, Darstellung, A7 Widgets/Live Activity/Control Center, A8 Konto-Akzent | Echtgeräte (Passkey, WatchConnectivity, Widgets, Intents), TestFlight-Upload (wartet auf Produktions-AASA), macOS-Sichtprüfung; Kalenderbrücke, KI-Worker, Standortautomatik fehlen |
+| 4g Gruppenmodul (ADR-0033) | Backend umgesetzt (G1, Branch `g1-polls`), PWA offen | G1 | PWA-Seiten (`/g/<token>`, Besitzerbereich), Service-Worker-Ausnahme, MariaDB-Lauf siehe `handoffs/G1-backend.md`; nicht gemergt |
 | 6 Später | nicht begonnen | – | alles |
 | Veröffentlichung/CI (W1) | Repos öffentlich (17.10.), Workflows laufen | W1 | Backend-CI und Apple-CI rot (siehe `STATUS.md`), Release-Pfad nie ausgeführt |
 
@@ -128,7 +129,7 @@ Push-Zustellung auf echten Geräten (nur Fake-Dienst); strukturierter PDF-Altber
 
 ## 4d. Modulschalter (ergänzt 15.10.2026)
 
-Betreiber und Konto können Module abschalten (ADR-0012, Vertrag ab v0.9.0): `reports`, `planning`, `transfer`, `automation`, `mcp`.
+Betreiber und Konto können Module abschalten (ADR-0012, Vertrag ab v0.9.0): `reports`, `planning`, `transfer`, `automation`, `mcp` (seit G1/Vertrag 0.37.0 zusätzlich `groups`).
 Stand: erledigt (C20 Backend, L17 PWA, Echt-E2E in L18). Abnahme: je Modul Tests für Server aus, Konto aus, beide an, Operator-Override (`MODULES_DISABLED`) und Tokens; Daten bleiben beim Abschalten erhalten. Belegt automatisiert; Betrieb mit abgeschalteten Modulen auf Echtgeräten ungeprüft.
 
 ## 5. Native Apps
