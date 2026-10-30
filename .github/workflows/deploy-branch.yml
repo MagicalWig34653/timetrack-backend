@@ -1,0 +1,33 @@
+# Keeps the source-free `deploy` branch (stack, scripts, operation docs) in sync with main.
+name: Deploy branch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "deploy/swarm/**"
+      - "docs/DEPLOYMENT.md"
+      - "docs/UPDATE.md"
+      - "docs/BETRIEB.md"
+      - "docs/installation/**"
+      - "scripts/sync-deploy-branch.sh"
+      - ".github/workflows/deploy-branch.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Rebuild and push deploy
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git branch --track main origin/main 2>/dev/null || true
+          git fetch origin deploy:refs/heads/deploy 2>/dev/null || true
+          scripts/sync-deploy-branch.sh --push
