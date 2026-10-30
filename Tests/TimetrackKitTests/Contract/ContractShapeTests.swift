@@ -128,6 +128,36 @@ extension AuthTests {
                 for issue in JSONSchemaValidator(document: document, reportUndeclaredProperties: true).validate(json, against: ["$ref": "#/components/schemas/Health"]) { problems.append("GET /health: \(issue)") }
             } else { problems.append("GET /health: body is not JSON") }
             // Error bodies share the documented Error schema.
+            // G1 groups module: owner and public shapes (ADR-0033).
+            let groupPoll = try self.object(await self.api(app, admin, .POST, "groups/polls", ["title": "T", "kind": "date", "choiceMode": "multi", "timeZone": "Europe/Berlin",
+                "options": [["date": "2027-03-01", "startTime": "18:00", "endTime": "19:00"], ["date": "2027-03-02"]]], .created))
+            let pollId = try XCTUnwrap(groupPoll["id"] as? String), pollToken = try XCTUnwrap(groupPoll["token"] as? String)
+            let optionIds = self.gArray(groupPoll["options"]).compactMap { $0["id"] as? String }
+            try await self.contractCheck(app, admin, document, .GET, template: "groups/polls", path: "groups/polls", problems: &problems)
+            try await self.contractCheck(app, admin, document, .GET, template: "groups/polls/{id}", path: "groups/polls/" + pollId, problems: &problems)
+            try await self.contractCheck(app, nil, document, .GET, template: "public/groups/{token}", path: "public/groups/" + pollToken, problems: &problems)
+            let voted = try await self.contractCheck(app, nil, document, .POST, template: "public/groups/{token}/votes", path: "public/groups/\(pollToken)/votes",
+                body: ["name": "Anna", "answers": [["optionId": optionIds[0], "answer": "yes"], ["optionId": optionIds[1], "answer": "maybe"]]], status: .created, problems: &problems)
+            _ = voted
+            try await self.contractCheck(app, nil, document, .GET, template: "public/groups/{token}", path: "public/groups/" + pollToken, problems: &problems)
+            try await self.contractCheck(app, admin, document, .POST, template: "groups/polls/{id}/rotate-token", path: "groups/polls/\(pollId)/rotate-token", problems: &problems)
+            try await self.contractCheck(app, admin, document, .POST, template: "groups/polls/{id}/close", path: "groups/polls/\(pollId)/close", problems: &problems)
+            let groupCatalog = try self.object(await self.api(app, admin, .POST, "groups/catalogs", ["name": "K", "items": [["name": "Döner", "priceCents": 650]]], .created))
+            let catalogId = try XCTUnwrap(groupCatalog["id"] as? String)
+            try await self.contractCheck(app, admin, document, .GET, template: "groups/catalogs", path: "groups/catalogs", problems: &problems)
+            try await self.contractCheck(app, admin, document, .GET, template: "groups/catalogs/{id}", path: "groups/catalogs/" + catalogId, problems: &problems)
+            let groupOrder = try self.object(await self.api(app, admin, .POST, "groups/orders", ["title": "Dönerstag", "catalogId": catalogId], .created))
+            let orderId = try XCTUnwrap(groupOrder["id"] as? String), orderToken = try XCTUnwrap(groupOrder["token"] as? String)
+            let groupEntry = try await self.contractCheck(app, nil, document, .POST, template: "public/groups/{token}/entries", path: "public/groups/\(orderToken)/entries",
+                body: ["name": "Bob", "item": "Döner", "priceCents": 650, "quantity": 2], status: .created, problems: &problems)
+            let groupEntryId = try XCTUnwrap(((try self.object(groupEntry))["entry"] as? [String: Any])?["id"] as? String)
+            try await self.contractCheck(app, nil, document, .POST, template: "public/groups/{token}/entries/{entryId}/take", path: "public/groups/\(orderToken)/entries/\(groupEntryId)/take",
+                body: ["name": "Cleo"], status: .created, problems: &problems)
+            try await self.contractCheck(app, nil, document, .GET, template: "public/groups/{token}", path: "public/groups/" + orderToken, problems: &problems)
+            try await self.contractCheck(app, admin, document, .GET, template: "groups/orders", path: "groups/orders", problems: &problems)
+            try await self.contractCheck(app, admin, document, .GET, template: "groups/orders/{id}", path: "groups/orders/" + orderId, problems: &problems)
+            try await self.contractCheck(app, admin, document, .GET, template: "groups/orders/suggestions", path: "groups/orders/suggestions", problems: &problems)
+            try await self.contractCheck(app, nil, document, .GET, template: "public/groups/{token}", path: "public/groups/" + String(repeating: "Z", count: 43), status: .notFound, problems: &problems)
             try await self.contractCheck(app, nil, document, .GET, template: "work-models", path: "work-models", status: .unauthorized, problems: &problems)
             try await check(.GET, "work-models/{id}", "work-models/" + UUID().uuidString, nil, .notFound)
         }

@@ -1,8 +1,9 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.36.0
+  version: 0.37.0
   description: |
+    v0.37.0 (G1, ADR-0033): Modul `groups` (sechster Modulschlüssel, ModuleKey/ModuleStatus). Öffentliche Umfragen (Termin- und Textumfragen, Einzel-/Mehrfachwahl, yes/maybe/no) und Bestellrunden (z. B. Dönerstag) mit Katalogen. Besitzer-API unter /api/v1/groups/{polls,orders,catalogs} (Sitzung + CSRF, Modul groups); öffentliche API unter /api/v1/public/groups/{token}/… ohne Anmeldung: das 256-Bit-Token ist die einzige Berechtigung (nur als Hash gespeichert, per rotate-token erneuerbar), Teilnehmer geben einen Anzeigenamen an und ändern ihre Stimme/ihren Eintrag mit einem Bearbeitungsschlüssel (Header X-Edit-Secret, nur als Hash gespeichert). Antworten enthalten keine Kontodaten, immer Cache-Control no-store und X-Robots-Tag noindex. Ratenbegrenzung je Client und Link (429 Retry-After). Freigabeseite der PWA: /g/<token>. Aufbewahrung: beendete/abgelaufene Umfragen und Runden werden nach GROUPS_RETENTION_DAYS (Standard 90) vom Aufräumjob gelöscht; Kontoexport polls/orders/catalogs, Kontolöschung entfernt alles. Neue Fehlercodes: group_closed, group_full, name_taken (409), answers_invalid, deadline_in_past (400), edit_secret_invalid (403), too_many_polls, too_many_orders, too_many_catalogs (409). Neue Migration g1.create_groups.
     v0.36.0 (C3, ADR-0032): (a) Abwesenheitsstatus je Art. Nur Urlaub (`vacation`) hat den Antragsablauf planned/requested/approved/rejected/cancelled/taken. Krank (`sick`) und Freistellung (`excused`) kennen nur den neuen Status `recorded` (erfasst) und `cancelled`; Sonstiges (`other`) kennt `planned`, `recorded`, `cancelled`. `Absence.status` kann jetzt `recorded` sein (Clients müssen den Wert tolerieren). `AbsenceInput.status` ist optional (Standard: Urlaub `planned`, sonst `recorded`). Ältere Clients, die für sick/excused planned/requested/approved/taken senden, werden angenommen und normalisiert (-> `recorded`; bei other requested -> planned, approved/taken -> recorded); `rejected` für sick/excused/other und `recorded` für vacation sind 400 `absence_status_invalid_for_kind`. Migration c3.allow_recorded_absence_status und c3.normalise_absence_statuses (bestehende Zeilen werden normalisiert, der alte Status bleibt in `absences.legacy_status`). ICS: Krank/Freigestellt ohne Statuszusatz, ausdrückliche Tagesmarkierungen (Urlaub, Krank, Freigestellt, Berufsschultag) und erfasste Berufsschultage erscheinen im Abo. MCP `create_absence`: `status` optional, `recorded` erlaubt. (b) Zeitkonto ohne den laufenden Tag: `TimeAccount.balanceSeconds`, `TimeWeek.summary.accountBalance*`, die kumulierten Salden und Summen der Statistik zählen die Tagesdifferenzen nur bis gestern; neue Felder `includesToday` (immer false) und `todayDeltaSeconds` (Differenz des laufenden Tages, null wenn asOf vor heute liegt oder das Konto noch nicht begonnen hat) an TimeAccount, TimeWeek.summary und TimeStatistics. `TimeWeek.summary.balanceSeconds`/`targetToDateSeconds` und die Statistik-Differenzen enthalten den heutigen Tag ebenfalls nicht mehr. Kontoanpassungen mit Datum heute zählen sofort. `provisional` ist beim Konto nur noch gesetzt, wenn ein Tag bis gestern vorläufig ist. (c) Die Konto-E-Mail ist die einzige Adresse für E-Mail-Codes der Wiederherstellung: `PUT /me/recovery/email` braucht keinen Body mehr (204 = sofort aktiv bei bestätigter Konto-Adresse, 202 = Code an die Konto-Adresse gesendet; Body `email` ist veraltet: gleich der Konto-Adresse oder, wenn diese fehlt oder unbestätigt ist, neue Konto-Adresse nach Code-Bestätigung; abweichend von einer bestätigten Konto-Adresse 409 `recovery_email_must_be_account_email`; ohne Konto-Adresse und ohne Body 409 `account_email_missing`). `GET /me/recovery` `email` ergänzt `accountEmail` und `usesAccountEmail`; `verified` bedeutet: Konto-Adresse bestätigt. Entfernen der Konto-Adresse und Wechsel wirken auf die Wiederherstellung (aus bzw. neue Adresse). Migration c3.account_email_is_recovery_email.
     v0.35.0 (P13): Plantage enthalten geordnete, überschneidungsfreie Blöcke mit start/end/kind und optional placeId/note. Neue Schreibfelder haben Vorrang vor den alten Zeitfeldern; alte Felder bleiben les- und schreibbar und werden aus Blöcken abgeleitet. Planfreigaben zeigen Blöcke ohne Ort/Notiz. Neue Fehlercodes (400): plan_blocks_invalid, plan_blocks_overlap, plan_kind_invalid, plan_note_invalid.
     v0.29.0 (R2): Rechtsprofile, Berufsschulstunden und informative Warnungen; keine Rechtsberatung.
@@ -1910,6 +1911,342 @@ paths:
       description: Standard-Bemerkungsregeln des Import-Profils worktime_workbook (ADR-0013).
       security: [ { session: [] } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/WorktimeRemarkRule' } } } } } }
+  /api/v1/groups/polls:
+    get:
+      operationId: listPolls
+      summary: Eigene Umfragen auflisten
+      description: Umfragen des Kontos (Modul groups), neueste zuerst. Der Freigabelink steht nie in der Liste.
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/PollSummary' } } } } } }
+    post:
+      operationId: createPoll
+      summary: Umfrage anlegen
+      description: |
+        Legt eine öffentliche Umfrage an. `kind` `text` (freie Antwortmöglichkeiten, `label`) oder `date` (Terminvorschläge mit `date`, optional `startTime`/`endTime`
+        als lokale Uhrzeit HH:mm, Zeitzone in `timeZone`). `choiceMode` `single` (genau eine Stimme) oder `multi`. Bei Terminumfragen antworten Teilnehmer je Option
+        mit yes, maybe oder no. Höchstens 50 Optionen, 200 Umfragen je Konto (409 too_many_polls); Titel höchstens 120, Optionen 200 Zeichen.
+        Das Token (`token`) und der Pfad (`path`, `/g/<token>`) stehen nur in dieser Antwort und in der Antwort von rotate-token (ADR-0033).
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PollInput' } } } }
+      responses:
+        '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/Poll' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/groups/polls/{id}:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get:
+      operationId: getPoll
+      summary: Eigene Umfrage mit allen Stimmen abrufen
+      description: Besitzeransicht; die Stimmen sind auch bei `hideResults` sichtbar. Das Token wird nicht erneut ausgegeben.
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Poll' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    patch:
+      operationId: patchPoll
+      summary: Umfrage ändern
+      description: Merge-Patch für `title`, `description`, `deadline` (null entfernt die Frist; eine Frist in der Vergangenheit ist 400 deadline_in_past) und `hideResults`. Optionen sind unveränderlich.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PollPatch' } } } }
+      responses: { '200': { description: geändert, content: { application/json: { schema: { $ref: '#/components/schemas/Poll' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '404': { $ref: '#/components/responses/NotFound' } }
+    delete:
+      operationId: deletePoll
+      summary: Umfrage mit allen Stimmen löschen
+      description: Löscht Umfrage, Optionen und Stimmen endgültig; der Link antwortet danach mit 404.
+      security: [ { session: [], csrf: [] } ]
+      responses: { '204': { description: gelöscht }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/groups/polls/{id}/close:
+    post:
+      operationId: closePoll
+      summary: Umfrage beenden
+      description: Beendet die Umfrage; danach sind für Teilnehmer keine Änderungen mehr möglich und die Ergebnisse werden sichtbar. Wiederholen ist ein No-op.
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '200': { description: beendet, content: { application/json: { schema: { $ref: '#/components/schemas/Poll' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/groups/polls/{id}/reopen:
+    post:
+      operationId: reopenPoll
+      summary: Umfrage wieder öffnen
+      description: Hebt das Beenden auf; eine bereits verstrichene Frist wird dabei entfernt.
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '200': { description: geöffnet, content: { application/json: { schema: { $ref: '#/components/schemas/Poll' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/groups/polls/{id}/final:
+    post:
+      operationId: setPollFinalOption
+      summary: Endgültige Option der Umfrage festlegen
+      description: Setzt `finalOptionId` und beendet die Umfrage. `optionId` null nimmt die Wahl zurück (die Umfrage bleibt beendet). Eine fremde Option ist 400.
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [optionId], properties: { optionId: { type: [string, 'null'], format: uuid } } } } } }
+      responses: { '200': { description: gesetzt, content: { application/json: { schema: { $ref: '#/components/schemas/Poll' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/groups/polls/{id}/rotate-token:
+    post:
+      operationId: rotatePollToken
+      summary: Link der Umfrage erneuern
+      description: Erzeugt einen neuen Freigabelink. Der alte Link antwortet sofort mit 404; Stimmen und Bearbeitungsschlüssel bleiben. Token und `path` stehen nur in dieser Antwort.
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '200': { description: erneuert, content: { application/json: { schema: { $ref: '#/components/schemas/Poll' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/groups/polls/{id}/votes/{voteId}:
+    delete:
+      operationId: removePollVote
+      summary: Stimme aus der Umfrage entfernen
+      description: Der Besitzer kann jede Stimme entfernen (auch nach dem Beenden).
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' }, { name: voteId, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '204': { description: entfernt }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/groups/orders:
+    get:
+      operationId: listOrders
+      summary: Eigene Bestellrunden auflisten
+      description: Bestellrunden des Kontos (Modul groups), neueste zuerst.
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/OrderSummary' } } } } } }
+    post:
+      operationId: createOrder
+      summary: Bestellrunde anlegen
+      description: |
+        Legt eine Bestellrunde an (z. B. Dönerstag). Optional `note`, `deadline` (Zukunft, sonst 400 deadline_in_past) und ein eigener Katalog `catalogId`
+        (fremde Kataloge sind 400). Höchstens 200 Runden je Konto (409 too_many_orders). Token und `path` (`/g/<token>`) stehen nur in dieser Antwort.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/OrderInput' } } } }
+      responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/Order' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/v1/groups/orders/suggestions:
+    get:
+      operationId: listOrderItemSuggestions
+      summary: Häufige frühere Gerichte vorschlagen
+      description: Die bis zu 20 häufigsten Gerichte aus den letzten 50 eigenen Runden (Vorschläge für neue Runden, nur Komfort).
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ItemSuggestion' } } } } } }
+  /api/v1/groups/orders/{id}:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get:
+      operationId: getOrder
+      summary: Eigene Bestellrunde abrufen
+      description: Besitzeransicht mit Einträgen, Zusammenfassung (gleiche Gerichte gruppiert) und Summen. Das Token wird nicht erneut ausgegeben.
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Order' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    patch:
+      operationId: patchOrder
+      summary: Bestellrunde ändern
+      description: Merge-Patch für `title`, `note`, `deadline` und `catalogId` (null entfernt).
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/OrderPatch' } } } }
+      responses: { '200': { description: geändert, content: { application/json: { schema: { $ref: '#/components/schemas/Order' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '404': { $ref: '#/components/responses/NotFound' } }
+    delete:
+      operationId: deleteOrder
+      summary: Bestellrunde mit allen Einträgen löschen
+      description: Löscht Runde und Einträge endgültig; der Link antwortet danach mit 404.
+      security: [ { session: [], csrf: [] } ]
+      responses: { '204': { description: gelöscht }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/groups/orders/{id}/close:
+    post:
+      operationId: closeOrder
+      summary: Bestellrunde beenden
+      description: Danach können Teilnehmer nichts mehr hinzufügen oder ändern. Wiederholen ist ein No-op.
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '200': { description: beendet, content: { application/json: { schema: { $ref: '#/components/schemas/Order' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/groups/orders/{id}/reopen:
+    post:
+      operationId: reopenOrder
+      summary: Bestellrunde wieder öffnen
+      description: Hebt das Beenden auf; eine bereits verstrichene Frist wird dabei entfernt.
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '200': { description: geöffnet, content: { application/json: { schema: { $ref: '#/components/schemas/Order' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/groups/orders/{id}/rotate-token:
+    post:
+      operationId: rotateOrderToken
+      summary: Link der Bestellrunde erneuern
+      description: Neuer Freigabelink, der alte antwortet sofort mit 404; Einträge und Bearbeitungsschlüssel bleiben. Token und `path` stehen nur in dieser Antwort.
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '200': { description: erneuert, content: { application/json: { schema: { $ref: '#/components/schemas/Order' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/groups/orders/{id}/entries/{entryId}:
+    delete:
+      operationId: removeOrderEntry
+      summary: Eintrag aus der Bestellrunde entfernen
+      description: Der Besitzer kann jeden Eintrag entfernen (auch nach dem Beenden).
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' }, { name: entryId, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '204': { description: entfernt }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/groups/orders/{id}/export:
+    get:
+      operationId: exportOrder
+      summary: Bestellliste exportieren
+      description: Liste als Datei, `format` csv (Standard) oder txt. In CSV-Zellen, die eine Formel beginnen könnten (=, +, -, @, Tab, CR), steht ein führendes Apostroph.
+      security: [ { session: [] } ]
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: format, in: query, required: false, schema: { type: string, enum: [csv, txt] } }
+      responses:
+        '200': { description: Datei, content: { text/csv: { schema: { type: string } }, text/plain: { schema: { type: string } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/groups/catalogs:
+    get:
+      operationId: listCatalogs
+      summary: Eigene Kataloge auflisten
+      description: Gespeicherte Kataloge (Name und Gerichte mit optionalem Preis) des Kontos.
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Catalog' } } } } } }
+    post:
+      operationId: createCatalog
+      summary: Katalog anlegen
+      description: Höchstens 30 Kataloge je Konto (409 too_many_catalogs) und 200 Gerichte je Katalog; Name höchstens 80, Gericht 200 Zeichen, Preis 0 bis 1.000.000 Cent.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CatalogInput' } } } }
+      responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/Catalog' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/v1/groups/catalogs/{id}:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get:
+      operationId: getCatalog
+      summary: Katalog abrufen
+      description: Ein eigener Katalog; fremde Kataloge sind 404.
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Catalog' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    put:
+      operationId: replaceCatalog
+      summary: Katalog ersetzen
+      description: Ersetzt Name und die gesamte Gerichteliste.
+      security: [ { session: [], csrf: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CatalogInput' } } } }
+      responses: { '200': { description: ersetzt, content: { application/json: { schema: { $ref: '#/components/schemas/Catalog' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '404': { $ref: '#/components/responses/NotFound' } }
+    delete:
+      operationId: deleteCatalog
+      summary: Katalog löschen
+      description: Bestellrunden, die den Katalog verwenden, verlieren nur die Zuordnung.
+      security: [ { session: [], csrf: [] } ]
+      responses: { '204': { description: gelöscht }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/public/groups/{token}:
+    get:
+      operationId: viewPublicGroup
+      summary: Umfrage oder Bestellrunde per Link ansehen
+      description: |
+        Ohne Anmeldung: das Token im Pfad (43 Zeichen, 256 Bit) ist die einzige Berechtigung (ADR-0033). Liefert `type` poll oder order mit der öffentlichen Ansicht
+        ohne Kontodaten. Bei `hideResults` fehlen `votes` und `tally`, solange die Umfrage offen ist. Unbekannte, erneuerte, gelöschte Links, deaktivierte Besitzer und
+        abgeschaltetes Modul sind ununterscheidbar 404. Alle Antworten: `Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow`. Ratenbegrenzt je Client und Link (429, `Retry-After`).
+      security: []
+      parameters: [ { $ref: '#/components/parameters/GroupToken' } ]
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/PublicGroup' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooMany' }
+  /api/v1/public/groups/{token}/export:
+    get:
+      operationId: exportPublicOrder
+      summary: Bestellliste per Link herunterladen
+      description: Wie der Export des Besitzers, für Teilnehmer der Runde (nur Bestellrunden; bei einer Umfrage 404).
+      security: []
+      parameters:
+        - { $ref: '#/components/parameters/GroupToken' }
+        - { name: format, in: query, required: false, schema: { type: string, enum: [csv, txt] } }
+      responses:
+        '200': { description: Datei, content: { text/csv: { schema: { type: string } }, text/plain: { schema: { type: string } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooMany' }
+  /api/v1/public/groups/{token}/votes:
+    post:
+      operationId: castPublicPollVote
+      summary: Bei einer Umfrage per Link abstimmen
+      description: |
+        Legt eine Stimme mit Anzeigename an (höchstens 60 Zeichen, je Umfrage eindeutig ohne Beachtung von Groß-/Kleinschreibung: 409 name_taken). `answers` je Option yes, maybe
+        (nur Terminumfragen) oder no; Einzelwahl verlangt genau ein yes, Mehrfachwahl bei Textumfragen mindestens eines. Höchstens 500 Stimmen je Umfrage (409 group_full), beendet: 409 group_closed.
+        `editSecret` steht nur in dieser Antwort; der Client bewahrt ihn auf und sendet ihn als Header `X-Edit-Secret`.
+      security: []
+      parameters: [ { $ref: '#/components/parameters/GroupToken' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/VoteInput' } } } }
+      responses:
+        '201': { description: gespeichert, content: { application/json: { schema: { $ref: '#/components/schemas/VoteCreated' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooMany' }
+  /api/v1/public/groups/{token}/votes/{voteId}:
+    put:
+      operationId: updatePublicPollVote
+      summary: Eigene Stimme ändern
+      description: Erfordert den Header `X-Edit-Secret` der Stimme (sonst 403 edit_secret_invalid). Namen und Antworten werden ersetzt; nach dem Beenden 409 group_closed.
+      security: []
+      parameters: [ { $ref: '#/components/parameters/GroupToken' }, { $ref: '#/components/parameters/GroupEditSecret' }, { name: voteId, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/VoteInput' } } } }
+      responses:
+        '200': { description: gespeichert, content: { application/json: { schema: { $ref: '#/components/schemas/PollVote' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooMany' }
+    delete:
+      operationId: deletePublicPollVote
+      summary: Eigene Stimme zurückziehen
+      description: Erfordert den Header `X-Edit-Secret` der Stimme (403 edit_secret_invalid); nach dem Beenden 409 group_closed.
+      security: []
+      parameters: [ { $ref: '#/components/parameters/GroupToken' }, { $ref: '#/components/parameters/GroupEditSecret' }, { name: voteId, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        '204': { description: entfernt }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooMany' }
+  /api/v1/public/groups/{token}/entries:
+    post:
+      operationId: addPublicOrderEntry
+      summary: Eintrag zur Bestellrunde per Link hinzufügen
+      description: |
+        Name (höchstens 60), Gericht (höchstens 200), optional `note` (höchstens 200), `quantity` (1 bis 99, Standard 1) und `priceCents` (0 bis 1.000.000). Höchstens 200 Einträge je Runde
+        (409 group_full); beendet: 409 group_closed. `editSecret` steht nur in dieser Antwort (Header `X-Edit-Secret` für Änderungen).
+      security: []
+      parameters: [ { $ref: '#/components/parameters/GroupToken' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/EntryInput' } } } }
+      responses:
+        '201': { description: gespeichert, content: { application/json: { schema: { $ref: '#/components/schemas/EntryCreated' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooMany' }
+  /api/v1/public/groups/{token}/entries/{entryId}:
+    put:
+      operationId: updatePublicOrderEntry
+      summary: Eigenen Eintrag ändern
+      description: Erfordert den Header `X-Edit-Secret` des Eintrags (403 edit_secret_invalid); nach dem Beenden 409 group_closed.
+      security: []
+      parameters: [ { $ref: '#/components/parameters/GroupToken' }, { $ref: '#/components/parameters/GroupEditSecret' }, { name: entryId, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/EntryInput' } } } }
+      responses:
+        '200': { description: gespeichert, content: { application/json: { schema: { $ref: '#/components/schemas/Entry' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooMany' }
+    delete:
+      operationId: deletePublicOrderEntry
+      summary: Eigenen Eintrag löschen
+      description: Erfordert den Header `X-Edit-Secret` des Eintrags (403 edit_secret_invalid); nach dem Beenden 409 group_closed.
+      security: []
+      parameters: [ { $ref: '#/components/parameters/GroupToken' }, { $ref: '#/components/parameters/GroupEditSecret' }, { name: entryId, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        '204': { description: entfernt }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooMany' }
+  /api/v1/public/groups/{token}/entries/{entryId}/take:
+    post:
+      operationId: takePublicOrderEntry
+      summary: Gericht eines anderen Eintrags übernehmen
+      description: Legt einen neuen Eintrag mit eigenem Namen und eigenem Bearbeitungsschlüssel an, der Gericht, Preis und (ohne eigene `note`) die Notiz des Quelleintrags kopiert. `quantity` Standard 1.
+      security: []
+      parameters: [ { $ref: '#/components/parameters/GroupToken' }, { name: entryId, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/EntryTake' } } } }
+      responses:
+        '201': { description: übernommen, content: { application/json: { schema: { $ref: '#/components/schemas/EntryCreated' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooMany' }
 components:
   securitySchemes:
     session: { type: apiKey, in: cookie, name: tt_session }
@@ -1917,6 +2254,8 @@ components:
     bearer: { type: http, scheme: bearer, description: OAuth-Access-Token (tto_) oder persönliches Token (ttp_) nur für /mcp }
     csrf: { type: apiKey, in: header, name: X-CSRF-Token }
   parameters:
+    GroupToken: { name: token, in: path, required: true, description: 'Freigabetoken der Umfrage oder Bestellrunde (43 Zeichen, base64url)', schema: { type: string, minLength: 43, maxLength: 43 } }
+    GroupEditSecret: { name: X-Edit-Secret, in: header, required: true, description: 'Bearbeitungsschlüssel, den die Antwort beim Anlegen der Stimme bzw. des Eintrags geliefert hat', schema: { type: string } }
     Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
     IsoWeek: { name: isoWeek, in: path, required: true, description: 'ISO-Woche, z. B. 2026-W44 (Montag bis Sonntag)', schema: { type: string, pattern: '^[0-9]{4}-W[0-9]{2}$', example: 2026-W44 } }
   responses:
@@ -2383,6 +2722,241 @@ components:
         lastUsedAt: { type: [string, 'null'], format: date-time }
         token: { type: string, description: 'nur in der POST-Antwort' }
         path: { type: string, description: 'nur in der POST-Antwort: /ics/<token>.ics' }
+    PollOptionInput:
+      type: object
+      properties:
+        label: { type: string, maxLength: 200, description: 'Textumfrage: Pflicht; Terminumfrage: optionale Beschriftung' }
+        date: { type: string, format: date, description: 'nur Terminumfrage, Pflicht' }
+        startTime: { type: string, pattern: '^[0-9]{2}:[0-9]{2}$' }
+        endTime: { type: string, pattern: '^[0-9]{2}:[0-9]{2}$', description: 'nur mit startTime, nach dem Beginn' }
+    PollInput:
+      type: object
+      required: [title, kind, choiceMode, options]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, maxLength: 2000 }
+        kind: { type: string, enum: [text, date] }
+        choiceMode: { type: string, enum: [single, multi] }
+        timeZone: { type: string, description: 'IANA-Zeitzone der Terminvorschläge, z. B. Europe/Berlin' }
+        options: { type: array, minItems: 1, maxItems: 50, items: { $ref: '#/components/schemas/PollOptionInput' } }
+        deadline: { type: string, format: date-time }
+        hideResults: { type: boolean }
+    PollPatch:
+      type: object
+      properties:
+        title: { type: string, maxLength: 120 }
+        description: { type: [string, 'null'], maxLength: 2000 }
+        deadline: { type: [string, 'null'], format: date-time }
+        hideResults: { type: boolean }
+    PollOption:
+      type: object
+      required: [id]
+      properties:
+        id: { type: string, format: uuid }
+        label: { type: [string, 'null'] }
+        date: { type: [string, 'null'], format: date }
+        startTime: { type: [string, 'null'] }
+        endTime: { type: [string, 'null'] }
+    PollAnswer:
+      type: object
+      required: [optionId, answer]
+      properties:
+        optionId: { type: string, format: uuid }
+        answer: { type: string, enum: ['yes', maybe, 'no'] }
+    PollVote:
+      type: object
+      required: [id, name, answers, createdAt, updatedAt]
+      description: 'Enthält nur den Anzeigenamen, nie Kontodaten oder den Bearbeitungsschlüssel. Optionen ohne Eintrag in `answers` zählen als no.'
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        answers: { type: array, items: { $ref: '#/components/schemas/PollAnswer' } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PollTally:
+      type: object
+      required: [optionId, 'yes', maybe, 'no']
+      properties:
+        optionId: { type: string, format: uuid }
+        'yes': { type: integer }
+        maybe: { type: integer }
+        'no': { type: integer }
+    Poll:
+      type: object
+      required: [title, kind, choiceMode, options, hideResults, closed, resultsVisible, voteCount]
+      description: 'Besitzer- und öffentliche Ansicht. `id`, `createdAt`, `updatedAt` nur in der Besitzeransicht; `votes` und `tally` fehlen in der öffentlichen Ansicht, solange `hideResults` gilt und die Umfrage offen ist. `token` und `path` nur bei Anlegen und rotate-token.'
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: [string, 'null'] }
+        kind: { type: string, enum: [text, date] }
+        choiceMode: { type: string, enum: [single, multi] }
+        timeZone: { type: [string, 'null'] }
+        options: { type: array, items: { $ref: '#/components/schemas/PollOption' } }
+        deadline: { type: [string, 'null'], format: date-time }
+        hideResults: { type: boolean }
+        closed: { type: boolean, description: 'beendet oder Frist verstrichen' }
+        closedAt: { type: [string, 'null'], format: date-time }
+        finalOptionId: { type: [string, 'null'], format: uuid }
+        resultsVisible: { type: boolean }
+        voteCount: { type: integer }
+        votes: { type: array, items: { $ref: '#/components/schemas/PollVote' } }
+        tally: { type: array, items: { $ref: '#/components/schemas/PollTally' } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        token: { type: string, description: 'nur bei Anlegen und rotate-token' }
+        path: { type: string, description: 'nur bei Anlegen und rotate-token: /g/<token>' }
+    PollSummary:
+      type: object
+      required: [id, title, kind, choiceMode, closed, voteCount, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        kind: { type: string, enum: [text, date] }
+        choiceMode: { type: string, enum: [single, multi] }
+        deadline: { type: [string, 'null'], format: date-time }
+        closed: { type: boolean }
+        closedAt: { type: [string, 'null'], format: date-time }
+        voteCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+    VoteInput:
+      type: object
+      required: [name, answers]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 60 }
+        answers: { type: array, items: { $ref: '#/components/schemas/PollAnswer' } }
+    VoteCreated:
+      type: object
+      required: [vote, editSecret]
+      properties:
+        vote: { $ref: '#/components/schemas/PollVote' }
+        editSecret: { type: string, description: 'nur in dieser Antwort; clientseitig aufbewahren' }
+    OrderInput:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 120 }
+        note: { type: string, maxLength: 2000 }
+        deadline: { type: string, format: date-time }
+        catalogId: { type: string, format: uuid }
+    OrderPatch:
+      type: object
+      properties:
+        title: { type: string, maxLength: 120 }
+        note: { type: [string, 'null'], maxLength: 2000 }
+        deadline: { type: [string, 'null'], format: date-time }
+        catalogId: { type: [string, 'null'], format: uuid }
+    EntryInput:
+      type: object
+      required: [name, item]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 60 }
+        item: { type: string, minLength: 1, maxLength: 200 }
+        note: { type: string, maxLength: 200 }
+        quantity: { type: integer, minimum: 1, maximum: 99 }
+        priceCents: { type: integer, minimum: 0, maximum: 1000000 }
+    EntryTake:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 60 }
+        quantity: { type: integer, minimum: 1, maximum: 99 }
+        note: { type: string, maxLength: 200 }
+    Entry:
+      type: object
+      required: [id, name, item, quantity, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        item: { type: string }
+        note: { type: [string, 'null'] }
+        quantity: { type: integer }
+        priceCents: { type: [integer, 'null'] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    EntryCreated:
+      type: object
+      required: [entry, editSecret]
+      properties:
+        entry: { $ref: '#/components/schemas/Entry' }
+        editSecret: { type: string, description: 'nur in dieser Antwort; clientseitig aufbewahren' }
+    AggregatedItem:
+      type: object
+      required: [item, quantity, names]
+      properties:
+        item: { type: string }
+        note: { type: [string, 'null'] }
+        priceCents: { type: [integer, 'null'] }
+        quantity: { type: integer }
+        names: { type: array, items: { type: string } }
+    CatalogItem:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        priceCents: { type: [integer, 'null'], minimum: 0, maximum: 1000000 }
+    Order:
+      type: object
+      required: [title, closed, entryCount, entries, aggregated, totalCents, unpricedQuantity, suggestions]
+      description: 'Besitzer- und öffentliche Ansicht. `id`, `catalogId`, `createdAt` nur in der Besitzeransicht. `suggestions` sind die Gerichte des gewählten Katalogs. `token`/`path` nur bei Anlegen und rotate-token.'
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        note: { type: [string, 'null'] }
+        deadline: { type: [string, 'null'], format: date-time }
+        closed: { type: boolean }
+        closedAt: { type: [string, 'null'], format: date-time }
+        catalogId: { type: [string, 'null'], format: uuid }
+        entryCount: { type: integer }
+        entries: { type: array, items: { $ref: '#/components/schemas/Entry' } }
+        aggregated: { type: array, items: { $ref: '#/components/schemas/AggregatedItem' }, description: 'gleiche Gerichte (Text, Notiz, Preis) zusammengefasst, größte Menge zuerst' }
+        totalCents: { type: integer, description: 'Summe aus Menge mal Preis der Einträge mit Preis' }
+        unpricedQuantity: { type: integer, description: 'Stückzahl der Einträge ohne Preis' }
+        suggestions: { type: array, items: { $ref: '#/components/schemas/CatalogItem' } }
+        createdAt: { type: string, format: date-time }
+        token: { type: string }
+        path: { type: string, description: 'nur bei Anlegen und rotate-token: /g/<token>' }
+    OrderSummary:
+      type: object
+      required: [id, title, closed, entryCount, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        deadline: { type: [string, 'null'], format: date-time }
+        closed: { type: boolean }
+        closedAt: { type: [string, 'null'], format: date-time }
+        entryCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+    ItemSuggestion:
+      type: object
+      required: [item, count]
+      properties:
+        item: { type: string }
+        priceCents: { type: [integer, 'null'] }
+        count: { type: integer }
+    PublicGroup:
+      type: object
+      required: [type]
+      properties:
+        type: { type: string, enum: [poll, order] }
+        poll: { $ref: '#/components/schemas/Poll' }
+        order: { $ref: '#/components/schemas/Order' }
+    CatalogInput:
+      type: object
+      required: [name, items]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        items: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/CatalogItem' } }
+    Catalog:
+      type: object
+      required: [id, name, items, itemCount, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        items: { type: array, items: { $ref: '#/components/schemas/CatalogItem' } }
+        itemCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
     TriggerError:
       type: object
       required: [error]
@@ -3021,7 +3595,7 @@ components:
         lastSuccessAt: { type: [string, 'null'], format: date-time }
     ModuleKey:
       type: string
-      enum: [reports, planning, transfer, automation, mcp]
+      enum: [reports, planning, transfer, automation, mcp, groups]
     ModuleStatus:
       type: object
       required: [key, serverEnabled, accountEnabled, effective, lockedByOperator]
