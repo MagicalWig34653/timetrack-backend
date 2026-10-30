@@ -2,7 +2,8 @@ import Foundation
 import Fluent
 
 // G1: groups module (ADR-0033). Public polls (appointment finding and general polls) and group orders, reachable through an
-// unguessable link without login. Only SHA-256 hashes of link tokens and edit secrets are stored.
+// unguessable link without login. Lookups use the SHA-256 hash of the link token; edit secrets are stored only as hashes.
+// The owner may view the link again, so the token itself is kept in `link_token` (nil for rows from before g1b: rotate once).
 
 enum GroupLimits {
     static let titleMax = 120
@@ -29,6 +30,7 @@ final class GroupPollRecord: Model, @unchecked Sendable {
     @ID(key: .id) var id: UUID?
     @Field(key: "account_id") var accountId: UUID
     @Field(key: "token_hash") var tokenHash: String
+    @OptionalField(key: "link_token") var linkToken: String?
     @Field(key: "title") var title: String
     @OptionalField(key: "description") var details: String?
     /// `text` (free-text options) or `date` (date or date-time slots with yes/maybe/no answers).
@@ -86,6 +88,7 @@ final class GroupOrderRecord: Model, @unchecked Sendable {
     @ID(key: .id) var id: UUID?
     @Field(key: "account_id") var accountId: UUID
     @Field(key: "token_hash") var tokenHash: String
+    @OptionalField(key: "link_token") var linkToken: String?
     @Field(key: "title") var title: String
     @OptionalField(key: "note") var note: String?
     @OptionalField(key: "deadline") var deadline: Date?
@@ -253,5 +256,18 @@ enum GroupPurge {
             try await GroupCatalogItemRecord.query(on: db).filter(\.$catalogId ~~ chunk).delete()
             try await GroupCatalogRecord.query(on: db).filter(\._$id ~~ chunk).delete()
         }
+    }
+}
+
+/// Keeps the link token readable for the owner (the detail view shows it again); older rows stay nil until the link is renewed.
+struct AddGroupLinkTokens: AsyncMigration {
+    let name = "g1b.add_group_link_tokens"
+    func prepare(on db: any Database) async throws {
+        try await db.schema("group_polls").field("link_token", .string).update()
+        try await db.schema("group_orders").field("link_token", .string).update()
+    }
+    func revert(on db: any Database) async throws {
+        try await db.schema("group_polls").deleteField("link_token").update()
+        try await db.schema("group_orders").deleteField("link_token").update()
     }
 }

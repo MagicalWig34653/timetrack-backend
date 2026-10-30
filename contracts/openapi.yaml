@@ -1,9 +1,9 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.37.0
+  version: 0.37.1
   description: |
-    v0.37.0 (G1, ADR-0033): Modul `groups` (sechster Modulschlüssel, ModuleKey/ModuleStatus). Öffentliche Umfragen (Termin- und Textumfragen, Einzel-/Mehrfachwahl, yes/maybe/no) und Bestellrunden (z. B. Dönerstag) mit Katalogen. Besitzer-API unter /api/v1/groups/{polls,orders,catalogs} (Sitzung + CSRF, Modul groups); öffentliche API unter /api/v1/public/groups/{token}/… ohne Anmeldung: das 256-Bit-Token ist die einzige Berechtigung (nur als Hash gespeichert, per rotate-token erneuerbar), Teilnehmer geben einen Anzeigenamen an und ändern ihre Stimme/ihren Eintrag mit einem Bearbeitungsschlüssel (Header X-Edit-Secret, nur als Hash gespeichert). Antworten enthalten keine Kontodaten, immer Cache-Control no-store und X-Robots-Tag noindex. Ratenbegrenzung je Client und Link (429 Retry-After). Freigabeseite der PWA: /g/<token>. Aufbewahrung: beendete/abgelaufene Umfragen und Runden werden nach GROUPS_RETENTION_DAYS (Standard 90) vom Aufräumjob gelöscht; Kontoexport polls/orders/catalogs, Kontolöschung entfernt alles. Neue Fehlercodes: group_closed, group_full, name_taken (409), answers_invalid, deadline_in_past (400), edit_secret_invalid (403), too_many_polls, too_many_orders, too_many_catalogs (409). Neue Migration g1.create_groups.
+    v0.37.1 (G1b): Besitzer-Detailansicht von Umfragen und Bestellrunden zeigt `token`/`path` jederzeit wieder (Migration g1b.add_group_link_tokens; ältere Zeilen erst nach rotate-token). v0.37.0 (G1, ADR-0033): Modul `groups` (sechster Modulschlüssel, ModuleKey/ModuleStatus). Öffentliche Umfragen (Termin- und Textumfragen, Einzel-/Mehrfachwahl, yes/maybe/no) und Bestellrunden (z. B. Dönerstag) mit Katalogen. Besitzer-API unter /api/v1/groups/{polls,orders,catalogs} (Sitzung + CSRF, Modul groups); öffentliche API unter /api/v1/public/groups/{token}/… ohne Anmeldung: das 256-Bit-Token ist die einzige Berechtigung (nur als Hash gespeichert, per rotate-token erneuerbar), Teilnehmer geben einen Anzeigenamen an und ändern ihre Stimme/ihren Eintrag mit einem Bearbeitungsschlüssel (Header X-Edit-Secret, nur als Hash gespeichert). Antworten enthalten keine Kontodaten, immer Cache-Control no-store und X-Robots-Tag noindex. Ratenbegrenzung je Client und Link (429 Retry-After). Freigabeseite der PWA: /g/<token>. Aufbewahrung: beendete/abgelaufene Umfragen und Runden werden nach GROUPS_RETENTION_DAYS (Standard 90) vom Aufräumjob gelöscht; Kontoexport polls/orders/catalogs, Kontolöschung entfernt alles. Neue Fehlercodes: group_closed, group_full, name_taken (409), answers_invalid, deadline_in_past (400), edit_secret_invalid (403), too_many_polls, too_many_orders, too_many_catalogs (409). Neue Migration g1.create_groups.
     v0.36.0 (C3, ADR-0032): (a) Abwesenheitsstatus je Art. Nur Urlaub (`vacation`) hat den Antragsablauf planned/requested/approved/rejected/cancelled/taken. Krank (`sick`) und Freistellung (`excused`) kennen nur den neuen Status `recorded` (erfasst) und `cancelled`; Sonstiges (`other`) kennt `planned`, `recorded`, `cancelled`. `Absence.status` kann jetzt `recorded` sein (Clients müssen den Wert tolerieren). `AbsenceInput.status` ist optional (Standard: Urlaub `planned`, sonst `recorded`). Ältere Clients, die für sick/excused planned/requested/approved/taken senden, werden angenommen und normalisiert (-> `recorded`; bei other requested -> planned, approved/taken -> recorded); `rejected` für sick/excused/other und `recorded` für vacation sind 400 `absence_status_invalid_for_kind`. Migration c3.allow_recorded_absence_status und c3.normalise_absence_statuses (bestehende Zeilen werden normalisiert, der alte Status bleibt in `absences.legacy_status`). ICS: Krank/Freigestellt ohne Statuszusatz, ausdrückliche Tagesmarkierungen (Urlaub, Krank, Freigestellt, Berufsschultag) und erfasste Berufsschultage erscheinen im Abo. MCP `create_absence`: `status` optional, `recorded` erlaubt. (b) Zeitkonto ohne den laufenden Tag: `TimeAccount.balanceSeconds`, `TimeWeek.summary.accountBalance*`, die kumulierten Salden und Summen der Statistik zählen die Tagesdifferenzen nur bis gestern; neue Felder `includesToday` (immer false) und `todayDeltaSeconds` (Differenz des laufenden Tages, null wenn asOf vor heute liegt oder das Konto noch nicht begonnen hat) an TimeAccount, TimeWeek.summary und TimeStatistics. `TimeWeek.summary.balanceSeconds`/`targetToDateSeconds` und die Statistik-Differenzen enthalten den heutigen Tag ebenfalls nicht mehr. Kontoanpassungen mit Datum heute zählen sofort. `provisional` ist beim Konto nur noch gesetzt, wenn ein Tag bis gestern vorläufig ist. (c) Die Konto-E-Mail ist die einzige Adresse für E-Mail-Codes der Wiederherstellung: `PUT /me/recovery/email` braucht keinen Body mehr (204 = sofort aktiv bei bestätigter Konto-Adresse, 202 = Code an die Konto-Adresse gesendet; Body `email` ist veraltet: gleich der Konto-Adresse oder, wenn diese fehlt oder unbestätigt ist, neue Konto-Adresse nach Code-Bestätigung; abweichend von einer bestätigten Konto-Adresse 409 `recovery_email_must_be_account_email`; ohne Konto-Adresse und ohne Body 409 `account_email_missing`). `GET /me/recovery` `email` ergänzt `accountEmail` und `usesAccountEmail`; `verified` bedeutet: Konto-Adresse bestätigt. Entfernen der Konto-Adresse und Wechsel wirken auf die Wiederherstellung (aus bzw. neue Adresse). Migration c3.account_email_is_recovery_email.
     v0.35.0 (P13): Plantage enthalten geordnete, überschneidungsfreie Blöcke mit start/end/kind und optional placeId/note. Neue Schreibfelder haben Vorrang vor den alten Zeitfeldern; alte Felder bleiben les- und schreibbar und werden aus Blöcken abgeleitet. Planfreigaben zeigen Blöcke ohne Ort/Notiz. Neue Fehlercodes (400): plan_blocks_invalid, plan_blocks_overlap, plan_kind_invalid, plan_note_invalid.
     v0.29.0 (R2): Rechtsprofile, Berufsschulstunden und informative Warnungen; keine Rechtsberatung.
@@ -1925,7 +1925,7 @@ paths:
         Legt eine öffentliche Umfrage an. `kind` `text` (freie Antwortmöglichkeiten, `label`) oder `date` (Terminvorschläge mit `date`, optional `startTime`/`endTime`
         als lokale Uhrzeit HH:mm, Zeitzone in `timeZone`). `choiceMode` `single` (genau eine Stimme) oder `multi`. Bei Terminumfragen antworten Teilnehmer je Option
         mit yes, maybe oder no. Höchstens 50 Optionen, 200 Umfragen je Konto (409 too_many_polls); Titel höchstens 120, Optionen 200 Zeichen.
-        Das Token (`token`) und der Pfad (`path`, `/g/<token>`) stehen nur in dieser Antwort und in der Antwort von rotate-token (ADR-0033).
+        Das Token (`token`) und der Pfad (`path`, `/g/<token>`) stehen in dieser Antwort, in der Antwort von rotate-token und in der Besitzer-Detailansicht (jederzeit wieder abrufbar; ADR-0033 Nachtrag).
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PollInput' } } } }
       responses:
@@ -2006,7 +2006,7 @@ paths:
       summary: Bestellrunde anlegen
       description: |
         Legt eine Bestellrunde an (z. B. Dönerstag). Optional `note`, `deadline` (Zukunft, sonst 400 deadline_in_past) und ein eigener Katalog `catalogId`
-        (fremde Kataloge sind 400). Höchstens 200 Runden je Konto (409 too_many_orders). Token und `path` (`/g/<token>`) stehen nur in dieser Antwort.
+        (fremde Kataloge sind 400). Höchstens 200 Runden je Konto (409 too_many_orders). Token und `path` (`/g/<token>`) stehen in dieser Antwort, bei rotate-token und in der Besitzer-Detailansicht.
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/OrderInput' } } } }
       responses: { '201': { description: angelegt, content: { application/json: { schema: { $ref: '#/components/schemas/Order' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '409': { $ref: '#/components/responses/Conflict' } }
@@ -2784,7 +2784,7 @@ components:
     Poll:
       type: object
       required: [title, kind, choiceMode, options, hideResults, closed, resultsVisible, voteCount]
-      description: 'Besitzer- und öffentliche Ansicht. `id`, `createdAt`, `updatedAt` nur in der Besitzeransicht; `votes` und `tally` fehlen in der öffentlichen Ansicht, solange `hideResults` gilt und die Umfrage offen ist. `token` und `path` nur bei Anlegen und rotate-token.'
+      description: 'Besitzer- und öffentliche Ansicht. `id`, `createdAt`, `updatedAt` nur in der Besitzeransicht; `votes` und `tally` fehlen in der öffentlichen Ansicht, solange `hideResults` gilt und die Umfrage offen ist. `token` und `path` nur in der Besitzeransicht (Anlegen, rotate-token, Detail; bei älteren Zeilen erst nach Erneuerung des Links).'
       properties:
         id: { type: string, format: uuid }
         title: { type: string }
@@ -2804,8 +2804,8 @@ components:
         tally: { type: array, items: { $ref: '#/components/schemas/PollTally' } }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
-        token: { type: string, description: 'nur bei Anlegen und rotate-token' }
-        path: { type: string, description: 'nur bei Anlegen und rotate-token: /g/<token>' }
+        token: { type: string, description: 'nur Besitzeransicht (Anlegen, rotate-token, Detail)' }
+        path: { type: string, description: 'nur Besitzeransicht: /g/<token>' }
     PollSummary:
       type: object
       required: [id, title, kind, choiceMode, closed, voteCount, createdAt]
@@ -2898,7 +2898,7 @@ components:
     Order:
       type: object
       required: [title, closed, entryCount, entries, aggregated, totalCents, unpricedQuantity, suggestions]
-      description: 'Besitzer- und öffentliche Ansicht. `id`, `catalogId`, `createdAt` nur in der Besitzeransicht. `suggestions` sind die Gerichte des gewählten Katalogs. `token`/`path` nur bei Anlegen und rotate-token.'
+      description: 'Besitzer- und öffentliche Ansicht. `id`, `catalogId`, `createdAt` nur in der Besitzeransicht. `suggestions` sind die Gerichte des gewählten Katalogs. `token`/`path` nur in der Besitzeransicht (Anlegen, rotate-token, Detail; bei älteren Zeilen erst nach Erneuerung des Links).'
       properties:
         id: { type: string, format: uuid }
         title: { type: string }
@@ -2915,7 +2915,7 @@ components:
         suggestions: { type: array, items: { $ref: '#/components/schemas/CatalogItem' } }
         createdAt: { type: string, format: date-time }
         token: { type: string }
-        path: { type: string, description: 'nur bei Anlegen und rotate-token: /g/<token>' }
+        path: { type: string, description: 'nur Besitzeransicht: /g/<token>' }
     OrderSummary:
       type: object
       required: [id, title, closed, entryCount, createdAt]

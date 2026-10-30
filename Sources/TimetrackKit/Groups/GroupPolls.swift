@@ -98,6 +98,7 @@ enum PollCore {
         let options = try await options(id, on: db)
         let closed = poll.isClosed(now)
         let visible = owner || !poll.hideResults || closed
+        let shown = owner ? (token ?? poll.linkToken) : nil
         let voteCount = try await GroupPollVoteRecord.query(on: db).filter(\.$pollId == id).count()
         var votes: [PollVoteDTO]?, tally: [PollTallyDTO]?
         if visible {
@@ -114,7 +115,7 @@ enum PollCore {
                      timeZone: poll.timeZone, options: try options.map(optionDTO), deadline: poll.deadline, hideResults: poll.hideResults,
                      closed: closed, closedAt: poll.closedAt, finalOptionId: poll.finalOptionId, resultsVisible: visible,
                      voteCount: voteCount, votes: votes, tally: tally, createdAt: owner ? poll.createdAt : nil,
-                     updatedAt: owner ? poll.updatedAt : nil, token: token, path: token.map { "/g/" + $0 })
+                     updatedAt: owner ? poll.updatedAt : nil, token: shown, path: shown.map { "/g/" + $0 })
     }
 
     /// Replaces the answers of a vote (delete and insert; the pair is inside the caller's transaction).
@@ -215,7 +216,7 @@ struct PollService: Sendable {
         }
         let (token, hash) = GroupTokens.create()
         let poll = GroupPollRecord()
-        poll.accountId = scope.accountId; poll.tokenHash = hash; poll.title = title
+        poll.accountId = scope.accountId; poll.tokenHash = hash; poll.linkToken = token; poll.title = title
         poll.details = try GroupText.block(input.description, max: GroupLimits.descriptionMax)
         poll.kind = input.kind; poll.choiceMode = input.choiceMode; poll.timeZone = try PollCore.validTimeZone(input.timeZone)
         poll.deadline = input.deadline; poll.hideResults = input.hideResults ?? false; poll.createdAt = now; poll.updatedAt = now
@@ -274,7 +275,7 @@ struct PollService: Sendable {
     func rotate(_ id: UUID, now: Date = Date()) async throws -> PollDTO {
         let poll = try await record(id)
         let (token, hash) = GroupTokens.create()
-        poll.tokenHash = hash; poll.updatedAt = now
+        poll.tokenHash = hash; poll.linkToken = token; poll.updatedAt = now
         try await poll.update(on: scope.db)
         return try await PollCore.dto(poll, on: scope.db, now: now, owner: true, token: token)
     }

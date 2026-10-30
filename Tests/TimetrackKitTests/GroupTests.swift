@@ -86,11 +86,11 @@ extension AuthTests {
             let token = try XCTUnwrap(created["token"] as? String), id = try XCTUnwrap(created["id"] as? String)
             XCTAssertEqual(token.count, 43)
             XCTAssertEqual(created["path"] as? String, "/g/" + token)
-            // The token is stored only as a hash and is never shown again.
+            // Lookups use the hash; the owner's detail view shows the link again, lists and public views never do.
             let row = try await XCTUnwrapAsync(try await GroupPollRecord.find(UUID(uuidString: id), on: app.db))
             XCTAssertEqual(row.tokenHash, Secrets.hash(token)); XCTAssertNotEqual(row.tokenHash, token)
             let again = try object(await api(app, owner, .GET, "groups/polls/" + id))
-            XCTAssertNil(again["token"]); XCTAssertNil(again["path"])
+            XCTAssertEqual(again["token"] as? String, token); XCTAssertEqual(again["path"] as? String, "/g/" + token)
             let listed = try await api(app, owner, .GET, "groups/polls")
             XCTAssertFalse(listed.body.string.contains(token))
             // Public view without any login.

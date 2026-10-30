@@ -56,6 +56,7 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
     app.migrations.add(NormaliseAbsenceStatuses())
     app.migrations.add(UnifyRecoveryEmail())
     app.migrations.add(CreateGroups())
+    app.migrations.add(AddGroupLinkTokens())
     // Fluent installs the migrate command, including --revert and the global --yes flag.
     // Do not auto-apply migrations before explicit migrate/revert commands.
     if config.autoMigrate && !app.environment.arguments.contains("migrate") {

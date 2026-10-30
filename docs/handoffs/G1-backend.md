@@ -9,7 +9,7 @@ Besitzer (Sitzung, schreibend mit CSRF, Modul `groups`, nicht über Bearer/MCP),
 | Methode, Pfad | Zweck |
 | --- | --- |
 | `GET/POST /polls`, `GET/PATCH/DELETE /polls/{id}` | Umfragen auflisten, anlegen (201, `token`/`path` nur hier), ansehen (mit allen Stimmen), ändern (title, description, deadline, hideResults), löschen |
-| `POST /polls/{id}/close`, `/reopen`, `/final` (`{optionId}` oder null), `/rotate-token` | Beenden, Öffnen, Endergebnis wählen (beendet), Link erneuern (neues `token`/`path` nur in der Antwort) |
+| `POST /polls/{id}/close`, `/reopen`, `/final` (`{optionId}` oder null), `/rotate-token` | Beenden, Öffnen, Endergebnis wählen (beendet), Link erneuern (neues `token`/`path` in der Antwort). Seit 0.37.1 liefert auch `GET /polls/{id}` (und `/orders/{id}`) `token`/`path` wieder; fehlen sie (ältere Zeile), einmal erneuern |
 | `DELETE /polls/{id}/votes/{voteId}` | Stimme entfernen |
 | `GET/POST /orders`, `GET/PATCH/DELETE /orders/{id}` | Bestellrunden |
 | `POST /orders/{id}/close`, `/reopen`, `/rotate-token`; `DELETE /orders/{id}/entries/{entryId}`; `GET /orders/{id}/export?format=csv\|txt`; `GET /orders/suggestions` | wie oben; Export; häufige frühere Gerichte |
