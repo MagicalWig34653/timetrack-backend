@@ -3,7 +3,7 @@
 #
 #   deploy/swarm/create-secrets.sh [--dry-run] [--db-password-file FILE | --generate-db-password FILE]
 #                                  [--save-generated DIR] [--smtp-password-file FILE] [--oidc-client-secret-file FILE]
-#                                  [--apns-private-key-file FILE] [--prefix tt_]
+#                                  [--apns-private-key-file FILE] [--add-only] [--prefix tt_]
 #
 # Secrets:
 #   tt_db_password          the password of the MariaDB user. Either read from --db-password-file, or generated with
@@ -22,6 +22,10 @@
 #                           validated with openssl without printing it; the PEM text (with line breaks) becomes the
 #                           secret value. Needs the APNs block in stack.yaml (docs/DEPLOYMENT.md).
 #
+# --add-only: for an existing stack. Skips tt_db_password, tt_storage_secret_key and tt_vapid_private_key (which must
+#   stay as they are) and creates only the optional secrets given by --smtp-password-file, --oidc-client-secret-file and
+#   --apns-private-key-file, e.g. to add APNs later.
+#
 # Guarantees: values are never printed and never passed as command-line arguments (they travel through stdin and
 # files with mode 0600); existing secrets are never overwritten (the script aborts before creating anything).
 # --dry-run generates and validates every value in memory, checks which secrets exist (if Swarm is reachable) and
@@ -37,6 +41,7 @@ SMTP_PASSWORD_FILE=""
 OIDC_SECRET_FILE=""
 APNS_KEY_FILE=""
 SAVE_DIR=""
+ADD_ONLY=0
 
 die() { echo "create-secrets: $*" >&2; exit 1; }
 
@@ -45,6 +50,7 @@ usage() { sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY_RUN=1 ;;
+    --add-only) ADD_ONLY=1 ;;
     --prefix) [ $# -ge 2 ] || die "--prefix needs a value"; PREFIX="$2"; shift ;;
     --db-password-file) [ $# -ge 2 ] || die "--db-password-file needs a path"; DB_PASSWORD_FILE="$2"; shift ;;
     --generate-db-password) [ $# -ge 2 ] || die "--generate-db-password needs a path"; GENERATE_DB_PASSWORD_FILE="$2"; shift ;;
@@ -58,6 +64,10 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+if [ "$ADD_ONLY" -eq 1 ]; then
+  [ -z "$DB_PASSWORD_FILE$GENERATE_DB_PASSWORD_FILE$SAVE_DIR" ] || die "--add-only cannot be combined with the database password or --save-generated options"
+  [ -n "$SMTP_PASSWORD_FILE$OIDC_SECRET_FILE$APNS_KEY_FILE" ] || die "--add-only needs at least one of --smtp-password-file, --oidc-client-secret-file, --apns-private-key-file"
+fi
 [ -z "$DB_PASSWORD_FILE" ] || [ -z "$GENERATE_DB_PASSWORD_FILE" ] || die "use either --db-password-file or --generate-db-password"
 case "$PREFIX" in *[!a-zA-Z0-9_.-]*|"") die "--prefix may only contain letters, digits, _ . -" ;; esac
 command -v openssl >/dev/null 2>&1 || die "openssl is required"
@@ -91,6 +101,7 @@ ORDER=()
 V_db=""; V_storage=""; V_vapid=""; V_smtp=""; V_oidc=""; V_apns=""
 value_of() { local v="V_$1"; printf '%s' "${!v}"; }
 
+if [ "$ADD_ONLY" -eq 0 ]; then
 V_storage="$(gen_storage_key)"
 [ "$(printf '%s' "$V_storage" | base64 -d 2>/dev/null | wc -c | tr -d ' ')" = "32" ] || die "storage key generation failed"
 ORDER+=(storage)
@@ -117,6 +128,7 @@ else
 fi
 [ -n "$V_db" ] || die "the database password is empty"
 ORDER+=(db)
+fi
 
 if [ -n "$SMTP_PASSWORD_FILE" ]; then V_smtp="$(cat "$SMTP_PASSWORD_FILE")"; [ -n "$V_smtp" ] || die "SMTP password file is empty"; ORDER+=(smtp); fi
 if [ -n "$OIDC_SECRET_FILE" ]; then V_oidc="$(cat "$OIDC_SECRET_FILE")"; [ -n "$V_oidc" ] || die "OIDC secret file is empty"; ORDER+=(oidc); fi
