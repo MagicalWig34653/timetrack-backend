@@ -159,7 +159,8 @@ extension Application {
         }
         let apnsTransport = apnsConfiguration == nil ? nil : (options.apnsTransport ?? HTTP2ApnsTransport(group: eventLoopGroup))
         let apns = apnsConfiguration.flatMap { configuration in apnsTransport.map { ApnsSender(configuration: configuration, transport: $0) } }
-        let service = NotificationService(auth: auth, vapid: vapid, transport: transport, policy: policy, apns: apns)
+        var service = NotificationService(auth: auth, vapid: vapid, transport: transport, policy: policy, apns: apns)
+        service.apnsEnvironment = options.environment.filter { $0.key.hasPrefix("APNS_") }
         var scheduler = NotificationScheduler(auth: auth, db: db, vapid: vapid, transport: transport, policy: policy, logger: logger)
         scheduler.apns = apns
         let runtime = NotificationRuntime(scheduler: scheduler, service: service, transport: transport, interval: options.interval)

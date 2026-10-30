@@ -382,6 +382,61 @@ extension AuthTests {
         XCTAssertEqual(outcome, .retry("network"))   // only a fixed code, never the error text
     }
 
+    func testApnsAdminDiagnosisStatusAndGuards() async throws {
+        // Unconfigured and incomplete: status names the problem, the check answers 501.
+        var partial = apnsEnvironment(); partial["APNS_TEAM_ID"] = "short"
+        for (env, code, problems) in [(["NOTIFICATIONS_ENABLED": "false"], "not_configured", [String]()), (partial, "incomplete", ["APNS_TEAM_ID"])] {
+            try await apnsApp(env: env) { app, auth, _, _ in
+                let (admin, _) = try await registered(auth, db: app.db)
+                let member = try await self.second(app, auth, admin)
+                let status = try object(await api(app, admin, .GET, "admin/apns"))
+                XCTAssertEqual(status["configured"] as? Bool, false); XCTAssertEqual(status["problems"] as? [String], problems)
+                XCTAssertEqual(((status["hints"] as? [[String: Any]])?.first)?["code"] as? String, code)
+                XCTAssertFalse(String(decoding: try JSONSerialization.data(withJSONObject: status), as: UTF8.self).contains("PRIVATE KEY"))
+                _ = try await api(app, admin, .POST, "admin/apns/check", nil, .notImplemented)
+                for (method, path) in [(HTTPMethod.GET, "admin/apns"), (.POST, "admin/apns/check")] {
+                    _ = try await api(app, member, method, path, nil, .forbidden)
+                    let recovery = try await auth.issueSession(for: admin.account, recovery: true, on: app.db)
+                    _ = try await api(app, recovery, method, path, nil, .forbidden)
+                    let anonymous = try await app.testable().sendRequest(method, "/api/v1/" + path)
+                    XCTAssertEqual(anonymous.status, .unauthorized)
+                }
+            }
+        }
+    }
+
+    func testApnsAdminCheckProbesWithoutDeliveringAndExplainsFailures() async throws {
+        let transport = FakeApnsTransport()
+        try await apnsApp(env: apnsEnvironment(), transport: transport) { app, auth, _, _ in
+            let (admin, _) = try await registered(auth, db: app.db)
+            transport.script([], then: ApnsResponse(status: 400, reason: "BadDeviceToken"))
+            var status = try object(await api(app, admin, .GET, "admin/apns"))
+            XCTAssertEqual(status["configured"] as? Bool, true); XCTAssertEqual(status["keyId"] as? String, "ABC123DEFG")
+            XCTAssertEqual(status["bundleIds"] as? [String], [testBundle, "com.example.timetrack.watch"]); XCTAssertEqual(status["deviceCount"] as? Int, 0)
+            XCTAssertEqual(((status["hints"] as? [[String: Any]])?.first)?["code"] as? String, "no_devices")
+            _ = try await api(app, admin, .POST, "me/push-devices", deviceBody(), .created)
+            status = try object(await api(app, admin, .GET, "admin/apns"))
+            XCTAssertEqual(status["deviceCount"] as? Int, 1); XCTAssertEqual((status["hints"] as? [Any])?.count, 0)
+            // All probes use the made-up token, so nothing can reach a device.
+            let ok = try object(await api(app, admin, .POST, "admin/apns/check"))
+            XCTAssertEqual(ok["ok"] as? Bool, true)
+            XCTAssertEqual((ok["probes"] as? [[String: Any]])?.count, 4)
+            XCTAssertEqual(Set(transport.requests.map(\.deviceToken)), [ApnsDiagnosis.probeToken])
+            XCTAssertEqual(Set(transport.requests.map(\.environment)), ["production", "sandbox"])
+            XCTAssertFalse(String(decoding: try JSONSerialization.data(withJSONObject: ok), as: UTF8.self).contains(ApnsDiagnosis.probeToken))
+            // Apple rejects the key, one topic is not allowed, and a network error: each is a normal 200 result with advice.
+            transport.script([ApnsResponse(status: 403, reason: "InvalidProviderToken"), ApnsResponse(status: 403, reason: "TopicDisallowed")], then: ApnsResponse(status: 410, reason: "Unregistered"))
+            let bad = try object(await api(app, admin, .POST, "admin/apns/check"))
+            XCTAssertEqual(bad["ok"] as? Bool, false)
+            let probes = try XCTUnwrap(bad["probes"] as? [[String: Any]])
+            XCTAssertEqual(probes.map { $0["status"] as? String }, ["failed", "failed", "ok", "ok"])
+            XCTAssertEqual(probes[0]["reason"] as? String, "InvalidProviderToken"); XCTAssertNotNil(probes[0]["advice"] as? String)
+            // Rate limit: 6 checks per 10 minutes.
+            for _ in 0..<(ApnsDiagnosis.checkLimit - 2) { _ = try await api(app, admin, .POST, "admin/apns/check") }
+            _ = try await api(app, admin, .POST, "admin/apns/check", nil, .tooManyRequests)
+        }
+    }
+
     func testMcpDoesNotExposePushDevices() async throws {
         try await apnsApp(env: apnsEnvironment()) { app, auth, _, _ in
             let (a, _) = try await registered(auth, db: app.db)

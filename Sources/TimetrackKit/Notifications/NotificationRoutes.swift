@@ -62,6 +62,23 @@ func registerNotificationRoutes(_ app: Application, auth: AuthService, service: 
     api.post("me", "push-devices", ":id", "test") { req async throws -> Response in
         try await service.sendDeviceTest(account(req), id: id(req), on: req.db); return Response(status: .accepted)
     }
+    // Administrator diagnosis (P14e): status without secrets and a live credential check that sends nothing.
+    api.get("admin", "apns") { req async throws -> Response in
+        try req.authContext.admin()
+        let count = try await ApnsDeviceRecord.query(on: req.db).count()
+        return try timeResponse(ApnsDiagnosis.status(configuration: service.apns?.configuration, environment: service.apnsEnvironment, deviceCount: count))
+    }
+    api.post("admin", "apns", "check") { req async throws -> Response in
+        let context = try req.authContext; try context.admin()
+        guard let sender = service.apns else { throw APIError(.notImplemented, "push_unavailable") }
+        let id = try context.account.requireID()
+        guard try await MailDiagnosis.allow(auth, db: req.db, [("apnscheck:" + id.uuidString, ApnsDiagnosis.checkLimit, ApnsDiagnosis.checkWindow)]) else {
+            throw APIError(.tooManyRequests, "too_many_requests")
+        }
+        let result = await ApnsDiagnosis.run(sender)
+        _ = try? await AccountAuditRecord(action: "apns.checked", actor: id, target: id).create(on: req.db)
+        return try timeResponse(result)
+    }
     api.post("me", "push-subscriptions", ":id", "test") { req async throws -> Response in
         try await service.sendTest(account(req), id: id(req), on: req.db); return Response(status: .accepted)
     }

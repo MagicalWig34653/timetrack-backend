@@ -1,8 +1,9 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.37.1
+  version: 0.38.0
   description: |
+    v0.38.0 (P14e, ADR-0030 Nachtrag, additiv, nur Admin): APNs-Diagnose. GET /admin/apns (Zustand ohne Geheimnisse, fehlende oder ungültige APNS_*-Variablen, Gerätezahl, Hinweise) und POST /admin/apns/check (prüft live bei Apple, ob Schlüssel, Team und Bundle-IDs akzeptiert werden, mit einem erfundenen Gerätetoken; es wird nichts zugestellt; 6 je 10 Minuten).
     v0.37.1 (G1b): Besitzer-Detailansicht von Umfragen und Bestellrunden zeigt `token`/`path` jederzeit wieder (Migration g1b.add_group_link_tokens; ältere Zeilen erst nach rotate-token). v0.37.0 (G1, ADR-0033): Modul `groups` (sechster Modulschlüssel, ModuleKey/ModuleStatus). Öffentliche Umfragen (Termin- und Textumfragen, Einzel-/Mehrfachwahl, yes/maybe/no) und Bestellrunden (z. B. Dönerstag) mit Katalogen. Besitzer-API unter /api/v1/groups/{polls,orders,catalogs} (Sitzung + CSRF, Modul groups); öffentliche API unter /api/v1/public/groups/{token}/… ohne Anmeldung: das 256-Bit-Token ist die einzige Berechtigung (nur als Hash gespeichert, per rotate-token erneuerbar), Teilnehmer geben einen Anzeigenamen an und ändern ihre Stimme/ihren Eintrag mit einem Bearbeitungsschlüssel (Header X-Edit-Secret, nur als Hash gespeichert). Antworten enthalten keine Kontodaten, immer Cache-Control no-store und X-Robots-Tag noindex. Ratenbegrenzung je Client und Link (429 Retry-After). Freigabeseite der PWA: /g/<token>. Aufbewahrung: beendete/abgelaufene Umfragen und Runden werden nach GROUPS_RETENTION_DAYS (Standard 90) vom Aufräumjob gelöscht; Kontoexport polls/orders/catalogs, Kontolöschung entfernt alles. Neue Fehlercodes: group_closed, group_full, name_taken (409), answers_invalid, deadline_in_past (400), edit_secret_invalid (403), too_many_polls, too_many_orders, too_many_catalogs (409). Neue Migration g1.create_groups.
     v0.36.0 (C3, ADR-0032): (a) Abwesenheitsstatus je Art. Nur Urlaub (`vacation`) hat den Antragsablauf planned/requested/approved/rejected/cancelled/taken. Krank (`sick`) und Freistellung (`excused`) kennen nur den neuen Status `recorded` (erfasst) und `cancelled`; Sonstiges (`other`) kennt `planned`, `recorded`, `cancelled`. `Absence.status` kann jetzt `recorded` sein (Clients müssen den Wert tolerieren). `AbsenceInput.status` ist optional (Standard: Urlaub `planned`, sonst `recorded`). Ältere Clients, die für sick/excused planned/requested/approved/taken senden, werden angenommen und normalisiert (-> `recorded`; bei other requested -> planned, approved/taken -> recorded); `rejected` für sick/excused/other und `recorded` für vacation sind 400 `absence_status_invalid_for_kind`. Migration c3.allow_recorded_absence_status und c3.normalise_absence_statuses (bestehende Zeilen werden normalisiert, der alte Status bleibt in `absences.legacy_status`). ICS: Krank/Freigestellt ohne Statuszusatz, ausdrückliche Tagesmarkierungen (Urlaub, Krank, Freigestellt, Berufsschultag) und erfasste Berufsschultage erscheinen im Abo. MCP `create_absence`: `status` optional, `recorded` erlaubt. (b) Zeitkonto ohne den laufenden Tag: `TimeAccount.balanceSeconds`, `TimeWeek.summary.accountBalance*`, die kumulierten Salden und Summen der Statistik zählen die Tagesdifferenzen nur bis gestern; neue Felder `includesToday` (immer false) und `todayDeltaSeconds` (Differenz des laufenden Tages, null wenn asOf vor heute liegt oder das Konto noch nicht begonnen hat) an TimeAccount, TimeWeek.summary und TimeStatistics. `TimeWeek.summary.balanceSeconds`/`targetToDateSeconds` und die Statistik-Differenzen enthalten den heutigen Tag ebenfalls nicht mehr. Kontoanpassungen mit Datum heute zählen sofort. `provisional` ist beim Konto nur noch gesetzt, wenn ein Tag bis gestern vorläufig ist. (c) Die Konto-E-Mail ist die einzige Adresse für E-Mail-Codes der Wiederherstellung: `PUT /me/recovery/email` braucht keinen Body mehr (204 = sofort aktiv bei bestätigter Konto-Adresse, 202 = Code an die Konto-Adresse gesendet; Body `email` ist veraltet: gleich der Konto-Adresse oder, wenn diese fehlt oder unbestätigt ist, neue Konto-Adresse nach Code-Bestätigung; abweichend von einer bestätigten Konto-Adresse 409 `recovery_email_must_be_account_email`; ohne Konto-Adresse und ohne Body 409 `account_email_missing`). `GET /me/recovery` `email` ergänzt `accountEmail` und `usesAccountEmail`; `verified` bedeutet: Konto-Adresse bestätigt. Entfernen der Konto-Adresse und Wechsel wirken auf die Wiederherstellung (aus bzw. neue Adresse). Migration c3.account_email_is_recovery_email.
     v0.35.0 (P13): Plantage enthalten geordnete, überschneidungsfreie Blöcke mit start/end/kind und optional placeId/note. Neue Schreibfelder haben Vorrang vor den alten Zeitfeldern; alte Felder bleiben les- und schreibbar und werden aus Blöcken abgeleitet. Planfreigaben zeigen Blöcke ohne Ort/Notiz. Neue Fehlercodes (400): plan_blocks_invalid, plan_blocks_overlap, plan_kind_invalid, plan_note_invalid.
@@ -1435,6 +1436,20 @@ paths:
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: false, content: { application/json: { schema: { $ref: '#/components/schemas/MailTestInput' } } } }
       responses: { '200': { description: gesendet, content: { application/json: { schema: { $ref: '#/components/schemas/MailTestResult' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '403': { $ref: '#/components/responses/Forbidden' }, '422': { description: Empfänger abgelehnt, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }, '429': { $ref: '#/components/responses/TooMany' }, '501': { $ref: '#/components/responses/NotImplemented' }, '502': { description: Mailserver-Fehler, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }, '504': { description: Zeitüberschreitung, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } } }
+  /api/v1/admin/apns:
+    get:
+      operationId: getApnsStatus
+      summary: APNs-Konfiguration abrufen
+      description: Nur Admin. Zeigt die APNs-Einstellungen aus der Umgebung ohne den Schlüssel (Key-ID, Team-ID, Bundle-IDs), die Namen fehlender oder ungültiger APNS_*-Variablen und die Zahl registrierter Geräte (alle Konten) samt Hinweisen.
+      security: [ { session: [] } ]
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/ApnsStatus' } } } }, '403': { $ref: '#/components/responses/Forbidden' } }
+  /api/v1/admin/apns/check:
+    post:
+      operationId: checkApns
+      summary: APNs-Zugang live prüfen
+      description: Nur Admin, normale Sitzung. Sendet je Bundle-ID und Umgebung (Produktion, Sandbox) eine Anfrage mit einem erfundenen Gerätetoken an Apple. Lehnt Apple nur das Token ab, sind Schlüssel, Team und Bundle-ID gültig; es wird nichts zugestellt. Ein abgelehnter Schritt ist ein normales Ergebnis (200, ok=false) mit Hinweis. 6 je 10 Minuten (429), 501 ohne APNs-Konfiguration.
+      security: [ { session: [], csrf: [] } ]
+      responses: { '200': { description: Ergebnis, content: { application/json: { schema: { $ref: '#/components/schemas/ApnsCheckResult' } } } }, '403': { $ref: '#/components/responses/Forbidden' }, '429': { $ref: '#/components/responses/TooMany' }, '501': { $ref: '#/components/responses/NotImplemented' } }
   /api/v1/files:
     post:
       operationId: uploadFile
@@ -3411,6 +3426,41 @@ components:
       type: object
       required: [sent, to, durationMs]
       properties: { sent: { type: boolean }, to: { type: string }, durationMs: { type: integer } }
+    ApnsHint:
+      type: object
+      required: [severity, code, message]
+      properties: { severity: { type: string, enum: [info, warning] }, code: { type: string, enum: [not_configured, incomplete, no_devices] }, message: { type: string } }
+    ApnsStatus:
+      type: object
+      required: [configured, bundleIds, problems, deviceCount, source, hints]
+      properties:
+        configured: { type: boolean }
+        keyId: { type: string }
+        teamId: { type: string }
+        bundleIds: { type: array, items: { type: string } }
+        problems: { type: array, items: { type: string }, description: 'Namen fehlender oder ungültiger APNS_*-Variablen' }
+        deviceCount: { type: integer }
+        source: { type: string, enum: [environment] }
+        hints: { type: array, items: { $ref: '#/components/schemas/ApnsHint' } }
+    ApnsProbe:
+      type: object
+      required: [bundleId, environment, status]
+      properties:
+        bundleId: { type: string }
+        environment: { type: string, enum: [production, sandbox] }
+        status: { type: string, enum: [ok, failed] }
+        httpStatus: { type: integer }
+        reason: { type: string, description: 'APNs-Grund oder network' }
+        advice: { type: string }
+    ApnsCheckResult:
+      type: object
+      required: [ok, summary, checkedAt, totalMs, probes]
+      properties:
+        ok: { type: boolean }
+        summary: { type: string }
+        checkedAt: { type: string, format: date-time }
+        totalMs: { type: integer }
+        probes: { type: array, items: { $ref: '#/components/schemas/ApnsProbe' } }
     StorageSettings:
       type: object
       required: [rules, maxUploadBytes, hasSecret]

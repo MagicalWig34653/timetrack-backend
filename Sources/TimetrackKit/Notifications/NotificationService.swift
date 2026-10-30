@@ -62,6 +62,8 @@ struct NotificationService: Sendable {
     var policy = PushEndpointPolicy()
     /// APNs delivery for the Apple apps; nil while unconfigured (ADR-0030).
     var apns: ApnsSender?
+    /// The environment the APNs settings were read from (only used to name missing or invalid variables in the diagnosis).
+    var apnsEnvironment: [String: String] = [:]
 
     // MARK: Notifications
 
