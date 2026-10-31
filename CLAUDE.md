@@ -73,6 +73,7 @@ Diese Regel bei jedem Agent-Auftrag mitgeben.
 - Standortsignal, Planung und tatsächliche Zeit sind unterschiedliche Objekte.
 - KI erstellt bearbeitbare Entwürfe, erfindet keine Tätigkeiten. KI-Zugang getrennt vom App-Login.
 - Kontentrennung auch für MCP, Exporte, Anhänge, Jobs, Suche und Push durchsetzen.
+- **Keine einseitigen Rahmen/Akzentbalken** an Einträgen, Karten oder Menüpunkten (Nutzerentscheidung 31.10.2026, `docs/DESIGN.md`); Hervorhebung über Hintergrund/Textfarbe/Gewicht.
 - Vorschläge nicht als Nutzerentscheidungen darstellen; offene Details kenntlich halten.
 
 ## Öffentliches Repository, Kennungen, Namen

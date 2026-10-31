@@ -111,3 +111,7 @@ Stand: 17.10.2026 (Paket G1, Vertrag v0.15.0, ADR-0020 Nachtrag). Gilt für die 
 
 **Weitere Akzent-Voreinstellungen** mit weißer Schrift (jeweils ≥ 4,5:1 auf der Fläche, Tinte ≥ 4,5:1 auf Seitengrund): siehe `docs/handoffs/G1.md` für IDs und Hex-Werte.
 
+
+## Verbot: einseitige Rahmen und Akzentbalken (Nutzerentscheidung 31.10.2026)
+
+Keine einseitigen Rahmen, Balken oder „Klammern“ an Einträgen, Karten oder Menüpunkten (zum Beispiel `border-l-2`, `border-r-*` auf abgerundeten Elementen, farbige Streifen am Rand). Sie werden auf abgerundeten Flächen als gebogene Klammer gezeichnet und der Nutzer lehnt sie ausdrücklich ab. Aktiv und Hervorhebung nur über Hintergrund, Textfarbe und Schriftgewicht. Gilt für PWA und native Apps und ist jedem Agent-Auftrag mitzugeben.
