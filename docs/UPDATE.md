@@ -50,6 +50,8 @@ Während eines Rolling Updates laufen kurz alte und neue Replikas nebeneinander.
 
 ### Update-Skript (Swarm)
 
+**Tags:** Jeder Build trägt `sha-<Backend-Commit>` und zusätzlich den eindeutigen Tag `sha-<Backend-Commit>-<PWA-Commit>`. Die PWA liegt in einem eigenen Repository; ein Planer prüft alle 15 Minuten, ob deren `main` schon ein Image hat, und baut sonst neu. `update.sh` bevorzugt den eindeutigen Tag, sodass PWA-Änderungen auch bei gleichem Backend-Commit als neuer Stand erkannt werden.
+
 `deploy/swarm/update.sh` erledigt die Schritte 2 bis 4 in einem Lauf: Es sucht auf GHCR den neuesten `sha-<Commit>`-Tag (den Tag, der auf denselben Stand wie `latest` zeigt; gefunden in konstanter Zeit über das Image-Label `org.opencontainers.image.revision` und gegen den Digest von `latest` geprüft, nur als Rückfall werden alle Tags verglichen, damit es auch mit sehr vielen Images schnell bleibt), schreibt ihn als `TIMETRACK_IMAGE` in deine `.env` (Sicherung als `.env.bak`), führt den Migrations-Job mit dem neuen Image aus, wartet auf „Complete“ und stellt erst danach das Backend per Rolling Update um. Schlägt die Migration fehl, bleibt das Backend unverändert.
 
 ```sh

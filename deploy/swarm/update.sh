@@ -81,8 +81,9 @@ digest_of() {
 }
 
 # Commit the image of a tag was built from (label org.opencontainers.image.revision); empty when it cannot be read.
-revision_of() {
-  local index manifest config
+# Prints the value of one image label of a tag (empty when missing).
+label_of() {
+  local name="$2" index manifest config
   index="$(curl -fsS -H "Authorization: Bearer $TOKEN" -H "Accept: $ACCEPT" "https://ghcr.io/v2/${REPO}/manifests/$1")" || return 1
   # An index lists platform manifests (plus attestations); a plain manifest has its own config.
   manifest="$(printf '%s' "$index" | tr -d '\n ' | grep -o '"digest":"sha256:[0-9a-f]*","size":[0-9]*,"platform":{"architecture":"\(amd64\|arm64\)"' | head -1 | grep -o 'sha256:[0-9a-f]*')"
@@ -92,8 +93,9 @@ revision_of() {
   config="$(printf '%s' "$index" | tr -d '\n ' | grep -o '"config":{[^}]*}' | grep -o 'sha256:[0-9a-f]*' | head -1)"
   [ -n "$config" ] || return 1
   curl -fsSL -H "Authorization: Bearer $TOKEN" "https://ghcr.io/v2/${REPO}/blobs/${config}" \
-    | grep -o '"org.opencontainers.image.revision":"[0-9a-f]*"' | head -1 | sed 's/.*:"\([0-9a-f]*\)"/\1/'
+    | grep -o "\"${name}\":\"[0-9a-f]*\"" | head -1 | sed 's/.*:"\([0-9a-f]*\)"/\1/'
 }
+revision_of() { label_of "$1" org.opencontainers.image.revision; }
 
 step "Find the newest image tag"
 if [ -z "$TAG" ]; then
@@ -106,13 +108,18 @@ if [ -z "$TAG" ]; then
   # tag is sha-<first 7 characters>. latest -> index -> first platform manifest -> config blob -> label (4 requests).
   # The result is verified against the digest of latest; if anything is missing the slow scan below runs instead.
   REVISION="$(revision_of latest || true)"
+  PWA_REVISION="$(label_of latest dev.timetrack.pwa-revision || true)"
   if [ -n "$REVISION" ]; then
-    candidate="sha-${REVISION:0:7}"
-    if [ "$(digest_of "$candidate")" = "$LATEST_DIGEST" ]; then TAG="$candidate"; say "latest was built from commit ${REVISION:0:7} -> ${candidate} (verified)"; fi
+    # Builds also happen when only the PWA changed, so sha-<commit> alone is not unique: prefer sha-<commit>-<pwa commit>.
+    candidates="sha-${REVISION:0:7}"
+    [ -z "$PWA_REVISION" ] || candidates="sha-${REVISION:0:7}-${PWA_REVISION:0:7} ${candidates}"
+    for candidate in $candidates; do
+      if [ "$(digest_of "$candidate")" = "$LATEST_DIGEST" ]; then TAG="$candidate"; say "latest was built from commit ${REVISION:0:7} -> ${candidate} (verified)"; break; fi
+    done
   fi
   if [ -z "$TAG" ]; then
     say "Label lookup did not give a verified tag, falling back to comparing all sha- tags (slow with many images) ..."
-    TAGS="$(curl -fsS -H "Authorization: Bearer $TOKEN" "https://ghcr.io/v2/${REPO}/tags/list?n=1000" | grep -o '"sha-[0-9a-f]*"' | tr -d '"' || true)"
+    TAGS="$(curl -fsS -H "Authorization: Bearer $TOKEN" "https://ghcr.io/v2/${REPO}/tags/list?n=1000" | grep -o '"sha-[0-9a-f-]*"' | tr -d '"' || true)"
     [ -n "$TAGS" ] || die "no sha- tags found"
     TOTAL="$(printf '%s\n' "$TAGS" | wc -l | tr -d ' ')"
     say "${TOTAL} sha- tags found, comparing their digests with latest ..."
