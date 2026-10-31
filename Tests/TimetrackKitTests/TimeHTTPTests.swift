@@ -30,6 +30,32 @@ extension AuthTests {
         var body: [String: Any] = ["kind": "work", "startedAt": start]
         if let end { body["endedAt"] = end }; return body
     }
+    func testArchivedPlacesCanBeListedAndRestored() async throws {
+        try await withApp { app, auth in
+            let (a, _) = try await registered(auth, db: app.db)
+            let b = try await second(app, auth, a)
+            func array(_ response: XCTHTTPResponse) throws -> [[String: Any]] {
+                try XCTUnwrap(JSONSerialization.jsonObject(with: Data(response.body.readableBytesView)) as? [[String: Any]])
+            }
+            let id = try resourceID(try await timeRequest(app, a, .POST, "places", placeBody(), status: .created))
+            _ = try await timeRequest(app, a, .POST, "places", placeBody("off").merging(["name": "Home"]) { _, new in new }, status: .created)
+            try await timeRequest(app, a, .DELETE, "places/" + id, status: .noContent)
+            try await eq(try array(try await timeRequest(app, a, .GET, "places")).count, 1)
+            let archived = try array(try await timeRequest(app, a, .GET, "places?archived=true"))
+            try await eq(archived.map { $0["id"] as? String }, [id]); try await eq(archived.first?["archived"] as? Bool, true)
+            try await eq(try array(try await timeRequest(app, a, .GET, "places?archived=all")).count, 2)
+            try await timeRequest(app, a, .GET, "places?archived=maybe", status: .badRequest)
+            // Another account sees nothing and cannot restore it.
+            try await eq(try array(try await timeRequest(app, b, .GET, "places?archived=all")).count, 0)
+            try await timeRequest(app, b, .POST, "places/" + id + "/restore", status: .notFound)
+            let restored = try object(try await timeRequest(app, a, .POST, "places/" + id + "/restore"))
+            try await eq(restored["archived"] as? Bool, false)
+            try await timeRequest(app, a, .POST, "places/" + id + "/restore")
+            try await eq(try array(try await timeRequest(app, a, .GET, "places")).count, 2)
+            try await eq(try array(try await timeRequest(app, a, .GET, "places?archived=true")).count, 0)
+        }
+    }
+
     func testTimeRESTModelsPlacesSegmentsDaysAndAccount() async throws {
         try await withApp { app, auth in
             let (context, _) = try await registered(auth, db: app.db)

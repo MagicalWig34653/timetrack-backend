@@ -5,6 +5,7 @@ Die Einzelpakete (A1, B2, …) stehen in `docs/ARBEITSPLAN.md`.
 
 ## Unveröffentlicht
 
+- **Archivierte Orte (P15, Vertrag 0.39.0):** `GET /places?archived=true|all` listet archivierte Orte, `POST /places/{id}/restore` stellt einen Ort wieder her. Clients (PWA, Apple) können Wiederherstellen und Archivliste jetzt anbieten.
 - **Image-Tags und PWA-Builds:** Der Docker-Workflow baut alle 15 Minuten neu, wenn `main` der PWA noch kein Image hat, und taggt jedes Image zusätzlich eindeutig `sha-<Backend>-<PWA>` (Label `dev.timetrack.pwa-revision`). `update.sh` findet diesen Tag; vorher konnte ein neuer PWA-Stand unter demselben `sha-<Backend>`-Tag verborgen bleiben.
 - **APNs-Diagnose (P14e, Vertrag 0.38.0, nur Admin):** `GET /admin/apns` zeigt Key-ID, Team-ID, Bundle-IDs, fehlende oder ungültige `APNS_*`-Variablen und die Gerätezahl (ohne Schlüssel); `POST /admin/apns/check` prüft live bei Apple mit einem erfundenen Gerätetoken (je Bundle-ID und Umgebung), ohne etwas zuzustellen; 6 je 10 Minuten. Der Test an ein registriertes Gerät (`/me/push-devices/{id}/test`) bleibt.
 - **Gruppenmodul: Link wieder ansehen (G1b, Vertrag 0.37.1):** Die Besitzer-Detailansicht von Umfragen und Bestellrunden liefert `token`/`path` jederzeit erneut (Migration `g1b.add_group_link_tokens`, Nachtrag in ADR-0033); Zeilen von vor dieser Änderung brauchen einmal „Link erneuern“. PWA: Link im Besitzerbereich dauerhaft anzeigen/kopieren (noch offen).

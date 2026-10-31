@@ -88,8 +88,15 @@ struct WorkModelService: Sendable {
 
 struct PlaceService: Sendable {
     let scope: TimeServices
-    func list() async throws -> [PlaceDTO] {
-        try await PlaceRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).all().map(\.payload).filter { $0.archived != true }
+    /// `.active` (default) hides archived places, `.archived` lists only them, `.all` both.
+    enum Scope: String, Sendable { case active, archived, all }
+    func list(_ scopeFilter: Scope = .active) async throws -> [PlaceDTO] {
+        let all = try await PlaceRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).all().map(\.payload)
+        switch scopeFilter {
+        case .active: return all.filter { $0.archived != true }
+        case .archived: return all.filter { $0.archived == true }
+        case .all: return all
+        }
     }
     func record(_ id: UUID) async throws -> PlaceRecord {
         guard let row = try await PlaceRecord.query(on: scope.db).filter(\.$accountId == scope.accountId).filter(\.$id == id).first() else { throw APIError.missing }
@@ -105,6 +112,10 @@ struct PlaceService: Sendable {
     }
     func archive(_ id: UUID) async throws {
         let row = try await record(id); row.payload.archived = true; try await row.update(on: scope.db)
+    }
+    /// Brings an archived place back (idempotent for an active one).
+    func restore(_ id: UUID) async throws -> PlaceDTO {
+        let row = try await record(id); row.payload.archived = false; try await row.update(on: scope.db); return row.payload
     }
 }
 

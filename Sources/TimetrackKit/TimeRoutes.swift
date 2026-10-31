@@ -40,7 +40,17 @@ func registerTimeRoutes(_ app: Application, auth: AuthService) {
         let key = try id(req); let input = try timeDecode(WorkModelDTO.self, request: req)
         return try await runRead(req) { try timeResponse(await $0.models.preview(key, input: input)) }
     }
-    api.get("places") { req async throws -> Response in try await runRead(req) { try timeResponse(await $0.places.list()) } }
+    api.get("places") { req async throws -> Response in
+        let filter: PlaceService.Scope
+        if let raw: String = req.query["archived"] {
+            guard let parsed = ["true": PlaceService.Scope.archived, "only": .archived, "all": .all, "false": .active][raw] else { throw APIError.invalid }
+            filter = parsed
+        } else { filter = .active }
+        return try await runRead(req) { try timeResponse(await $0.places.list(filter)) }
+    }
+    api.post("places", ":id", "restore") { req async throws -> Response in
+        let key = try id(req); return try await run(req) { try timeResponse(await $0.places.restore(key)) }
+    }
     api.post("places") { req async throws -> Response in
         let input = try timeDecode(PlaceDTO.self, request: req)
         return try await run(req) { try timeResponse(await $0.places.save(input), status: .created) }

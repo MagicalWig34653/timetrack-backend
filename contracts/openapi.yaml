@@ -1,8 +1,9 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.38.0
+  version: 0.39.0
   description: |
+    v0.39.0 (P15, additiv): Archivierte Orte. `GET /places?archived=true|all` (Standard: nur aktive; `true` nur archivierte, `all` beide) und `POST /places/{id}/restore` stellt einen archivierten Ort wieder her (200 mit dem Ort, idempotent, fremde Orte 404). Kennzahl `archived` am Ort war schon vorhanden.
     v0.38.0 (P14e, ADR-0030 Nachtrag, additiv, nur Admin): APNs-Diagnose. GET /admin/apns (Zustand ohne Geheimnisse, fehlende oder ungültige APNS_*-Variablen, Gerätezahl, Hinweise) und POST /admin/apns/check (prüft live bei Apple, ob Schlüssel, Team und Bundle-IDs akzeptiert werden, mit einem erfundenen Gerätetoken; es wird nichts zugestellt; 6 je 10 Minuten).
     v0.37.1 (G1b): Besitzer-Detailansicht von Umfragen und Bestellrunden zeigt `token`/`path` jederzeit wieder (Migration g1b.add_group_link_tokens; ältere Zeilen erst nach rotate-token). v0.37.0 (G1, ADR-0033): Modul `groups` (sechster Modulschlüssel, ModuleKey/ModuleStatus). Öffentliche Umfragen (Termin- und Textumfragen, Einzel-/Mehrfachwahl, yes/maybe/no) und Bestellrunden (z. B. Dönerstag) mit Katalogen. Besitzer-API unter /api/v1/groups/{polls,orders,catalogs} (Sitzung + CSRF, Modul groups); öffentliche API unter /api/v1/public/groups/{token}/… ohne Anmeldung: das 256-Bit-Token ist die einzige Berechtigung (nur als Hash gespeichert, per rotate-token erneuerbar), Teilnehmer geben einen Anzeigenamen an und ändern ihre Stimme/ihren Eintrag mit einem Bearbeitungsschlüssel (Header X-Edit-Secret, nur als Hash gespeichert). Antworten enthalten keine Kontodaten, immer Cache-Control no-store und X-Robots-Tag noindex. Ratenbegrenzung je Client und Link (429 Retry-After). Freigabeseite der PWA: /g/<token>. Aufbewahrung: beendete/abgelaufene Umfragen und Runden werden nach GROUPS_RETENTION_DAYS (Standard 90) vom Aufräumjob gelöscht; Kontoexport polls/orders/catalogs, Kontolöschung entfernt alles. Neue Fehlercodes: group_closed, group_full, name_taken (409), answers_invalid, deadline_in_past (400), edit_secret_invalid (403), too_many_polls, too_many_orders, too_many_catalogs (409). Neue Migration g1.create_groups.
     v0.36.0 (C3, ADR-0032): (a) Abwesenheitsstatus je Art. Nur Urlaub (`vacation`) hat den Antragsablauf planned/requested/approved/rejected/cancelled/taken. Krank (`sick`) und Freistellung (`excused`) kennen nur den neuen Status `recorded` (erfasst) und `cancelled`; Sonstiges (`other`) kennt `planned`, `recorded`, `cancelled`. `Absence.status` kann jetzt `recorded` sein (Clients müssen den Wert tolerieren). `AbsenceInput.status` ist optional (Standard: Urlaub `planned`, sonst `recorded`). Ältere Clients, die für sick/excused planned/requested/approved/taken senden, werden angenommen und normalisiert (-> `recorded`; bei other requested -> planned, approved/taken -> recorded); `rejected` für sick/excused/other und `recorded` für vacation sind 400 `absence_status_invalid_for_kind`. Migration c3.allow_recorded_absence_status und c3.normalise_absence_statuses (bestehende Zeilen werden normalisiert, der alte Status bleibt in `absences.legacy_status`). ICS: Krank/Freigestellt ohne Statuszusatz, ausdrückliche Tagesmarkierungen (Urlaub, Krank, Freigestellt, Berufsschultag) und erfasste Berufsschultage erscheinen im Abo. MCP `create_absence`: `status` optional, `recorded` erlaubt. (b) Zeitkonto ohne den laufenden Tag: `TimeAccount.balanceSeconds`, `TimeWeek.summary.accountBalance*`, die kumulierten Salden und Summen der Statistik zählen die Tagesdifferenzen nur bis gestern; neue Felder `includesToday` (immer false) und `todayDeltaSeconds` (Differenz des laufenden Tages, null wenn asOf vor heute liegt oder das Konto noch nicht begonnen hat) an TimeAccount, TimeWeek.summary und TimeStatistics. `TimeWeek.summary.balanceSeconds`/`targetToDateSeconds` und die Statistik-Differenzen enthalten den heutigen Tag ebenfalls nicht mehr. Kontoanpassungen mit Datum heute zählen sofort. `provisional` ist beim Konto nur noch gesetzt, wenn ein Tag bis gestern vorläufig ist. (c) Die Konto-E-Mail ist die einzige Adresse für E-Mail-Codes der Wiederherstellung: `PUT /me/recovery/email` braucht keinen Body mehr (204 = sofort aktiv bei bestätigter Konto-Adresse, 202 = Code an die Konto-Adresse gesendet; Body `email` ist veraltet: gleich der Konto-Adresse oder, wenn diese fehlt oder unbestätigt ist, neue Konto-Adresse nach Code-Bestätigung; abweichend von einer bestätigten Konto-Adresse 409 `recovery_email_must_be_account_email`; ohne Konto-Adresse und ohne Body 409 `account_email_missing`). `GET /me/recovery` `email` ergänzt `accountEmail` und `usesAccountEmail`; `verified` bedeutet: Konto-Adresse bestätigt. Entfernen der Konto-Adresse und Wechsel wirken auf die Wiederherstellung (aus bzw. neue Adresse). Migration c3.account_email_is_recovery_email.
@@ -670,7 +671,9 @@ paths:
     get:
       operationId: listPlaces
       summary: Orte auflisten
+      description: Standard nur aktive Orte. `archived=true` liefert nur archivierte, `archived=all` aktive und archivierte (sonst 400).
       security: [ { session: [] } ]
+      parameters: [ { name: archived, in: query, required: false, schema: { type: string, enum: ['true', 'false', all] } } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Place' } } } } } }
     post:
       operationId: createPlace
@@ -693,6 +696,13 @@ paths:
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '204': { description: archiviert }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/v1/places/{id}/restore:
+    post:
+      operationId: restorePlace
+      summary: Archivierten Ort wiederherstellen
+      security: [ { session: [], csrf: [] } ]
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses: { '200': { description: wiederhergestellt, content: { application/json: { schema: { $ref: '#/components/schemas/Place' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/v1/time/segments:
     get:
       operationId: listSegments
