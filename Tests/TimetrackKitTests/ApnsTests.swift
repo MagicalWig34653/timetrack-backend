@@ -423,6 +423,11 @@ extension AuthTests {
             XCTAssertEqual((ok["probes"] as? [[String: Any]])?.count, 4)
             XCTAssertEqual(Set(transport.requests.map(\.deviceToken)), [ApnsDiagnosis.probeToken])
             XCTAssertEqual(Set(transport.requests.map(\.environment)), ["production", "sandbox"])
+            // One provider token for all probes, and the check reuses it on the next run (Apple throttles new tokens).
+            XCTAssertEqual(Set(transport.requests.map(\.authorization)).count, 1)
+            let firstToken = try XCTUnwrap(transport.requests.first?.authorization)
+            _ = try object(await api(app, admin, .POST, "admin/apns/check"))
+            XCTAssertEqual(Set(transport.requests.map(\.authorization)), [firstToken])
             XCTAssertFalse(String(decoding: try JSONSerialization.data(withJSONObject: ok), as: UTF8.self).contains(ApnsDiagnosis.probeToken))
             // Apple rejects the key, one topic is not allowed, and a network error: each is a normal 200 result with advice.
             transport.script([ApnsResponse(status: 403, reason: "InvalidProviderToken"), ApnsResponse(status: 403, reason: "TopicDisallowed")], then: ApnsResponse(status: 410, reason: "Unregistered"))
@@ -432,7 +437,7 @@ extension AuthTests {
             XCTAssertEqual(probes.map { $0["status"] as? String }, ["failed", "failed", "ok", "ok"])
             XCTAssertEqual(probes[0]["reason"] as? String, "InvalidProviderToken"); XCTAssertNotNil(probes[0]["advice"] as? String)
             // Rate limit: 6 checks per 10 minutes.
-            for _ in 0..<(ApnsDiagnosis.checkLimit - 2) { _ = try await api(app, admin, .POST, "admin/apns/check") }
+            for _ in 0..<(ApnsDiagnosis.checkLimit - 3) { _ = try await api(app, admin, .POST, "admin/apns/check") }
             _ = try await api(app, admin, .POST, "admin/apns/check", nil, .tooManyRequests)
         }
     }

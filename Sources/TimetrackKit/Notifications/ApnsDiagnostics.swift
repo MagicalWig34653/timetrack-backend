@@ -82,6 +82,7 @@ enum ApnsDiagnosis {
         case (403, "ExpiredProviderToken"): "Apple hält das Token für abgelaufen. Prüfe die Uhrzeit des Servers."
         case (403, "TopicDisallowed"): "Der Schlüssel darf für diese Bundle-ID nicht senden. Prüfe APNS_BUNDLE_IDS und die Schlüsselberechtigung im Apple-Developer-Konto."
         case (400, "BadTopic"), (400, "MissingTopic"): "Apple kennt diese Bundle-ID nicht. Prüfe APNS_BUNDLE_IDS."
+        case (429, "TooManyProviderTokenUpdates"): "Apple hat zu oft neue Anmelde-Token gesehen (höchstens etwa eines pro 20 Minuten). Warte 20 bis 60 Minuten und prüfe dann erneut. Das ist keine Fehlkonfiguration."
         case (429, _): "Apple drosselt Anfragen. Versuche es später erneut."
         case (500...599, _): "Apple meldet einen Serverfehler. Versuche es später erneut."
         default: "Unerwartete Antwort von Apple."
@@ -96,10 +97,12 @@ enum ApnsDiagnosis {
     static func run(_ sender: ApnsSender, now: Date = Date()) async -> ApnsCheckResult {
         let started = ContinuousClock.now
         var probes: [ApnsProbeDTO] = []
+        // The same cached provider token as real deliveries: Apple throttles new tokens (TooManyProviderTokenUpdates, about one per 20 minutes).
+        let authorization = sender.tokens.token(now: now)
         for bundleId in sender.configuration.bundleIds.sorted() {
             for environment in ["production", "sandbox"] {
                 let request = ApnsRequest(deviceToken: probeToken, environment: environment, topic: bundleId, pushType: "alert", priority: 10, collapseId: "diagnosis",
-                                          expiration: 0, authorization: ApnsTokenProvider.make(sender.configuration, now: now), body: Data(#"{"aps":{"alert":"x"}}"#.utf8))
+                                          expiration: 0, authorization: authorization, body: Data(#"{"aps":{"alert":"x"}}"#.utf8))
                 do {
                     let response = try await sender.transport.send(request)
                     let reason = response.reason ?? ""
