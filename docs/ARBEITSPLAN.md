@@ -1,5 +1,9 @@
 # Arbeitsplan und Agent-Übergabe
 
+## 30.10.–01.11.2026 – Gruppenlink, APNs-Diagnose, Orte-Archiv, AUD3, Einstellungen (Claude-Agents, alles integriert)
+
+G1b (Link wieder abrufbar, Vertrag 0.37.1), P14e (APNs-Diagnose, 0.38.0), P15 (archivierte Orte, 0.39.0), U9/U10 und P15-pwa (PWA), AUD3-A (Einstellungen: Auslöse-Links, Profil, Konto & Sicherheit), AUD3-B (archivierte Orte, halber Betriebstag, Urlaubsantrag), SET-A (Einstellungsstruktur wie PWA), Deploy-Branch und Image-Tags. Agents arbeiteten in Worktrees `timetrack-apple-wt/{aud3-a,aud3-b,set-a}`; Lead-Prüfung: Diffs gelesen, Kerntests und iOS/Mac-Builds selbst gelaufen. Übergabe: `docs/handoffs/SESSION-2026-11-01.md`.
+
 ## G1 – Gruppenmodul Backend (30.10.2026)
 
 Claude-Agent, Worktree `../timetrack-backend-wt/g1`, Branch `g1-polls` (Basis main 5006d0d). Umfang: öffentliche Umfragen, Bestellrunden, Kataloge, Modul `groups`, Aufbewahrung, Export/Löschung, Vertrag 0.37.0, ADR-0033. Status: umgesetzt, Lead-Prüfung offen, nicht gemergt. Nächster Schritt: PWA-Paket (Route `/g/<token>`, Besitzerbereich, Service-Worker-Ausnahme, Modulschalter-Eintrag).

@@ -1,5 +1,7 @@
 # Aktueller Projektstand
 
+**Sitzungsabschluss 01.11.2026:** Backend `main` c05906e (Vertrag **0.39.0**), PWA `main` 4a71c83, Apple `main` 0da7d5e (TestFlight **Build 59**; SET-A noch nicht hochgeladen). Alles gepusht. **Vollständige Übergabe mit offenen Punkten und Stolpersteinen: `docs/handoffs/SESSION-2026-11-01.md`.** Kurz: GitHub-CI nach den Reparaturen noch nicht grün bestätigt, Dependabot-PRs offen, Server-Update und Geräteprüfungen stehen aus. Regel: keine einseitigen Rahmen/Akzentbalken (`docs/DESIGN.md`).
+
 **Sitzungsabschluss 30.10.2026 (Lead-Prüfung der Pakete unten erfolgt, alles gemergt):**
 
 - **Nachtrag 30.10. (später):** Backend Vertrag 0.37.1 (G1b: Gruppenlink in der Besitzeransicht wieder abrufbar, Migration `g1b.add_group_link_tokens`); PWA `main` f57fa51 (Link sichtbar, Saldo nur bis gestern in Monatskopf/Statistik, echte Schalter statt Checkboxen, Seitenumbruch der Stimmen; 1334 Unit-Tests, Mock-E2E 248 grün). **TestFlight Build 58 hochgeladen** (Xcode 27.1 aus dem Downloads-Ordner per `DEVELOPER_DIR`; 27.2 ist nicht zugelassen). Damit erledigt: Build-58-Blocker, PWA-Saldo, Schalter, Stimmen-Seitenumbruch.
