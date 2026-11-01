@@ -58,7 +58,7 @@ struct AllowRecordedAbsenceStatus: AsyncMigration {
 struct NormaliseAbsenceStatuses: AsyncMigration {
     let name = "c3.normalise_absence_statuses"
     func prepare(on db: any Database) async throws {
-        try await db.schema("absences").field("legacy_status", .string).update()
+        if !(await columnExists(db, table: "absences", column: "legacy_status")) { try await db.schema("absences").field("legacy_status", .string).update() }
         let sql = try requireSQL(db)
         let affected = try await sql.raw("""
             SELECT DISTINCT account_id FROM absences WHERE (kind IN ('sick', 'excused') AND status <> 'recorded' AND status <> 'cancelled') \

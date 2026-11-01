@@ -100,7 +100,7 @@ extension AuthTests {
             vacation.documentStatus = "not_needed"; vacation.version = 1; vacation.createdAt = Date(); vacation.updatedAt = Date()
             try await vacation.create(on: app.db)
             // Re-run the data part of the migration (the schema part already ran at startup).
-            try await app.db.schema("absences").deleteField("legacy_status").update()
+            try await requireSQL(app.db).raw("UPDATE absences SET legacy_status = NULL").run()
             try await NormaliseAbsenceStatuses().prepare(on: app.db)
             let migratedRow = try await AbsenceRecord.find(id, on: app.db)
             let migrated = try XCTUnwrap(migratedRow)

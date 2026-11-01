@@ -10,6 +10,13 @@ func requireSQL(_ database: any Database) throws -> any SQLDatabase {
     return sql
 }
 
+/// True when `table` already has `column`. A zero-row SELECT works on SQLite and MariaDB and does not change anything,
+/// so migrations that add a column can be run again safely (data steps of a migration are re-runnable, ADR-0032).
+func columnExists(_ database: any Database, table: String, column: String) async -> Bool {
+    guard let sql = database as? any SQLDatabase else { return false }
+    return (try? await sql.raw("SELECT \(unsafeRaw: column) FROM \(unsafeRaw: table) LIMIT 0").all()) != nil
+}
+
 /// A single conditional write followed by an affected-row count on the same connection.
 /// Pass a transaction database when consumption must commit together with other writes.
 /// Authorization and proof verification remain the caller's responsibility.

@@ -327,7 +327,8 @@ extension AuthTests {
             let (context, _) = try await registered(auth, db: app.db)
             _ = try await api(app, context, .PUT, "plan/days/2026-07-20", ["mode": "office", "plannedStart": "08:00", "plannedEnd": "16:00", "plannedBreakMinutes": 30])
             _ = try await api(app, context, .PUT, "plan/days/2026-07-21", ["mode": "school", "plannedStart": "09:00", "plannedEnd": "12:00"])
-            try await AddPlanBlocks().revert(on: app.db)
+            // Re-run: the migration is repeatable (the column exists, the blocks are derived again from the legacy fields).
+            try await requireSQL(app.db).raw("UPDATE plan_days SET blocks = NULL").run()
             try await AddPlanBlocks().prepare(on: app.db)
             let rows = try list(await api(app, context, .GET, "plan/days?from=2026-07-20&to=2026-07-21"))
             XCTAssertEqual(rows[0]["plannedSeconds"] as? Int, 27_000)

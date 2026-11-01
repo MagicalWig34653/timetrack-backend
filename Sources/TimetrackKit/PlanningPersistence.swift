@@ -231,7 +231,7 @@ struct AddPlanDayTimes: AsyncMigration {
 struct AddPlanBlocks: AsyncMigration {
     let name = "p13.add_plan_blocks"
     func prepare(on db: any Database) async throws {
-        try await db.schema("plan_days").field("blocks", .json).update()
+        if !(await columnExists(db, table: "plan_days", column: "blocks")) { try await db.schema("plan_days").field("blocks", .json).update() }
         for row in try await PlanDayRecord.query(on: db).all() {
             row.blocks = PlanTimes.legacyBlocks(start: row.plannedStart, end: row.plannedEnd,
                 breakMinutes: row.plannedBreakMinutes, kind: row.mode, placeId: row.placeId, note: row.note)
