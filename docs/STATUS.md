@@ -1,6 +1,6 @@
 # Aktueller Projektstand
 
-**Sitzungsabschluss 01.11.2026:** Backend `main` c05906e (Vertrag **0.39.0**), PWA `main` 4a71c83, Apple `main` 0da7d5e (TestFlight **Build 59**; SET-A noch nicht hochgeladen). Alles gepusht. **Vollständige Übergabe mit offenen Punkten und Stolpersteinen: `docs/handoffs/SESSION-2026-11-01.md`.** Kurz: GitHub-CI nach den Reparaturen noch nicht grün bestätigt, Dependabot-PRs offen, Server-Update und Geräteprüfungen stehen aus. Regel: keine einseitigen Rahmen/Akzentbalken (`docs/DESIGN.md`).
+**Sitzungsabschluss 01.11.2026:** Backend `main` c05906e (Vertrag **0.39.0**), PWA `main` 4a71c83, Apple `main` 0da7d5e (TestFlight **Build 59**; SET-A noch nicht hochgeladen). Alles gepusht. **Vollständige Übergabe mit offenen Punkten und Stolpersteinen: `docs/handoffs/SESSION-2026-11-01.md`.** Kurz: GitHub-CI auf `main` ist nach den Reparaturen grün (CI inkl. MariaDB 12.3, Docker, Pages, CodeQL; verifiziert 01.11.2026 an f9107c7). Dependabot: #9 (vapor 4.122.3) gemergt; offen #10/#12/#6 (Site-Abhängigkeiten, `npm ci` wegen nicht passender Lock-Datei rot bzw. Redocly-Major 1→2, nicht mergen) und #11 (Sammel-Bump der Actions, nicht gemergt). Server-Update und Geräteprüfungen stehen aus. Regel: keine einseitigen Rahmen/Akzentbalken (`docs/DESIGN.md`).
 
 **Sitzungsabschluss 30.10.2026 (Lead-Prüfung der Pakete unten erfolgt, alles gemergt):**
 
