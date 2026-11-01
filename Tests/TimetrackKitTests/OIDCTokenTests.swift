@@ -121,9 +121,14 @@ final class OIDCTokenTests: OIDCTestCase, @unchecked Sendable {
                 XCTAssertFalse(location.contains("eyJ"), "no JWT in redirects"); XCTAssertFalse(location.contains("at-secret-value"))
             }
             let all = sink.messages.joined(separator: "\n")
-            for secret in [approved.code, approved.state, "at-secret-value", "eyJ", context.token] {
+            for secret in [approved.code, approved.state, "at-secret-value", context.token] {
                 XCTAssertFalse(all.contains(secret), "log leaks \(secret.prefix(6))")
             }
+            // A JWT is three base64url segments starting with the encoded `{"` header. The bare prefix `eyJ` is not
+            // checked: the trace log carries SQL bindings with random base64url values (hashes, ids), which contain
+            // those three characters by chance (roughly 1 in 7000 long values; one run logs ~300), making a plain substring check flaky.
+            let jwtShape = try NSRegularExpression(pattern: "eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]*")
+            XCTAssertNil(jwtShape.firstMatch(in: all, range: NSRange(all.startIndex..., in: all)), "log leaks a JWT")
         }
     }
 }
