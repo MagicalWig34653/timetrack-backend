@@ -91,6 +91,8 @@ extension AuthTests {
         let data = oaJSON(consent)
         try await eq(data["clientName"] as? String, "Test Client"); try await eq(data["redirectHost"] as? String, "client.example")
         try await eq(data["scopes"] as? [String], ["time:read", "reports:read"]); XCTAssertNotNil(data["expiresAt"])
+        // SEC-12: anonymously registered clients are flagged so the consent page can warn.
+        try await eq(data["clientVerified"] as? Bool, false); XCTAssertNotNil(data["clientRegisteredAt"])
         let decision = try await oaDecision(app, context, started.id, approve: true)
         try await eq(decision.status, .ok)
         let url = try XCTUnwrap(oaJSON(decision)["redirectUrl"] as? String)

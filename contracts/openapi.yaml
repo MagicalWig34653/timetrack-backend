@@ -540,11 +540,14 @@ paths:
         (Anhänge). Rohzeiten und bewertete Zeiten stehen getrennt. Nie enthalten: Tokens, Hashes, Passkey-Material, Push-Schlüssel,
         Daten anderer Konten, eingehende Freigaben. Nicht lesbare oder über das Größenbudget (256 MiB) hinausgehende Dateien stehen in
         files.json mit included=false und reason. Nicht für Recovery-Sitzungen (403).
+        Verlangt eine frische Sitzung (Anmeldung höchstens 10 Minuten her, sonst 403 reauth_required) und ist auf 3 Aufrufe je Konto und Stunde
+        begrenzt (429 export_rate_limited).
       security: [ { session: [] } ]
       responses:
         '200': { description: ZIP, headers: { Content-Disposition: { schema: { type: string } } }, content: { application/zip: { schema: { type: string, format: binary } } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { description: 'export_rate_limited: höchstens 3 Exporte je Konto und Stunde' }
   /api/v1/me:
     delete:
       operationId: deleteMyAccount
@@ -1474,7 +1477,7 @@ paths:
     post:
       operationId: uploadFile
       summary: Datei hochladen
-      description: Lädt eine Datei hoch (multipart, Feld file). Speicherort nach Admin-Regeln. Typ-Whitelist und Größenlimit; 413 file_too_large, 415 unsupported_type.
+      description: 'Lädt eine Datei hoch (multipart, Feld file). Speicherort nach Admin-Regeln. Typ-Whitelist und Größenlimit; 413 file_too_large, 415 unsupported_type. Speicherkontingent je Konto (Standard 200 MiB und 500 Dateien, Admin-Einstellung): 413 storage_quota_exceeded. Höchstens 30 Uploads je Konto in 5 Minuten (429 too_many_requests).'
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, required: [file], properties: { file: { type: string, format: binary } } } } } }
       responses: { '201': { description: gespeichert, content: { application/json: { schema: { $ref: '#/components/schemas/FileMeta' } } } }, '400': { $ref: '#/components/responses/BadRequest' } }
@@ -3377,6 +3380,8 @@ components:
       properties:
         rules: { type: array, minItems: 1, items: { $ref: '#/components/schemas/StorageRule' }, description: geordnet; erste passende Regel gewinnt; letzte muss maxBytes null haben }
         maxUploadBytes: { type: integer, minimum: 1, default: 10485760 }
+        quotaBytes: { type: integer, minimum: 0, default: 209715200, description: 'Speicherkontingent je Konto in Bytes über alle Dateien; 0 = unbegrenzt' }
+        quotaFiles: { type: integer, minimum: 0, maximum: 1000000, default: 500, description: 'Höchstzahl Dateien je Konto; 0 = unbegrenzt' }
         localPath: { type: [string, 'null'] }
         s3:
           type: [object, 'null']
@@ -3483,10 +3488,12 @@ components:
         probes: { type: array, items: { $ref: '#/components/schemas/ApnsProbe' } }
     StorageSettings:
       type: object
-      required: [rules, maxUploadBytes, hasSecret]
+      required: [rules, maxUploadBytes, quotaBytes, quotaFiles, hasSecret]
       properties:
         rules: { type: array, items: { $ref: '#/components/schemas/StorageRule' } }
         maxUploadBytes: { type: integer }
+        quotaBytes: { type: integer, description: 'je Konto; 0 = unbegrenzt' }
+        quotaFiles: { type: integer, description: 'je Konto; 0 = unbegrenzt' }
         localPath: { type: [string, 'null'] }
         s3: { type: [object, 'null'], properties: { endpoint: { type: string }, region: { type: string }, bucket: { type: string }, pathStyle: { type: boolean }, accessKeyId: { type: string } } }
         hasSecret: { type: boolean }
@@ -3585,13 +3592,15 @@ components:
       enum: [time:read, time:write, schedule:read, schedule:write, reports:read, reports:write, documents:read]
     OAuthRequest:
       type: object
-      required: [id, clientName, redirectHost, scopes, expiresAt]
+      required: [id, clientName, redirectHost, scopes, expiresAt, clientRegisteredAt, clientVerified]
       properties:
         id: { type: string, format: uuid }
         clientName: { type: string }
         redirectHost: { type: string }
         scopes: { type: array, items: { $ref: '#/components/schemas/McpScope' } }
         expiresAt: { type: string, format: date-time }
+        clientRegisteredAt: { type: string, format: date-time, description: Zeitpunkt der (anonymen) Client-Registrierung }
+        clientVerified: { type: boolean, description: 'immer false: Clients registrieren sich offen (RFC 7591); die Zustimmungsseite soll sie als nicht verifiziert kennzeichnen und den Redirect-Host hervorheben' }
     OAuthGrant:
       type: object
       required: [id, clientName, scopes, createdAt]

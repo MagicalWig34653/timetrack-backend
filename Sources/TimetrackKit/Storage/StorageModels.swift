@@ -9,6 +9,13 @@ enum StorageLimits {
     /// Hard cap, also for the DB adapter (LONGBLOB / max_allowed_packet).
     static let hardMaxUploadBytes = 64 * 1024 * 1024
     static let multipartOverhead = 64 * 1024
+    /// Per-account quota defaults (SEC-06); `0` in the settings means "unlimited".
+    static let defaultQuotaBytes = 200 * 1024 * 1024
+    static let defaultQuotaFiles = 500
+    static let maxQuotaFiles = 1_000_000
+    /// Uploads per account within `uploadRateWindow`.
+    static let uploadRateLimit = 30
+    static let uploadRateWindow: TimeInterval = 300
     static let maxRules = 8
     static let maxAttachmentsPerAbsence = 20
     static let maxFilenameScalars = 120
@@ -33,6 +40,8 @@ final class StorageSettingsRecord: Model, @unchecked Sendable {
     @ID(key: .id) var id: UUID?
     @Field(key: "rules") var rules: [StorageRule]
     @Field(key: "max_upload_bytes") var maxUploadBytes: Int
+    @OptionalField(key: "quota_bytes") var quotaBytes: Int?
+    @OptionalField(key: "quota_files") var quotaFiles: Int?
     @OptionalField(key: "local_path") var localPath: String?
     @OptionalField(key: "s3_endpoint") var s3Endpoint: String?
     @OptionalField(key: "s3_region") var s3Region: String?
@@ -85,7 +94,22 @@ final class AbsenceAttachmentRecord: Model, @unchecked Sendable {
 // MARK: Migration
 
 enum StorageSchema {
-    static let migrations: [any Migration] = [CreateStorageTables(), BindStorageLocations()]
+    static let migrations: [any Migration] = [CreateStorageTables(), AddStorageQuota(), BindStorageLocations()]
+}
+
+/// SEC-06: per-account storage quota. Columns are nullable; `nil` means the built-in default. Repeatable.
+struct AddStorageQuota: AsyncMigration {
+    let name = "sec06.add_storage_quota"
+    func prepare(on db: any Database) async throws {
+        for column in ["quota_bytes", "quota_files"] where !(await columnExists(db, table: "storage_settings", column: column)) {
+            try await db.schema("storage_settings").field(.string(column), .int).update()
+        }
+    }
+    func revert(on db: any Database) async throws {
+        for column in ["quota_bytes", "quota_files"] where await columnExists(db, table: "storage_settings", column: column) {
+            try await db.schema("storage_settings").deleteField(.string(column)).update()
+        }
+    }
 }
 
 struct CreateStorageTables: AsyncMigration {
@@ -173,6 +197,9 @@ struct S3SettingsInput: Codable, Sendable {
 struct StorageSettingsInput: Decodable, Sendable {
     var rules: [StorageRule]
     var maxUploadBytes: Int?
+    /// Per-account quota; `nil` keeps the default, `0` disables the limit.
+    var quotaBytes: Int?
+    var quotaFiles: Int?
     var localPath: String?
     var s3: S3SettingsInput?
 }
@@ -184,20 +211,25 @@ struct S3SettingsOutput: Codable, Sendable, Equatable {
 struct StorageSettingsDTO: Content, Equatable {
     var rules: [StorageRule]
     var maxUploadBytes: Int
+    var quotaBytes: Int
+    var quotaFiles: Int
     var localPath: String?
     var s3: S3SettingsOutput?
     var hasSecret: Bool
 
     static let defaults = StorageSettingsDTO(rules: [.init(maxBytes: nil, backend: .db)],
                                              maxUploadBytes: StorageLimits.defaultMaxUploadBytes, localPath: nil, s3: nil, hasSecret: false)
-    init(rules: [StorageRule], maxUploadBytes: Int, localPath: String?, s3: S3SettingsOutput?, hasSecret: Bool) {
-        self.rules = rules; self.maxUploadBytes = maxUploadBytes; self.localPath = localPath; self.s3 = s3; self.hasSecret = hasSecret
+    init(rules: [StorageRule], maxUploadBytes: Int, quotaBytes: Int = StorageLimits.defaultQuotaBytes, quotaFiles: Int = StorageLimits.defaultQuotaFiles,
+         localPath: String?, s3: S3SettingsOutput?, hasSecret: Bool) {
+        self.rules = rules; self.maxUploadBytes = maxUploadBytes; self.quotaBytes = quotaBytes; self.quotaFiles = quotaFiles
+        self.localPath = localPath; self.s3 = s3; self.hasSecret = hasSecret
     }
     init(_ row: StorageSettingsRecord) {
         let s3: S3SettingsOutput? = row.s3Endpoint.map {
             .init(endpoint: $0, region: row.s3Region ?? "", bucket: row.s3Bucket ?? "", pathStyle: row.s3PathStyle, accessKeyId: row.s3AccessKeyId ?? "")
         }
-        self.init(rules: row.rules, maxUploadBytes: row.maxUploadBytes, localPath: row.localPath, s3: s3, hasSecret: row.s3SecretCiphertext != nil)
+        self.init(rules: row.rules, maxUploadBytes: row.maxUploadBytes, quotaBytes: row.quotaBytes ?? StorageLimits.defaultQuotaBytes,
+                  quotaFiles: row.quotaFiles ?? StorageLimits.defaultQuotaFiles, localPath: row.localPath, s3: s3, hasSecret: row.s3SecretCiphertext != nil)
     }
 }
 

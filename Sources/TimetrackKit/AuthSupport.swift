@@ -136,16 +136,19 @@ struct AuthService: Sendable {
         if let handle { try await limited(handle: handle, on: db) }
     }
     func limited(ip: String? = nil, handle: String? = nil, on db: any Database) async throws {
-        let allowed = try await transaction(on: db) { tx in
+        // SEC-11: the anonymous counters run in a plain transaction, not under the global `auth_lock`, so a flood of unauthenticated
+        // requests cannot throttle the write throughput of all accounts. A concurrent race can overshoot a limit by a few
+        // events, which is irrelevant for these counters. Pruning is a separate best-effort statement (also done by maintenance).
+        let allowed = try await db.transaction { tx in
             let now = Date()
             let keys = (ip.map { [("ip:" + Secrets.hash($0), 60)] } ?? []) + (handle.map { [("handle:" + Secrets.hash($0.lowercased()), 15)] } ?? [])
             for (key, limit) in keys {
                 if try await RateLimitEvent.query(on: tx).filter(\.$key == key).filter(\.$occurredAt > now.addingTimeInterval(-300)).count() >= limit { return false }
             }
             for (key, _) in keys { try await RateLimitEvent(key: key, occurredAt: now).create(on: tx) }
-            try await RateLimitEvent.query(on: tx).filter(\.$occurredAt < now.addingTimeInterval(-600)).delete()
             return true
         }
+        _ = try? await RateLimitEvent.query(on: db).filter(\.$occurredAt < Date().addingTimeInterval(-600)).delete()
         guard allowed else { throw APIError(.tooManyRequests, "too_many_requests") }
     }
 }

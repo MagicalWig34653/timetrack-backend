@@ -16,6 +16,7 @@ enum StorageErrors {
     static let unavailable = APIError(.serviceUnavailable, "storage_unavailable")
     static let notImplemented = APIError(.notImplemented, "not_implemented")
     static let corrupt = APIError(.internalServerError, "storage_corrupt")
+    static let quotaExceeded = APIError(.payloadTooLarge, "storage_quota_exceeded")
 }
 
 /// Per-application knobs. Production uses the defaults; tests replace single members.
@@ -117,6 +118,8 @@ struct StorageService: Sendable {
         try StorageRules.validate(input.rules)
         let limit = input.maxUploadBytes ?? StorageLimits.defaultMaxUploadBytes
         guard (1...StorageLimits.hardMaxUploadBytes).contains(limit) else { throw APIError.invalid }
+        let quotaBytes = input.quotaBytes ?? StorageLimits.defaultQuotaBytes, quotaFiles = input.quotaFiles ?? StorageLimits.defaultQuotaFiles
+        guard quotaBytes >= 0, (0...StorageLimits.maxQuotaFiles).contains(quotaFiles) else { throw APIError.invalid }
         let usesS3 = input.rules.contains { $0.backend == .s3 }, usesLocal = input.rules.contains { $0.backend == .local }
         let box = SecretBox(base64Key: env.secretKey())
         // S3 credentials can only be stored encrypted; without the server key they are refused.
@@ -142,6 +145,7 @@ struct StorageService: Sendable {
             }()
             let existed = row.$id.exists
             row.rules = input.rules; row.maxUploadBytes = limit; row.localPath = localPath
+            row.quotaBytes = quotaBytes; row.quotaFiles = quotaFiles
             if let s3 {
                 row.s3Endpoint = s3.endpoint; row.s3Region = s3.region; row.s3Bucket = s3.bucket; row.s3PathStyle = s3.pathStyle; row.s3AccessKeyId = s3.keyId
                 if let sealed { row.s3SecretCiphertext = sealed.ciphertext; row.s3SecretNonce = sealed.nonce }
@@ -201,6 +205,22 @@ struct StorageService: Sendable {
         try await session(context) { tx, _ in try await settingsRow(tx)?.maxUploadBytes ?? StorageLimits.defaultMaxUploadBytes }
     }
 
+    /// SEC-06: upload rate and per-account quota (bytes and file count over `pending` and `stored` rows). Runs inside the
+    /// serialized session transaction, so concurrent uploads of one account cannot overshoot the quota.
+    private func enforceQuota(_ tx: any Database, account: UUID, adding size: Int, settings: StorageSettingsRecord?) async throws {
+        let now = Date(), key = "upload:" + account.uuidString
+        if try await RateLimitEvent.query(on: tx).filter(\.$key == key).filter(\.$occurredAt > now.addingTimeInterval(-StorageLimits.uploadRateWindow)).count()
+            >= StorageLimits.uploadRateLimit { throw APIError(.tooManyRequests, "too_many_requests") }
+        let maxBytes = settings?.quotaBytes ?? StorageLimits.defaultQuotaBytes, maxFiles = settings?.quotaFiles ?? StorageLimits.defaultQuotaFiles
+        if maxBytes > 0 || maxFiles > 0 {
+            let active = [FileState.pending.rawValue, FileState.stored.rawValue]
+            let query = { StoredFileRecord.query(on: tx).filter(\.$accountId == account).filter(\.$state ~~ active) }
+            if maxFiles > 0, try await query().count() >= maxFiles { throw StorageErrors.quotaExceeded }
+            if maxBytes > 0, (try await query().sum(\.$size) ?? 0) + size > maxBytes { throw StorageErrors.quotaExceeded }
+        }
+        try await RateLimitEvent(key: key, occurredAt: now).create(on: tx)
+    }
+
     func upload(_ context: AuthContext, filename: String, declaredType: String?, data: Data) async throws -> FileMetaDTO {
         guard !data.isEmpty, let kind = FileTypeSniffer.verify(data: data, filename: filename, declaredMime: declaredType) else { throw StorageErrors.unsupported }
         let name = FilenameSanitizer.sanitize(filename, fallbackExtension: kind.ext)
@@ -212,6 +232,7 @@ struct StorageService: Sendable {
         let (backend, key, owner) = try await session(context) { tx, account -> (any StorageBackend, String, UUID) in
             let settings = try await settingsRow(tx)
             guard size <= (settings?.maxUploadBytes ?? StorageLimits.defaultMaxUploadBytes), size <= StorageLimits.hardMaxUploadBytes else { throw StorageErrors.tooLarge }
+            try await self.enforceQuota(tx, account: account, adding: size, settings: settings)
             let chosen = StorageRules.select(settings?.rules ?? StorageSettingsDTO.defaults.rules, size: size)
             let adapter = try self.backend(chosen, settings: settings)
             let row = StoredFileRecord()

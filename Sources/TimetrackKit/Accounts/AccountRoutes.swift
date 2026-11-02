@@ -1,6 +1,11 @@
 import Vapor
 import Fluent
 
+enum AccountExportLimits {
+    static let perWindow = 3
+    static let window: TimeInterval = 3600
+}
+
 /// Account administration, data export and account deletion (package B1, ADR-0016). Not behind any module switch.
 func registerAccountRoutes(_ app: Application, auth: AuthService) {
     let api = app.grouped("api", "v1").grouped(SessionMiddleware(service: auth))
@@ -27,9 +32,19 @@ func registerAccountRoutes(_ app: Application, auth: AuthService) {
     }
 
     api.get("me", "export") { req async throws -> Response in
+        // SEC-07: the archive holds every file of the account, so a stolen cookie alone must not suffice (fresh sign-in, as for
+        // account deletion), and repeated calls are limited per account. The audit row doubles as the rate counter and is
+        // written before the archive is built, so parallel calls cannot all pass the check.
+        let context = try req.authContext
+        try context.fresh()
+        let accountID = try context.account.requireID()
+        let since = Date().addingTimeInterval(-AccountExportLimits.window)
+        let recent = try await AccountAuditRecord.query(on: req.db).filter(\.$action == "account.exported").filter(\.$actorId == accountID)
+            .filter(\.$occurredAt > since).count()
+        guard recent < AccountExportLimits.perWindow else { throw APIError(.tooManyRequests, "export_rate_limited") }
+        try await AccountAuditRecord(action: "account.exported", actor: accountID, target: accountID).create(on: req.db)
         let service = admin(req)
-        let result = try await AccountExportService(auth: auth, db: req.db, storage: service.storage).archive(req.authContext)
-        _ = try? await AccountAuditRecord(action: "account.exported", actor: req.authContext.account.requireID(), target: req.authContext.account.requireID()).create(on: req.db)
+        let result = try await AccountExportService(auth: auth, db: req.db, storage: service.storage).archive(context)
         var headers = HTTPHeaders()
         headers.replaceOrAdd(name: .contentType, value: "application/zip")
         headers.replaceOrAdd(name: .contentDisposition, value: "attachment; filename=\"\(result.fileName)\"")

@@ -74,6 +74,7 @@ func registerStorageRoutes(_ app: Application, auth: AuthService) {
 struct StorageErrorMiddleware: AsyncMiddleware {
     static let messages: [String: String] = [
         "file_too_large": "Die Datei ist zu groß.",
+        "storage_quota_exceeded": "Dein Speicherkontingent ist ausgeschöpft. Lösche nicht mehr benötigte Dateien und versuche es erneut.",
         "unsupported_type": "Dieser Dateityp wird nicht unterstützt. Erlaubt sind PDF, PNG, JPG, HEIC und TXT.",
         "storage_unavailable": "Der Dateispeicher ist derzeit nicht erreichbar oder nicht eingerichtet.",
         "not_implemented": "Diese Funktion ist auf diesem Server nicht eingerichtet.",

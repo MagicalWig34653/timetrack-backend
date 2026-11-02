@@ -5,6 +5,8 @@ Die Einzelpakete (A1, B2, …) stehen in `docs/ARBEITSPLAN.md`.
 
 ## Unveröffentlicht
 
+- **Sicherheit SEC-C (Vertrag 0.40.0):** Speicherkontingent je Konto (Bytes und Anzahl, Admin-Einstellung, Fehler `storage_quota_exceeded`), Upload-Rate 30 je 5 Minuten; `GET /me/export` verlangt eine frische Sitzung (`reauth_required`) und ist auf 3 je Stunde begrenzt (`export_rate_limited`); anonyme Ratenzähler laufen ohne die globale `auth_lock`-Sperre, der Token-Endpunkt zählt je (Client, IP) statt je Client; Wartung entfernt unbenutzte OAuth-Clients (Schritt `oauth_clients`); die Zustimmungsdaten enthalten `clientRegisteredAt` und `clientVerified` (immer false). Migration `sec06.add_storage_quota`.
+
 - **Archivierte Orte (P15, Vertrag 0.39.0):** `GET /places?archived=true|all` listet archivierte Orte, `POST /places/{id}/restore` stellt einen Ort wieder her. Clients (PWA, Apple) können Wiederherstellen und Archivliste jetzt anbieten.
 - **Image-Tags und PWA-Builds:** Der Docker-Workflow baut alle 15 Minuten neu, wenn `main` der PWA noch kein Image hat, und taggt jedes Image zusätzlich eindeutig `sha-<Backend>-<PWA>` (Label `dev.timetrack.pwa-revision`). `update.sh` findet diesen Tag; vorher konnte ein neuer PWA-Stand unter demselben `sha-<Backend>`-Tag verborgen bleiben.
 - **APNs-Diagnose (P14e, Vertrag 0.38.0, nur Admin):** `GET /admin/apns` zeigt Key-ID, Team-ID, Bundle-IDs, fehlende oder ungültige `APNS_*`-Variablen und die Gerätezahl (ohne Schlüssel); `POST /admin/apns/check` prüft live bei Apple mit einem erfundenen Gerätetoken (je Bundle-ID und Umgebung), ohne etwas zuzustellen; 6 je 10 Minuten. Der Test an ein registriertes Gerät (`/me/push-devices/{id}/test`) bleibt.

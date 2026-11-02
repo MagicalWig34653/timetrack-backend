@@ -7,6 +7,8 @@ enum TimeMessages {
         "conflict": "Die Änderung steht im Konflikt mit vorhandenen Daten.",
         "csrf_invalid": "Bitte lade die Seite neu und versuche es erneut.",
         "recovery_session_restricted": "Bitte richte zuerst einen neuen Passkey ein.",
+        "reauth_required": "Bitte melde dich für diese Aktion erneut an.",
+        "export_rate_limited": "Der Datenexport ist höchstens dreimal pro Stunde möglich. Bitte versuche es später erneut.",
         "too_many_requests": "Zu viele Anfragen. Bitte versuche es später erneut.",
         "timer_already_running": "Es läuft bereits eine Zeiterfassung.",
         "no_running_timer": "Es läuft keine Zeiterfassung.",

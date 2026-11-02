@@ -32,6 +32,7 @@ struct MaintenanceService: Sendable {
             ("webauthn_challenges", { try await self.challenges(now) }),
             ("recovery_attempts", { try await self.recoveryAttempts(now) }),
             ("oauth_requests", { try await self.oauthRequests(now) }),
+            ("oauth_clients", { try await self.oauthClients(now) }),
             ("oauth_codes", { try await self.oauthCodes(now) }),
             ("oauth_tokens", { try await self.oauthTokens(now) }),
             ("oidc_states", { try await self.oidcStates(now) }),
@@ -99,6 +100,28 @@ struct MaintenanceService: Sendable {
     func oauthRequests(_ now: Date) async throws -> Int {
         let cutoff = now.addingTimeInterval(-MaintenanceRetention.oauthRequest)
         return try await purge(OAuthRequestRecord.self) { $0.filter(\.$expiresAt < cutoff) }
+    }
+
+    /// SEC-12: dynamically registered clients that never obtained a grant (no pending request either) are removed after
+    /// 30 days; registrations are anonymous, so the table must not grow without bound.
+    func oauthClients(_ now: Date) async throws -> Int {
+        let cutoff = now.addingTimeInterval(-MaintenanceRetention.oauthClient)
+        var total = 0
+        for _ in 0..<MaintenanceRetention.maxRounds {
+            let candidates = try await OAuthClient.query(on: db).filter(\.$createdAt < cutoff).group(.or) {
+                $0.filter(\.$lastUsedAt == nil).filter(\.$lastUsedAt < cutoff)
+            }.limit(MaintenanceRetention.batch).all()
+            var removed = 0
+            for client in candidates {
+                let id = try client.requireID()
+                guard try await OAuthRequestRecord.query(on: db).filter(\.$clientId == id).count() == 0,
+                      try await OAuthGrant.query(on: db).filter(\.$clientId == id).count() == 0 else { continue }
+                try await client.delete(on: db); removed += 1
+            }
+            total += removed
+            if candidates.count < MaintenanceRetention.batch || removed == 0 { break }
+        }
+        return total
     }
 
     func oauthCodes(_ now: Date) async throws -> Int {

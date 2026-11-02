@@ -118,8 +118,13 @@ final class C19ParserAndPolicyTests: XCTestCase, @unchecked Sendable {
         do { try await limiter.admit(ip: "shared", now: now); XCTFail("Expected IP limit") }
         catch let error as OAuthError { XCTAssertEqual(error.status, .tooManyRequests) }
         try await limiter.admit(ip: "other", now: now)
-        for index in 0..<120 { try await limiter.admit(ip: "ip-\(index)", client: "client-a", now: now) }
-        do { try await limiter.admit(ip: "new-ip", client: "client-a", now: now); XCTFail("Expected client limit") }
+        // SEC-11: one caller exhausting its (client, IP) budget must not lock the client out for other callers.
+        for _ in 0..<120 { try await limiter.admit(ip: "attacker", client: "client-a", now: now) }
+        do { try await limiter.admit(ip: "attacker", client: "client-a", now: now); XCTFail("Expected pair limit") }
+        catch let error as OAuthError { XCTAssertEqual(error.status, .tooManyRequests) }
+        try await limiter.admit(ip: "victim", client: "client-a", now: now)
+        for index in 0..<1079 { try await limiter.admit(ip: "ip-\(index)", client: "client-a", now: now) }
+        do { try await limiter.admit(ip: "new-ip", client: "client-a", now: now); XCTFail("Expected client ceiling") }
         catch let error as OAuthError { XCTAssertEqual(error.status, .tooManyRequests) }
         try await limiter.admit(ip: "new-ip", client: "client-b", now: now)
         try await limiter.admit(ip: "shared", now: now.addingTimeInterval(301))

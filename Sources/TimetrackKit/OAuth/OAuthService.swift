@@ -17,7 +17,12 @@ struct AuthorizeQuery: Decodable {
     let response_type: String?; let client_id: String?; let redirect_uri: String?; let code_challenge: String?
     let code_challenge_method: String?; let scope: String?; let state: String?; let resource: String?
 }
-struct OAuthRequestDTO: Content { let id: UUID; let clientName: String; let redirectHost: String; let scopes: [String]; let expiresAt: Date }
+/// `clientRegisteredAt` and `clientVerified` let the consent page warn about anonymously registered clients (SEC-12);
+/// dynamic registration is open, so `clientVerified` is always false.
+struct OAuthRequestDTO: Content {
+    let id: UUID; let clientName: String; let redirectHost: String; let scopes: [String]; let expiresAt: Date
+    let clientRegisteredAt: Date; let clientVerified: Bool
+}
 struct TokenForm: Decodable {
     let grant_type: String?; let code: String?; let redirect_uri: String?; let client_id: String?; let code_verifier: String?
     let refresh_token: String?; let resource: String?; let scope: String?
@@ -165,7 +170,8 @@ struct OAuthService: Sendable {
         guard record.decidedAt == nil, let client = try await OAuthClient.find(record.clientId, on: db) else { throw APIError.missing }
         let parts = URLComponents(string: record.redirectURI)
         let host = (parts?.host ?? "") + (parts?.port.map { ":\($0)" } ?? "")
-        return OAuthRequestDTO(id: id, clientName: client.name, redirectHost: host, scopes: record.scopes, expiresAt: record.expiresAt)
+        return OAuthRequestDTO(id: id, clientName: client.name, redirectHost: host, scopes: record.scopes, expiresAt: record.expiresAt,
+                               clientRegisteredAt: client.createdAt, clientVerified: false)
     }
 
     /// Returns the redirect URL for the client (code + state, or access_denied).

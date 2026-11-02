@@ -2640,6 +2640,15 @@
      "clientName": {
       "type": "string"
      },
+     "clientRegisteredAt": {
+      "description": "Zeitpunkt der (anonymen) Client-Registrierung",
+      "format": "date-time",
+      "type": "string"
+     },
+     "clientVerified": {
+      "description": "immer false: Clients registrieren sich offen (RFC 7591); die Zustimmungsseite soll sie als nicht verifiziert kennzeichnen und den Redirect-Host hervorheben",
+      "type": "boolean"
+     },
      "expiresAt": {
       "format": "date-time",
       "type": "string"
@@ -2663,7 +2672,9 @@
      "clientName",
      "redirectHost",
      "scopes",
-     "expiresAt"
+     "expiresAt",
+     "clientRegisteredAt",
+     "clientVerified"
     ],
     "type": "object"
    },
@@ -4809,6 +4820,14 @@
      "maxUploadBytes": {
       "type": "integer"
      },
+     "quotaBytes": {
+      "description": "je Konto; 0 = unbegrenzt",
+      "type": "integer"
+     },
+     "quotaFiles": {
+      "description": "je Konto; 0 = unbegrenzt",
+      "type": "integer"
+     },
      "rules": {
       "items": {
        "$ref": "#/components/schemas/StorageRule"
@@ -4842,6 +4861,8 @@
     "required": [
      "rules",
      "maxUploadBytes",
+     "quotaBytes",
+     "quotaFiles",
      "hasSecret"
     ],
     "type": "object"
@@ -4857,6 +4878,19 @@
      "maxUploadBytes": {
       "default": 10485760,
       "minimum": 1,
+      "type": "integer"
+     },
+     "quotaBytes": {
+      "default": 209715200,
+      "description": "Speicherkontingent je Konto in Bytes über alle Dateien; 0 = unbegrenzt",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "quotaFiles": {
+      "default": 500,
+      "description": "Höchstzahl Dateien je Konto; 0 = unbegrenzt",
+      "maximum": 1000000,
+      "minimum": 0,
       "type": "integer"
      },
      "rules": {
@@ -8515,7 +8549,7 @@
   },
   "/api/v1/files": {
    "post": {
-    "description": "Lädt eine Datei hoch (multipart, Feld file). Speicherort nach Admin-Regeln. Typ-Whitelist und Größenlimit; 413 file_too_large, 415 unsupported_type.",
+    "description": "Lädt eine Datei hoch (multipart, Feld file). Speicherort nach Admin-Regeln. Typ-Whitelist und Größenlimit; 413 file_too_large, 415 unsupported_type. Speicherkontingent je Konto (Standard 200 MiB und 500 Dateien, Admin-Einstellung): 413 storage_quota_exceeded. Höchstens 30 Uploads je Konto in 5 Minuten (429 too_many_requests).",
     "operationId": "uploadFile",
     "requestBody": {
      "content": {
@@ -10400,7 +10434,7 @@
   },
   "/api/v1/me/export": {
    "get": {
-    "description": "ZIP mit den eigenen Daten: manifest.json, account.json, je Tabelle <name>.json (zusätzlich .csv für time-entries, absences,\nreport-entries), time-entry-revisions, work-models, places, day-preferences, balance-adjustments, vacation-*, calendar-days, plan-days,\nreport-*, shares-outgoing (nur eigene ausgehende Freigaben als Metadaten), notification-settings.json, files.json und files/<id>-<name>\n(Anhänge). Rohzeiten und bewertete Zeiten stehen getrennt. Nie enthalten: Tokens, Hashes, Passkey-Material, Push-Schlüssel,\nDaten anderer Konten, eingehende Freigaben. Nicht lesbare oder über das Größenbudget (256 MiB) hinausgehende Dateien stehen in\nfiles.json mit included=false und reason. Nicht für Recovery-Sitzungen (403).\n",
+    "description": "ZIP mit den eigenen Daten: manifest.json, account.json, je Tabelle <name>.json (zusätzlich .csv für time-entries, absences,\nreport-entries), time-entry-revisions, work-models, places, day-preferences, balance-adjustments, vacation-*, calendar-days, plan-days,\nreport-*, shares-outgoing (nur eigene ausgehende Freigaben als Metadaten), notification-settings.json, files.json und files/<id>-<name>\n(Anhänge). Rohzeiten und bewertete Zeiten stehen getrennt. Nie enthalten: Tokens, Hashes, Passkey-Material, Push-Schlüssel,\nDaten anderer Konten, eingehende Freigaben. Nicht lesbare oder über das Größenbudget (256 MiB) hinausgehende Dateien stehen in\nfiles.json mit included=false und reason. Nicht für Recovery-Sitzungen (403).\nVerlangt eine frische Sitzung (Anmeldung höchstens 10 Minuten her, sonst 403 reauth_required) und ist auf 3 Aufrufe je Konto und Stunde\nbegrenzt (429 export_rate_limited).\n",
     "operationId": "exportMyData",
     "responses": {
      "200": {
@@ -10426,6 +10460,9 @@
      },
      "403": {
       "$ref": "#/components/responses/Forbidden"
+     },
+     "429": {
+      "description": "export_rate_limited: höchstens 3 Exporte je Konto und Stunde"
      }
     },
     "security": [
@@ -16423,5 +16460,5 @@
    "url": "/"
   }
  ],
- "x-source-sha256": "848a26474a8a1530a5f1a587a051de9a11976dccdec3572ba14a05b44df2ff8c"
+ "x-source-sha256": "cdb8eade8a38de26bc3c4d9f7f202b29eb1ec41fcf0cbd9cd83a7450edc2777f"
 }

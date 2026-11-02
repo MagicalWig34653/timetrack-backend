@@ -39,6 +39,11 @@ extension AuthTests {
                       row.resource = "r"; row.createdAt = t; row.expiresAt = t; try await row.create(on: db)
                   },
                   count: { try await OAuthRequestRecord.query(on: $0).count() }),
+            .init(step: "oauth_clients", grace: MaintenanceRetention.oauthClient,
+                  create: { db, t in
+                      let row = OAuthClient(); row.name = "unused"; row.redirectURIs = ["https://x.example/cb"]; row.createdAt = t; try await row.create(on: db)
+                  },
+                  count: { try await OAuthClient.query(on: $0).filter(\.$name == "unused").count() }),
             .init(step: "oauth_codes", grace: MaintenanceRetention.oauthCode,
                   create: { db, t in
                       let row = OAuthCode(); row.codeHash = Secrets.token(); row.clientId = client; row.accountId = account; row.grantId = grant; row.scopes = []

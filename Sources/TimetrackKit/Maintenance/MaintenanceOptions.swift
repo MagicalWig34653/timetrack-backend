@@ -49,6 +49,8 @@ enum MaintenanceRetention {
     static let recoveryAttempt: TimeInterval = 3_600
     static let oauthRequest: TimeInterval = 86_400
     static let oauthCode: TimeInterval = 86_400
+    /// Registered OAuth clients without any grant are removed after 30 days (SEC-12).
+    static let oauthClient: TimeInterval = 30 * 86_400
     /// Refresh tokens stay for reuse detection until they expire; afterwards one more week.
     static let oauthToken: TimeInterval = 7 * 86_400
     static let oidcState: TimeInterval = 3_600

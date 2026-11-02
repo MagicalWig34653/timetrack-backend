@@ -8,7 +8,9 @@ actor OAuthTokenLimiter {
         windows = windows.mapValues { $0.filter { $0 > cutoff } }.filter { !$0.value.isEmpty }
         // Connector services share IPs; keep the aggregate IP budget generous.
         let keys: [(String, Int)]
-        if let client { keys = [("client:" + client, 120), ("pair:" + ip + ":" + client, 120)] }
+        // SEC-11: the per-(client, IP) pair is the tight budget; the client-wide aggregate is only a generous ceiling, because
+        // a client_id is public and a tight shared counter would let any caller lock the client out for everyone.
+        if let client { keys = [("client:" + client, 1200), ("pair:" + ip + ":" + client, 120)] }
         else { keys = [("ip:" + ip, 1200)] }
         guard keys.allSatisfy({ windows[$0.0, default: []].count < $0.1 }) else {
             throw OAuthError("temporarily_unavailable", "Too many token requests.", status: .tooManyRequests)
