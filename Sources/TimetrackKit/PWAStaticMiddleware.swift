@@ -2,6 +2,8 @@ import Vapor
 
 struct PWAStaticMiddleware: AsyncMiddleware {
     let directory: String
+    /// `PWA_CSP_MODE`; defaults to the strict policy.
+    var cspMode: PWAContentSecurityPolicy.Mode = .enforce
     /// File extensions that identify a static asset request. A missing asset must never be answered with the SPA shell:
     /// a browser would receive text/html for a module script (white page when replicas or caches hold different builds).
     static let assetExtensions: Set<String> = [
@@ -49,12 +51,18 @@ struct PWAStaticMiddleware: AsyncMiddleware {
         response.headers.replaceOrAdd(name: .cacheControl, value: file.lastPathComponent == "index.html" ? "no-cache" : hashed ? "public, max-age=31536000, immutable" : "no-cache")
         response.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
         // SEC-05: the app shell gets the strict policy with hashes of its inline bootstrap scripts (see PWAContentSecurityPolicy).
-        if file.pathExtension == "html", let policy = PWAContentSecurityPolicy.policy(forHTMLFileAt: file.path) {
-            response.headers.replaceOrAdd(name: "Content-Security-Policy", value: policy)
-        } else {
-            // Other static files must not receive the restrictive API default (`default-src 'none'`): the CSP of a service
-            // worker script governs the worker itself and would block its precache fetches. 'self' is what the worker needs.
-            response.headers.replaceOrAdd(name: "Content-Security-Policy", value: PWAContentSecurityPolicy.assetPolicy)
+        // Other static files must not receive the restrictive API default (`default-src 'none'`): the CSP of a service
+        // worker script governs the worker itself and would block its precache fetches. 'self' is what the worker needs.
+        let isShell = file.pathExtension == "html"
+        let strict = isShell ? PWAContentSecurityPolicy.policy(forHTMLFileAt: file.path) : PWAContentSecurityPolicy.assetPolicy
+        switch cspMode {
+        case .enforce:
+            response.headers.replaceOrAdd(name: "Content-Security-Policy", value: strict ?? PWAContentSecurityPolicy.relaxedShellPolicy)
+        case .reportOnly:
+            if isShell, let strict { response.headers.replaceOrAdd(name: "Content-Security-Policy-Report-Only", value: strict) }
+            response.headers.replaceOrAdd(name: "Content-Security-Policy", value: isShell ? PWAContentSecurityPolicy.relaxedShellPolicy : PWAContentSecurityPolicy.relaxedAssetPolicy)
+        case .off:
+            response.headers.replaceOrAdd(name: "Content-Security-Policy", value: isShell ? PWAContentSecurityPolicy.relaxedShellPolicy : PWAContentSecurityPolicy.relaxedAssetPolicy)
         }
         // Vapor has no mapping for .webmanifest; browsers expect the manifest media type.
         if file.pathExtension == "webmanifest" { response.headers.replaceOrAdd(name: .contentType, value: "application/manifest+json") }

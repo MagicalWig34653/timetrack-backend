@@ -10,6 +10,20 @@ import Vapor
 /// the HTML file that is being served, plus `'self'` for the hashed `_app/` bundles and the service worker.
 /// Styles keep `'unsafe-inline'` because Svelte/shadcn components set `style=` attributes; scripts never do.
 enum PWAContentSecurityPolicy {
+    /// Operator switch `PWA_CSP_MODE` (emergency brake): how the PWA static responses are protected.
+    /// `enforce` (default) sends the strict policy; `reportOnly` sends the same policy as `Content-Security-Policy-Report-Only`
+    /// (the browser enforces nothing but logs violations to its console); `off` sends no script/resource policy at all.
+    /// In both relaxed modes only `frame-ancestors 'none'` (and `base-uri 'none'` for the shell) stays enforced.
+    enum Mode: String, Sendable {
+        case enforce
+        case reportOnly = "report-only"
+        case off
+    }
+
+    /// Enforced in the relaxed modes: no framing, no `<base>` injection; neither can break script or module loading.
+    static let relaxedShellPolicy = "frame-ancestors 'none'; base-uri 'none'"
+    static let relaxedAssetPolicy = "frame-ancestors 'none'"
+
     private static let cache = NIOLockedValueBox<[String: (modified: Date, policy: String)]>([:])
 
     /// Policy for the HTML file at `path`; cached per path and modification date.

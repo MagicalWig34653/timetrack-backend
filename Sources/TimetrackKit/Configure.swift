@@ -66,6 +66,7 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
     let sender = try mailSender ?? config.smtp.map { try SMTPMailSender(configuration: $0, group: app.eventLoopGroup,
         brand: MailBrand(productName: config.webAuthnRPName, operatorName: $0.fromName, baseURL: config.publicBaseURL)) }
     app.trustedProxies = config.trustedProxies
+    if config.pwaCSPMode != .enforce { app.logger.warning("PWA_CSP_MODE=\(config.pwaCSPMode.rawValue): the Content-Security-Policy of the PWA is not enforced. Restore the default (enforce) once the cause is fixed.") }
     for warning in config.trustedProxies.startupWarnings(behindTLSProxy: config.publicBaseURL.scheme == "https") { app.logger.warning("\(warning)") }
     let service = AuthService(configuration: config, mailSender: sender)
     // Replace Vapor's default error and URL logging middleware: invite URLs contain secrets.
@@ -77,7 +78,7 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
     app.middleware.use(TimeErrorMiddleware())
     app.middleware.use(ModuleGuard(auth: service))
     app.middleware.use(DeviceScopeGuard())
-    app.middleware.use(PWAStaticMiddleware(directory: config.pwaStaticDirectory))
+    app.middleware.use(PWAStaticMiddleware(directory: config.pwaStaticDirectory, cspMode: config.pwaCSPMode))
     app.asyncCommands.use(BootstrapAdmin(service: service), as: "bootstrap-admin")
     registerRoutes(app, service: service)
     app.installNotifications(auth: service, options: notifications)

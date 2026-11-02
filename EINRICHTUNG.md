@@ -172,7 +172,7 @@ docker build -t timetrack-dev-b3-backend:test . && scripts/test-image-smoke.sh  
 `scripts/dev-env.sh build-multiarch` baut amd64 und arm64 (OCI-Archiv, nicht gepusht). Auf dem arm64-Mac läuft amd64 unter QEMU;
 `QEMU_LIMIT=1` (Standard im Skript, Docker-Build-Argument) begrenzt SwiftPM auf wenige CPUs, sonst stürzt es unter Emulation ab. Nur amd64 geladen:
 `docker buildx build --platform linux/amd64 --build-arg QEMU_LIMIT=1 -t timetrack-dev-b3-amd64 --load .` (danach `docker rmi timetrack-dev-b3-amd64`).
-Ergebnis und Dauer: docs/BETRIEB.md, Abschnitt 7, und `docs/handoffs/B3.md`.
+Ergebnis und Dauer: docs/BETRIEB.md, Abschnitt 6 „Notbremse“, und `docs/handoffs/B3.md`.
 
 ### PWA (Repo timetrack-pwa)
 
@@ -239,6 +239,7 @@ Nie ein echtes `.env` committen. Ungültige Werte brechen den Start mit klarer M
 | `GROUPS_RETENTION_DAYS` | `90` | beendete oder abgelaufene Umfragen und Bestellrunden (Gruppenmodul, ADR-0033) werden so viele Tage nach dem Beenden bzw. der Frist vom Aufräumjob gelöscht (1 bis 3650); offene Elemente ohne Frist bleiben |
 | `IMPORT_JOB_TIMEOUT_HOURS` | `168` | offene Importe (hochgeladen/zugeordnet) älter als dies werden verworfen (1 bis 8760) |
 | `STORAGE_ORPHAN_GRACE_HOURS` | `168` | Karenzzeit, bevor verwaiste Objekte im lokalen Speicher gelöscht werden (1 bis 8760) |
+| `PWA_CSP_MODE` | `enforce` | Notbremse für die Content-Security-Policy der PWA: `enforce` (streng), `report-only` (nur Konsolenmeldungen, nichts blockiert), `off` (keine Skript-/Ressourcenrichtlinie); siehe `docs/BETRIEB.md` Abschnitt 6 „Notbremse“ |
 | `HSTS_MAX_AGE_SECONDS` | `15552000` | `Strict-Transport-Security` in Sekunden (0 bis 63072000), nur bei https-`PUBLIC_BASE_URL`; `0` = aus (SEC-05) |
 | `TRUSTED_PROXY_CIDRS` | leer (hinter Proxy **Pflicht**; Port per Firewall nur dem Proxy öffnen, SEC-01) | Kommagetrennt IPv4-/IPv6-Adressen oder CIDR-Netze der Reverse Proxys (z. B. `172.18.0.0/16,fd00::/8`). Nur wenn die Socket-Gegenstelle darin liegt, wird die Client-Adresse aus dem Forwarded-Header gelesen (ADR-0018). Leer: niemand vertrauenswürdig, Header wirkungslos. Ungültiger Eintrag ist ein Startfehler |
 | `TRUSTED_PROXY_HEADER` | `X-Forwarded-For` | `X-Forwarded-For` oder `X-Real-IP` (Groß-/Kleinschreibung egal); anderes ist ein Startfehler. Bei `X-Real-IP` muss der Proxy den Header bei jeder Anfrage überschreiben (Warnung beim Start, `docs/installation/proxy.md`) |

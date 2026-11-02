@@ -89,6 +89,102 @@ extension AuthTests {
         XCTAssertThrowsError(try Configuration(environment: ["HSTS_MAX_AGE_SECONDS": "-1"]))
     }
 
+    // MARK: - CSP hotfix: hashes against the bytes that are actually served, operator emergency brake
+
+    /// Production build of the PWA shell (`npm run build`, no mock): three inline scripts, one of them the SvelteKit start with `import()`.
+    private var productionShellURL: URL {
+        URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/pwa-production-index.html")
+    }
+
+    /// Independent of the production code: script bodies by plain byte search, hashed with CryptoKit-compatible SHA-256.
+    private func inlineScriptHashes(inServed bytes: [UInt8]) -> [String] {
+        let open = Array("<script".utf8), close = Array("</script>".utf8)
+        var hashes: [String] = [], index = 0
+        func find(_ needle: [UInt8], from: Int) -> Int? {
+            guard bytes.count >= needle.count, from <= bytes.count - needle.count else { return nil }
+            return (from...(bytes.count - needle.count)).first { bytes[$0..<($0 + needle.count)].elementsEqual(needle) }
+        }
+        while let start = find(open, from: index), let tagEnd = bytes[start...].firstIndex(of: UInt8(ascii: ">")), let end = find(close, from: tagEnd) {
+            let tag = String(decoding: bytes[start...tagEnd], as: UTF8.self)
+            if !tag.contains("src=") { hashes.append("'sha256-" + Data(SHA256.hash(data: Data(bytes[(tagEnd + 1)..<end]))).base64EncodedString() + "'") }
+            index = end + close.count
+        }
+        return hashes
+    }
+
+    func testCspHotfix_HashesMatchTheBytesServedForTheProductionBuildShell() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("pwa-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let original = try Data(contentsOf: productionShellURL)
+        XCTAssertFalse(original.contains(UInt8(ascii: "\r")), "fixture must keep LF line endings like the build output")
+        try original.write(to: directory.appendingPathComponent("index.html"))
+        for path in ["/", "/index.html", "/week", "/settings/profile"] {
+            // A client (or proxy) announcing gzip/br must still get the identity bytes that the hashes were computed from.
+            try await withApp(environment: ["PWA_STATIC_DIR": directory.path]) { app, _ in
+                var headers = HTTPHeaders(); headers.add(name: .acceptEncoding, value: "gzip, deflate, br")
+                try await app.test(.GET, path, headers: headers) { r async throws in
+                    XCTAssertEqual(r.status, .ok, path)
+                    XCTAssertNil(r.headers.first(name: .contentEncoding), path)
+                    let served = Array(r.body.readableBytesView)
+                    XCTAssertEqual(served, Array(original), "served bytes differ from the file for \(path)")
+                    let csp = try XCTUnwrap(r.headers.first(name: "Content-Security-Policy"))
+                    let hashes = inlineScriptHashes(inServed: served)
+                    XCTAssertEqual(hashes.count, 3, "recovery, theme and SvelteKit start script")
+                    for hash in hashes { XCTAssertTrue(csp.contains(hash), "\(hash) missing from the CSP for \(path)") }
+                    XCTAssertTrue(csp.contains("script-src 'self' "))
+                    XCTAssertFalse(csp.contains("unsafe-inline'; style") || csp.contains("script-src 'self' 'unsafe-inline'"))
+                    XCTAssertEqual(csp, PWAContentSecurityPolicy.policy(forHTML: String(decoding: served, as: UTF8.self)))
+                }
+            }
+        }
+    }
+
+    func testCspHotfix_ShellWithCRLFAndMultipleScriptsHashesTheRawBytes() throws {
+        let html = "<html><body>\r\n<script>\r\n  var a = 1;\r\n</script>\r\n<script id=\"x\">b()</script><script type=\"module\" src=\"/s.js\"></script><script>\n\timport('/e.js');\n</script></body></html>"
+        let policy = PWAContentSecurityPolicy.policy(forHTML: html)
+        for body in ["\r\n  var a = 1;\r\n", "b()", "\n\timport('/e.js');\n"] { XCTAssertTrue(policy.contains(PWAContentSecurityPolicy.hashSource(body)), body) }
+        XCTAssertEqual(policy.components(separatedBy: "'sha256-").count - 1, 3)
+    }
+
+    func testCspHotfix_ModeParsingAndDefault() throws {
+        XCTAssertEqual(try Configuration(environment: [:]).pwaCSPMode, .enforce)
+        XCTAssertEqual(try Configuration(environment: ["PWA_CSP_MODE": ""]).pwaCSPMode, .enforce)
+        XCTAssertEqual(try Configuration(environment: ["PWA_CSP_MODE": "Report-Only"]).pwaCSPMode, .reportOnly)
+        XCTAssertEqual(try Configuration(environment: ["PWA_CSP_MODE": "off"]).pwaCSPMode, .off)
+        XCTAssertThrowsError(try Configuration(environment: ["PWA_CSP_MODE": "none"]))
+    }
+
+    func testCspHotfix_EmergencyBrakeRelaxesOnlyThePWAResponses() async throws {
+        let directory = try shellDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        for mode in ["report-only", "off"] {
+            try await withApp(environment: ["PWA_STATIC_DIR": directory.path, "PWA_CSP_MODE": mode]) { app, _ in
+                try await app.test(.GET, "/some/route") { r async throws in
+                    XCTAssertEqual(r.headers.first(name: "Content-Security-Policy"), "frame-ancestors 'none'; base-uri 'none'", mode)
+                    let reportOnly = r.headers.first(name: "Content-Security-Policy-Report-Only")
+                    if mode == "report-only" { XCTAssertTrue(try XCTUnwrap(reportOnly).contains(PWAContentSecurityPolicy.hashSource("var a = 1;"))) } else { XCTAssertNil(reportOnly) }
+                    XCTAssertEqual(r.headers.first(name: "X-Frame-Options"), "DENY")
+                }
+                try await app.test(.GET, "/app.js") { r async throws in
+                    XCTAssertEqual(r.headers.first(name: "Content-Security-Policy"), "frame-ancestors 'none'", mode)
+                    XCTAssertNil(r.headers.first(name: "Content-Security-Policy-Report-Only"))
+                }
+                // The API keeps its strict default whatever the PWA mode is.
+                try await app.test(.GET, "/api/v1/me") { r async throws in
+                    XCTAssertEqual(r.headers.first(name: "Content-Security-Policy"), "default-src 'none'; frame-ancestors 'none'", mode)
+                }
+            }
+        }
+        // Default stays strict and sends no report-only header.
+        try await withApp(environment: ["PWA_STATIC_DIR": directory.path]) { app, _ in
+            try await app.test(.GET, "/some/route") { r async throws in
+                XCTAssertTrue(try XCTUnwrap(r.headers.first(name: "Content-Security-Policy")).hasPrefix("default-src 'self'; script-src 'self' "))
+                XCTAssertNil(r.headers.first(name: "Content-Security-Policy-Report-Only"))
+            }
+        }
+    }
+
     func testSec01_StartupWarningsForProxyNetworks() throws {
         func warnings(_ cidrs: String, tls: Bool = true) throws -> [String] {
             try TrustedProxies(cidrs: cidrs, header: nil).startupWarnings(behindTLSProxy: tls)

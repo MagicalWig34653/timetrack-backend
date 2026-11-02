@@ -34,6 +34,8 @@ public struct Configuration: Sendable {
     /// `Strict-Transport-Security` max-age in seconds; 0 disables the header. Only sent when `publicBaseURL` is https (SEC-05).
     public let hstsMaxAgeSeconds: Int
     public let pwaStaticDirectory: String
+    /// `PWA_CSP_MODE` (enforce, report-only, off): operator emergency brake for the Content-Security-Policy of the PWA shell.
+    let pwaCSPMode: PWAContentSecurityPolicy.Mode
     public let smtpHost: String?
     public let smtpPort: Int
     public let smtp: SMTPConfiguration?
@@ -76,6 +78,11 @@ public struct Configuration: Sendable {
         }
         disabledModules = try ModuleKey.parseDisabled(environment["MODULES_DISABLED"] ?? "")
         pwaStaticDirectory = environment["PWA_STATIC_DIR"] ?? "/srv/pwa"
+        let cspMode = (environment["PWA_CSP_MODE"] ?? "enforce").trimmingCharacters(in: .whitespaces).lowercased()
+        guard let mode = PWAContentSecurityPolicy.Mode(rawValue: cspMode.isEmpty ? "enforce" : cspMode) else {
+            throw ConfigurationError(key: "PWA_CSP_MODE", reason: "expected enforce, report-only or off")
+        }
+        pwaCSPMode = mode
         buildInfo = BuildInfo(environment: environment)
         smtpHost = environment["SMTP_HOST"].flatMap { $0.isEmpty ? nil : $0 }
         smtpPort = try integer("SMTP_PORT", "587", 1...65535)
