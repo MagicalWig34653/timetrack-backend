@@ -5,6 +5,8 @@ import Argon2Swift
 /// Implementations must never log recipients, verification codes or message bodies.
 public protocol MailSender: Sendable {
     func sendCode(_ code: String, to address: String) async throws
+    /// Security notice for the account owner (SEC-A). The default does nothing, so existing senders keep compiling.
+    func sendNotice(_ notice: SecurityNotice, to address: String) async throws
 }
 
 struct RecoveryStatusDTO: Content {
@@ -49,7 +51,14 @@ extension AuthService {
     }
     func fallbackPassword(_ password: String?, context: AuthContext, on db: any Database) async throws {
         try context.fresh()
-        guard password.map({ (12...256).contains($0.count) }) ?? true else { throw APIError.invalid }
+        // SEC-03: length alone is not enough. A weak choice gets its own code so clients can explain it (no oracle: it only
+        // judges what the caller typed).
+        if let password {
+            guard (FallbackPasswordPolicy.minimumLength...FallbackPasswordPolicy.maximumLength).contains(password.count) else { throw APIError.invalid }
+            let profile = try await Account.find(context.account.requireID(), on: db) ?? context.account
+            guard FallbackPasswordPolicy.acceptable(password, handle: profile.handle, displayName: profile.displayName, email: profile.email)
+            else { throw APIError(.badRequest, "weak_password") }
+        }
         // Run expensive hashing away from the event loop. Strip the library's trailing C NUL.
         let hash: String?
         if let password {
@@ -92,6 +101,7 @@ extension AuthService {
                 }
             }
             guard let target = requested ?? account.email else { throw APIError(.conflict, "account_email_missing") }
+            guard try await reserveMail(to: target, account: id, on: tx) else { throw APIError(.tooManyRequests, "too_many_requests") }
             if try await Account.query(on: tx).filter(\.$email == target).filter(\.$emailVerifiedAt != nil).filter(\.$id != id).first() != nil {
                 throw APIError(.conflict, "email_taken")
             }
@@ -141,8 +151,13 @@ extension AuthService {
         }
         guard valid else { throw APIError(.badRequest, "invalid_code") }
     }
-    func recoveryStart(_ input: RecoveryStart, on db: any Database) async throws -> RecoveryStarted {
+    /// `ip` is the rate-limit key of the client (nil in tests). The response never depends on whether the handle exists,
+    /// whether a mail was due, or whether the mail quota allowed it: mail goes out after the response was decided (SEC-04).
+    func recoveryStart(_ input: RecoveryStart, ip: String? = nil, on db: any Database) async throws -> RecoveryStarted {
         guard input.method != .emailVerification, input.identifier.count <= 32 else { throw APIError.invalid }
+        let lockKey = RecoveryLockPolicy.handleKey(input.identifier)
+        // The lock is keyed by the typed handle, not by the account, so a lock looks the same for unknown handles.
+        guard try await !recoveryLocked([lockKey] + (ip.map { [RecoveryLockPolicy.addressKey($0)] } ?? []), on: db) else { throw APIError(.tooManyRequests, "too_many_requests") }
         let code = Secrets.token(bytes: 12)
         let result: (UUID, String?) = try await transaction(on: db) { tx in
             let account = try await Account.query(on: tx).filter(\.$handle == input.identifier).filter(\.$disabledAt == nil).first()
@@ -155,7 +170,9 @@ extension AuthService {
                     // C3: the code goes to the verified account e-mail; the recovery row only records that the user switched it on.
                     if mailAvailable, try await EmailRecovery.query(on: tx).filter(\.$accountId == id).filter(\.$active == true).first() != nil,
                        let mail = account?.email, account?.emailVerifiedAt != nil {
-                        emailAddress = mail; proofHash = Secrets.hash(mail)
+                        proofHash = Secrets.hash(mail)
+                        // Over quota: the attempt is created as usual but nothing is sent (same response).
+                        if try await reserveMail(to: mail, account: id, scope: .recovery, on: tx) { emailAddress = mail }
                     } else { accountID = nil }
                 case .fallbackPassword:
                     if let password = try await FallbackPassword.query(on: tx).filter(\.$accountId == id).first() { proofHash = Secrets.hash(password.hash) }
@@ -166,20 +183,27 @@ extension AuthService {
                 }
             }
             let attempt = RecoveryAttempt(kind: input.method, accountId: accountID, codeHash: input.method == .email ? Secrets.hash(code) : nil,
-                proofHash: proofHash, expiresAt: Date().addingTimeInterval(600), attemptCount: 0, createdAt: Date())
+                proofHash: proofHash, expiresAt: Date().addingTimeInterval(600), attemptCount: 0, createdAt: Date(), lockKey: lockKey)
             try await attempt.create(on: tx)
             return (try attempt.requireID(), emailAddress)
         }
         // Delivery failure must not turn this anti-enumeration response into a different status.
-        if let address = result.1, let mailSender { try? await mailSender.sendCode(code, to: address) }
+        if let address = result.1, let mailSender {
+            await MailOutbox.shared.submit { try? await mailSender.sendCode(code, to: address) }
+        }
         return .init(recoveryId: result.0)
     }
-    func recoveryComplete(_ input: RecoveryProof, on db: any Database) async throws -> AuthContext {
+    private enum RecoveryOutcome { case success(AuthContext), rejected, guessFailed(account: UUID?, lockKey: String?) }
+    func recoveryComplete(_ input: RecoveryProof, ip: String? = nil, on db: any Database) async throws -> AuthContext {
         guard input.proof.count <= 256 else { throw APIError.unauthorized }
-        let context: AuthContext? = try await transaction(on: db) { tx in
+        let addressKey = ip.map(RecoveryLockPolicy.addressKey)
+        let outcome: RecoveryOutcome = try await transaction(on: db) { tx in
             guard let attempt = try await RecoveryAttempt.find(input.recoveryId, on: tx), attempt.kind != .emailVerification,
-                  attempt.consumedAt == nil, attempt.expiresAt > Date(), attempt.attemptCount < 5 else { return nil }
+                  attempt.consumedAt == nil, attempt.expiresAt > Date(), attempt.attemptCount < 5 else { return .rejected }
+            // SEC-03: a locked handle or address is refused before the proof is looked at and without using up an attempt.
+            if try await recoveryLocked([attempt.lockKey, addressKey].compactMap { $0 }, on: tx) { throw APIError(.tooManyRequests, "too_many_requests") }
             attempt.attemptCount += 1; try await attempt.update(on: tx)
+            let failed = RecoveryOutcome.guessFailed(account: attempt.accountId, lockKey: attempt.lockKey)
             var passwordVerified = false
             if attempt.kind == .fallbackPassword {
                 let password: FallbackPassword?
@@ -194,22 +218,38 @@ extension AuthService {
                     return false
                 }.value
             }
-            guard let id = attempt.accountId, let account = try await Account.find(id, on: tx), account.disabledAt == nil else { return nil }
+            guard let id = attempt.accountId, let account = try await Account.find(id, on: tx), account.disabledAt == nil else { return failed }
             switch attempt.kind {
             case .recoveryCode:
                 guard let code = try await RecoveryCode.query(on: tx).filter(\.$accountId == id).filter(\.$codeHash == Secrets.hash(input.proof)).first(),
-                      try await SingleUse.consume(.recoveryCode, id: code.requireID(), on: tx) else { return nil }
+                      try await SingleUse.consume(.recoveryCode, id: code.requireID(), on: tx) else { return failed }
             case .fallbackPassword:
-                guard passwordVerified else { return nil }
+                guard passwordVerified else { return failed }
             case .email:
                 guard mailAvailable, let email = try await EmailRecovery.query(on: tx).filter(\.$accountId == id).first(), email.active,
                       let mail = account.email, account.emailVerifiedAt != nil,
-                      Secrets.equal(attempt.proofHash ?? "", Secrets.hash(mail)), Secrets.equal(attempt.codeHash ?? "", Secrets.hash(input.proof)) else { return nil }
-            case .emailVerification: return nil
+                      Secrets.equal(attempt.proofHash ?? "", Secrets.hash(mail)), Secrets.equal(attempt.codeHash ?? "", Secrets.hash(input.proof)) else { return failed }
+            case .emailVerification: return .rejected
             }
             guard try await SingleUse.consume(.recoveryAttempt, id: input.recoveryId, on: tx) else { throw APIError.unauthorized }
-            return try await issueSession(for: account, recovery: true, on: tx)
+            try await AccountAuditRecord(action: "recovery.completed", actor: id, target: id, detail: attempt.kind.rawValue).create(on: tx)
+            return .success(try await issueSession(for: account, recovery: true, on: tx))
         }
-        guard let context else { throw APIError.unauthorized }; return context
+        switch outcome {
+        case .success(let context):
+            if let key = (try? await RecoveryAttempt.find(input.recoveryId, on: db))?.lockKey { try? await clearRecoveryFailures(key, on: db) }
+            await notify(.recoveryCompleted, account: try context.account.requireID(), on: db)
+            return context
+        case .rejected: throw APIError.unauthorized
+        case .guessFailed(let account, let lockKey):
+            var keys: [(key: String, free: Int)] = []
+            if let lockKey { keys.append((lockKey, RecoveryLockPolicy.freeFailuresPerHandle)) }
+            if let addressKey { keys.append((addressKey, RecoveryLockPolicy.freeFailuresPerAddress)) }
+            let counts = (try? await recordRecoveryFailure(keys, on: db)) ?? []
+            // Tell the owner when the handle lock starts and on every fifth failure after that.
+            if let account, lockKey != nil, let count = counts.first, count >= RecoveryLockPolicy.freeFailuresPerHandle,
+               (count - RecoveryLockPolicy.freeFailuresPerHandle) % 5 == 0 { await notify(.recoveryFailures, account: account, on: db) }
+            throw APIError.unauthorized
+        }
     }
 }

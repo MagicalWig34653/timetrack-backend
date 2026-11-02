@@ -20,6 +20,8 @@ extension AuthService {
         guard let token, token.count == 43,
               let session = try await Session.query(on: db).filter(\.$tokenHash == Secrets.hash(token)).first(),
               session.revokedAt == nil, session.expiresAt > Date(),
+              // SEC-15: idle timeout. `lastSeenAt` is refreshed at most once a minute, which is fine at hour granularity.
+              Date().timeIntervalSince(session.lastSeenAt ?? session.createdAt) < Double(configuration.sessionIdleHours * 3600),
               let account = try await Account.find(session.accountId, on: db), account.disabledAt == nil else { throw APIError.unauthorized }
         // The timestamp is informational; writing it on every request (up to three authentications per request)
         // cost a committed write each. Refresh it at most once a minute.

@@ -43,6 +43,12 @@ public struct SMTPMailSender: MailSender {
         catch { throw SMTPError.deliveryFailed }
     }
 
+    public func sendNotice(_ notice: SecurityNotice, to address: String) async throws {
+        let mail = MailTemplates.securityNotice(notice, brand: brand)
+        do { try await deliver(try Self.message(configuration: configuration, address: address, subject: mail.subject, body: mail.text, html: mail.html), to: address) }
+        catch { throw SMTPError.deliveryFailed }
+    }
+
     /// Sends the fixed test message of the mail diagnosis (ADR-0022); the failure class is the only detail that leaves.
     func sendTest(_ mail: RenderedMail, to address: String) async throws {
         let message = try Self.message(configuration: configuration, address: address, subject: mail.subject, body: mail.text, html: mail.html)

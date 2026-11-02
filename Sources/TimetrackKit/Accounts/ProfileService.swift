@@ -50,6 +50,8 @@ extension AuthService {
             let current = try await authenticate(context.token, on: tx); try current.fresh()
             let id = try current.account.requireID()
             if current.account.email == address, current.account.emailVerifiedAt != nil { throw APIError.invalid }
+            // SEC-08: bounded per account, per target address and server-wide, so the server cannot be used to mail strangers.
+            guard try await reserveMail(to: address, account: id, on: tx) else { throw APIError(.tooManyRequests, "too_many_requests") }
             try await EmailChangeRequest.query(on: tx).filter(\.$accountId == id).delete()
             try await EmailChangeRequest(accountId: id, email: address, codeHash: Secrets.hash(code),
                 expiresAt: Date().addingTimeInterval(Self.emailChangeLifetime)).create(on: tx)

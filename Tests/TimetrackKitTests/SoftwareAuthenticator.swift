@@ -39,7 +39,12 @@ struct SoftwareAuthenticator: Sendable {
 
 actor RecordingMailSender: MailSender {
     private var messages: [(String, String)] = []
+    private var notices: [(SecurityNotice, String)] = []
     func sendCode(_ code: String, to address: String) { messages.append((address, code)) }
-    func lastCode() -> String { messages.last!.1 }
-    func lastAddress() -> String { messages.last!.0 }
+    func sendNotice(_ notice: SecurityNotice, to address: String) { notices.append((notice, address)) }
+    // Mail leaves through the outbox after the response; wait for it so tests see a settled state.
+    func lastCode() async -> String { await MailOutbox.shared.drain(); return messages.last!.1 }
+    func lastAddress() async -> String { await MailOutbox.shared.drain(); return messages.last!.0 }
+    func codeCount() async -> Int { await MailOutbox.shared.drain(); return messages.count }
+    func noticeKinds() async -> [SecurityNotice] { await MailOutbox.shared.drain(); return notices.map(\.0) }
 }

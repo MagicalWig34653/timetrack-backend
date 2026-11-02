@@ -108,6 +108,12 @@ extension AuthService {
         }
     }
     func addPasskey(_ proof: RegisterProof, context: AuthContext, on db: any Database) async throws -> PasskeyDTO {
+        let (dto, promoted) = try await addPasskeyInTransaction(proof, context: context, on: db)
+        // Recovery finished: tell the owner (SEC-02). Best effort, never changes the response.
+        if promoted, let account = context.account.id { await notify(.recoveryFinished, account: account, on: db) }
+        return dto
+    }
+    private func addPasskeyInTransaction(_ proof: RegisterProof, context: AuthContext, on db: any Database) async throws -> (PasskeyDTO, Bool) {
         try await transaction(on: db) { tx in
             let current = try await authenticate(context.token, on: tx); try current.fresh(allowRecovery: true)
             let challenge = try await challenge(proof.challengeId, purpose: .addPasskey, on: tx)
@@ -115,11 +121,17 @@ extension AuthService {
             let key = try await verifyRegistration(proof, challenge: challenge, accountID: current.account.requireID(), on: tx)
             guard try await SingleUse.consume(.challenge, id: proof.challengeId, on: tx) else { throw APIError.invalid }
             try await key.create(on: tx)
-            if current.session.recovery {
+            let promoted = current.session.recovery
+            if promoted {
+                let accountID = try current.account.requireID()
                 try await Session.query(on: tx).filter(\.$id == current.session.requireID()).set(\.$recovery, to: false)
                     .set(\.$createdAt, to: Date()).set(\.$expiresAt, to: Date().addingTimeInterval(Double(configuration.sessionTTLHours * 3600))).update()
+                // SEC-02: whoever held the account before (cookie, OAuth grant, token) may be the reason for the recovery.
+                // Only this session survives; the new passkey is the fresh root of trust.
+                try await Self.revokeAccess(of: accountID, keepingSession: current.session.requireID(), on: tx)
+                try await AccountAuditRecord(action: "recovery.credentials_revoked", actor: accountID, target: accountID, detail: "sessions,oauth,tokens").create(on: tx)
             }
-            return try PasskeyDTO(key)
+            return (try PasskeyDTO(key), promoted)
         }
     }
     func passkeys(_ context: AuthContext, on db: any Database) async throws -> [PasskeyDTO] {
@@ -127,7 +139,8 @@ extension AuthService {
         return try await Passkey.query(on: db).filter(\.$accountId == context.account.requireID()).filter(\.$revokedAt == nil).sort(\.$createdAt).all().map(PasskeyDTO.init)
     }
     func changePasskey(_ id: UUID, name: String?, context: AuthContext, on db: any Database) async throws -> PasskeyDTO {
-        try await transaction(on: db) { tx in
+        let revoked = name == nil
+        let dto: PasskeyDTO = try await transaction(on: db) { tx in
             let current = try await authenticate(context.token, on: tx); try current.normal()
             guard let key = try await Passkey.query(on: tx).filter(\.$id == id).filter(\.$accountId == current.account.requireID()).filter(\.$revokedAt == nil).first() else { throw APIError.missing }
             if let name {
@@ -139,8 +152,14 @@ extension AuthService {
                 let identities = try await ExternalIdentity.query(on: tx).filter(\.$accountId == key.accountId).count()
                 guard count > 1 || identities > 0 || recovery.recoveryCodes.active || recovery.fallbackPassword.active || recovery.email.active else { throw APIError(.conflict, "last_passkey") }
                 key.revokedAt = Date()
+                // SEC-02: sessions are not bound to a credential, so the other sessions end; this one stays.
+                let accountID = try current.account.requireID()
+                try await Self.revokeOtherSessions(of: accountID, keeping: current.session.requireID(), on: tx)
+                try await AccountAuditRecord(action: "passkey.revoked", actor: accountID, target: accountID).create(on: tx)
             }
             try await key.update(on: tx); return try PasskeyDTO(key)
         }
+        if revoked, let account = context.account.id { await notify(.passkeyRevoked, account: account, on: db) }
+        return dto
     }
 }

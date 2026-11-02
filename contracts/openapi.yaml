@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.39.0
+  version: 0.40.0
   description: |
     v0.39.0 (P15, additiv): Archivierte Orte. `GET /places?archived=true|all` (Standard: nur aktive; `true` nur archivierte, `all` beide) und `POST /places/{id}/restore` stellt einen archivierten Ort wieder her (200 mit dem Ort, idempotent, fremde Orte 404). Kennzahl `archived` am Ort war schon vorhanden.
     v0.38.0 (P14e, ADR-0030 Nachtrag, additiv, nur Admin): APNs-Diagnose. GET /admin/apns (Zustand ohne Geheimnisse, fehlende oder ungültige APNS_*-Variablen, Gerätezahl, Hinweise) und POST /admin/apns/check (prüft live bei Apple, ob Schlüssel, Team und Bundle-IDs akzeptiert werden, mit einem erfundenen Gerätetoken; es wird nichts zugestellt; 6 je 10 Minuten).
@@ -293,7 +293,9 @@ paths:
     delete:
       operationId: revokePasskey
       summary: Passkey widerrufen
-      description: Widerruft einen Passkey. Der letzte Passkey kann nur widerrufen werden, wenn eine Recovery-Methode aktiv ist.
+      description: |
+        Widerruft einen Passkey. Der letzte Passkey kann nur widerrufen werden, wenn eine Recovery-Methode aktiv ist.
+        Seit 0.40.0 werden dabei alle anderen Sitzungen des Kontos beendet (die aufrufende bleibt) und eine Mitteilung an die bestätigte Konto-E-Mail gesendet; auf anderen Geräten ist eine neue Anmeldung nötig.
       security: [ { session: [], csrf: [] } ]
       parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
       responses:
@@ -331,11 +333,14 @@ paths:
     put:
       operationId: setFallbackPassword
       summary: Rückfallpasswort setzen
-      description: Setzt oder ersetzt das Rückfallpasswort (nur für Recovery, nie für normale Anmeldung).
+      description: |
+        Setzt oder ersetzt das Rückfallpasswort (nur für Recovery, nie für normale Anmeldung). Seit 0.40.0 mindestens 16 Zeichen (höchstens 256) mit Qualitätsprüfung:
+        zu wenige verschiedene Zeichen, Wiederholungen, Zeichenfolgen, bekannte Wendungen und Teile von Benutzername, Anzeigename oder E-Mail-Adresse werden mit 400 `weak_password` abgelehnt
+        (zu kurz oder zu lang: 400 `bad_request`). Empfohlen: lange Zufallsfolge oder Passphrase aus dem Passwortmanager.
       security: [ { session: [], csrf: [] } ]
       requestBody:
         required: true
-        content: { application/json: { schema: { type: object, required: [password], properties: { password: { type: string, minLength: 12, maxLength: 256 } } } } }
+        content: { application/json: { schema: { type: object, required: [password], properties: { password: { type: string, minLength: 16, maxLength: 256 } } } } }
       responses: { '204': { description: gesetzt }, '400': { $ref: '#/components/responses/BadRequest' } }
     delete:
       operationId: removeFallbackPassword
@@ -379,7 +384,8 @@ paths:
       description: |
         Startet Wiederherstellung. Antwort ist für unbekannte Konten und gültige Konten gleich (202),
         um Kontoexistenz nicht zu verraten. Methode `email` sendet einen Code (falls aktiv), `recovery-code`
-        und `fallback-password` erwarten Nachweis in /complete.
+        und `fallback-password` erwarten Nachweis in /complete. Seit 0.40.0 wird die Mail nach der Antwort versendet und je Konto auf 1 pro Minute und 5 pro Stunde begrenzt;
+        über dem Limit bleibt die Antwort unverändert (202), es wird nur nichts gesendet. Gesperrte Handles/Adressen: 429 (siehe /complete).
       requestBody:
         required: true
         content:
@@ -400,7 +406,11 @@ paths:
       description: |
         Prüft Nachweis (Code bzw. Passwort) atomar und einmalig; eröffnet eine kurzlebige Recovery-Sitzung
         (Cookie tt_session mit Flag recovery=true), die nur das Einrichten eines neuen Passkeys und
-        Sitzungswiderruf erlaubt.
+        Sitzungswiderruf erlaubt. Seit 0.40.0: Falsche Nachweise sperren das Konto-Handle (ab 5 Fehlversuchen, Dauer verdoppelt sich je weiterem Fehlversuch von 1 Minute bis 1 Stunde)
+        und die Client-Adresse (ab 20 Fehlversuchen über alle Handles). Gesperrt antwortet auch `recovery/start` mit 429, für bekannte und unbekannte Handles gleich;
+        der Zähler läuft 24 Stunden. Die Konto-E-Mail erhält Hinweise (Nachweis akzeptiert; Fehlversuche mit Sperre).
+        Sobald in der Recovery-Sitzung ein neuer Passkey angelegt wird (`POST /me/passkeys/verify`), werden alle anderen Sitzungen, OAuth-Grants/-Token und persönlichen Zugriffstoken des Kontos
+        beendet (Auslöse-Links und Kalender-Abos bleiben); Clients müssen danach mit 401 auf anderen Geräten rechnen.
       requestBody:
         required: true
         content:
@@ -573,7 +583,7 @@ paths:
       description: |
         Sendet einen Bestätigungscode (10 Minuten gültig, 5 Versuche) an die neue Adresse; die Adresse (kleingeschrieben) wird erst nach `verify` übernommen.
         Ersetzt eine offene Änderung. Frische Sitzung nötig (403 reauth_required). Ohne SMTP 501 not_implemented. Dieselbe bereits bestätigte Adresse → 400.
-        Rate-Limit je IP wie die Recovery-E-Mail (429).
+        Rate-Limit je IP wie die Recovery-E-Mail (429). Seit 0.40.0 zusätzlich Mail-Kontingent (429 `too_many_requests`): je Zieladresse und je Konto 5 pro Stunde und 20 pro Tag, serverweit 500 pro Stunde.
       security: [ { session: [], csrf: [] } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [email], properties: { email: { type: string, format: email } } } } } }
       responses: { '202': { description: Code versendet }, '400': { $ref: '#/components/responses/BadRequest' }, '403': { $ref: '#/components/responses/Forbidden' }, '429': { $ref: '#/components/responses/TooMany' }, '501': { $ref: '#/components/responses/NotImplemented' } }

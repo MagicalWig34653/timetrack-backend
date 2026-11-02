@@ -43,6 +43,7 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
     app.migrations.add(EnableExcusedAbsences())
     app.migrations.add(CreateWorktimeImportItems())
     for migration in AccountSchema.migrations { app.migrations.add(migration) }
+    for migration in AuthHardeningSchema.migrations { app.migrations.add(migration) }
     app.migrations.add(AddSegmentTimeIndex())
     app.migrations.add(AddPlanDayTimes())
     app.migrations.add(AddPlanBlocks())

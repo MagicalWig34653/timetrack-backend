@@ -12,10 +12,12 @@ public final class RecoveryAttempt: Model, @unchecked Sendable {
     @OptionalField(key: "consumed_at") public var consumedAt: Date?
     @Field(key: "attempt_count") public var attemptCount: Int
     @Field(key: "created_at") public var createdAt: Date
+    /// Hash of the handle typed at `recovery/start` (also for unknown handles); keys the failure lock (SEC-03).
+    @OptionalField(key: "lock_key") public var lockKey: String?
 
     public init() {}
 
-    public init(id: UUID? = nil, kind: RecoveryKind, accountId: UUID? = nil, codeHash: String? = nil, proofHash: String? = nil, expiresAt: Date, consumedAt: Date? = nil, attemptCount: Int, createdAt: Date) {
+    public init(id: UUID? = nil, kind: RecoveryKind, accountId: UUID? = nil, codeHash: String? = nil, proofHash: String? = nil, expiresAt: Date, consumedAt: Date? = nil, attemptCount: Int, createdAt: Date, lockKey: String? = nil) {
         self.id = id
         self.kind = kind
         self.accountId = accountId
@@ -25,5 +27,6 @@ public final class RecoveryAttempt: Model, @unchecked Sendable {
         self.consumedAt = consumedAt
         self.attemptCount = attemptCount
         self.createdAt = createdAt
+        self.lockKey = lockKey
     }
 }

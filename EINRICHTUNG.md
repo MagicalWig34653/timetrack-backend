@@ -221,6 +221,7 @@ Nie ein echtes `.env` committen. Ungültige Werte brechen den Start mit klarer M
 | `WEBAUTHN_ORIGIN`, `PUBLIC_BASE_URL` | `http://localhost:18080` | HTTPS außer auf Loopback, ohne Pfad/Slash; Host muss zur RP-ID passen |
 | `APPLE_APP_IDS` | leer | Kommagetrennt `<TeamID>.<BundleID>` (z. B. `ABCDE12345.com.example.timetrack`); Leerstellen/leere Einträge werden ignoriert, ungültiges Format ist ein Startfehler. Leer: `/.well-known/apple-app-site-association` antwortet 404, sonst `{"webcredentials":{"apps":[...]}}`. Native Passkeys melden den Origin `https://<RP-ID>` (ohne Port); das Backend akzeptiert ihn zusätzlich zu `WEBAUTHN_ORIGIN`, sofern die RP-ID eine echte Domain (mit Punkt) ist (ADR-0015) |
 | `SESSION_TTL_HOURS` | `720` | Compose/`.env.example` setzen `336` |
+| `SESSION_IDLE_HOURS` | `336` | Leerlauf-Timeout: eine Sitzung, die so lange nicht benutzt wurde, endet (1..8760; SEC-15) |
 | `PWA_STATIC_DIR` | `/srv/pwa` | Verzeichnis der gebauten PWA |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_TLS`, `SMTP_FROM`, `SMTP_FROM_NAME`, `SMTP_USER`, `SMTP_PASSWORD` | Port `587`, TLS `starttls` | E-Mail-Recovery; ohne `SMTP_HOST` ist sie nicht wählbar. `SMTP_TLS`: `starttls`, `implicit`, `off`. Mails sind HTML mit Klartext-Rückfall; `WEBAUTHN_RP_NAME` (Kopf), `SMTP_FROM_NAME` (Fußzeile) und `PUBLIC_BASE_URL` (Instanz, Links) prägen das Layout, Vorschau mit `scripts/mail-preview.sh` (ARCHITEKTUR 7b) |
 | `OIDC_ISSUER`, `OIDC_CLIENT_ID` (+ `OIDC_CLIENT_SECRET`, `OIDC_NAME`, `OIDC_SCOPES`) | aus | optionales OIDC (ADR-0007); Issuer und Client-ID nur zusammen |

@@ -36,7 +36,7 @@ Keine ausnutzbare Lücke mit hohem Schweregrad gefunden. Kontentrennung (IDOR), 
 - Beschreibung: Wer die Wiederherstellung durchläuft, bekommt eine Wiederherstellungssitzung und kann danach einen neuen Passkey anlegen. Dabei werden weder andere Sitzungen des Kontos noch OAuth-Grants, persönliche API-Tokens, Auslöse-Links, Kalender-Abos oder Gerätetokens widerrufen. Der Widerruf eines Passkeys beendet ebenfalls keine Sitzung. Der Nutzer muss „Andere Sitzungen beenden“ (`DELETE /me/sessions`) selbst auslösen; es gibt auch keine Benachrichtigung über eine abgeschlossene Wiederherstellung.
 - Szenario: Ein Angreifer hat ein Sitzungscookie oder einen MCP-Token erbeutet. Der Besitzer bemerkt es, wählt „Passkey verloren“, stellt wieder her und legt einen neuen Passkey an. Die Sitzung und der Token des Angreifers bleiben bis zum Ablauf (Standard 30 Tage; Stack 14 Tage; Tokens bis 365 Tage) nutzbar.
 - Empfehlung: Beim Abschluss der Wiederherstellung (und optional beim Passkey-Widerruf) `AccountEraser.revokeCredentials(of:)`-ähnlich alle anderen Sitzungen, OAuth-Grants und API-Tokens beenden (Auslöse-Links und Feeds mindestens anbieten); E-Mail-Hinweis „Wiederherstellung abgeschlossen“ an die bestätigte Adresse.
-- Status: offen.
+- Status: behoben (Paket SEC-A, Vertrag 0.40.0): Passkey-Anlegen aus einer Recovery-Sitzung beendet alle anderen Sitzungen, OAuth-Grants/-Token und persönlichen/Geräte-Token; Passkey-Widerruf beendet andere Sitzungen; Audit-Einträge `recovery.completed`, `recovery.credentials_revoked`, `passkey.revoked`; Mitteilungen per E-Mail. Auslöse-Links und Kalender-Abos bleiben bewusst bestehen (separat verwaltbar).
 
 ### SEC-03 Mittel (5.9 bei aktivem Rückfallpasswort, `AV:N/AC:H/PR:N/UI:N/C:H/I:H/A:N`): Online-Raten des Rückfallpassworts nur durch Handle-Zähler begrenzt, ohne Stärkeprüfung und ohne Benachrichtigung
 
@@ -44,14 +44,14 @@ Keine ausnutzbare Lücke mit hohem Schweregrad gefunden. Kontentrennung (IDOR), 
 - Beschreibung: Je Wiederherstellungsvorgang sind 5 Versuche erlaubt, neue Vorgänge sind über `recovery/start` unbegrenzt startbar, begrenzt nur durch den Handle-Zähler (15 Ereignisse je 5 Minuten, unabhängig von der IP). Das ergibt grob 2.900 Rateversuche je Tag und Konto. Das Passwort braucht nur 12 Zeichen ohne Qualitätsprüfung. Ein Treffer liefert eine Wiederherstellungssitzung und damit die Möglichkeit, einen Passkey anzulegen (Kontoübernahme). Argon2id (64 MiB, 3 Durchläufe) und gleichartige KDF-Arbeit für unbekannte Konten (kein Zeitorakel) sind gut; es fehlt eine Eskalation (Sperre mit steigender Dauer) und eine Meldung an den Besitzer.
 - Szenario: Ein Angreifer kennt ein Handle (Handles sind Anzeigenamen) und probiert eine Liste häufiger 12-Zeichen-Passwörter über Wochen durch.
 - Empfehlung: Wörterbuch-/Entropieprüfung beim Setzen (zum Beispiel Blocklist häufiger Passwörter, Mindestentropie oder 16 Zeichen), exponentielle Sperre je Konto nach Fehlversuchen, Benachrichtigung bei fehlgeschlagenen und erfolgreichen Wiederherstellungen, im UI Hinweis „Rückfallpasswort nur als lange Zufallsfolge“. Alternativ Rückfallpasswort nur zusammen mit Recovery-Codes zulassen.
-- Status: offen.
+- Status: behoben (Paket SEC-A): Sperre je Handle (ab 5 Fehlversuchen, verdoppelnd von 1 Minute bis 1 Stunde, 24-h-Fenster) und je Client-Adresse (ab 20), identisch für unbekannte Handles; Rückfallpasswort mindestens 16 Zeichen mit Qualitätsprüfung (`weak_password`); E-Mail-Hinweis bei Sperre und bei akzeptiertem Nachweis.
 
 ### SEC-04 Mittel (4.3, `AV:N/AC:L/PR:N/UI:N/C:N/I:N/A:L` plus Datenschutz): Wiederherstellung per E-Mail: Mail-Flut gegen Dritte und Zeitorakel
 
 - Ort: `RecoveryService.swift:144-175`.
 - Beschreibung: `recovery/start` mit Methode `email` sendet für Konten mit aktiver E-Mail-Wiederherstellung synchron (`try? await mailSender.sendCode`, Zeile 174) einen Code an die hinterlegte Adresse; für unbekannte Konten oder Konten ohne aktive Wiederherstellung geschieht nichts. Zwei Folgen: (1) Mail-Flut: bis zu 15 Mails je 5 Minuten je Handle (Handle-Zähler), also rund 4.300 Mails je Tag an das Opfer, ohne Cooldown je Konto; (2) Zeitorakel: Der Antwortzeit-Unterschied (SMTP-Roundtrip) verrät, ob ein Handle ein Konto mit aktiver E-Mail-Wiederherstellung ist, obwohl die Antwort sonst absichtlich einheitlich ist (Anti-Enumeration).
 - Empfehlung: Cooldown und Tageslimit je Konto (zum Beispiel 1 je Minute, 5 je Stunde); Versand asynchron nach der Antwort (Hintergrundaufgabe) oder Antwortzeit auffüllen.
-- Status: offen.
+- Status: behoben (Paket SEC-A): Mail-Kontingent (Recovery 1/Minute, je Adresse und Konto 5/Stunde und 20/Tag, serverweit 500/Stunde), Versand nach der Antwort (Outbox), Antwort unabhängig vom Kontingent.
 
 ### SEC-05 Niedrig (3.1): Keine Sicherheitsheader für PWA und die meisten API-Antworten vom Backend
 
@@ -79,7 +79,7 @@ Keine ausnutzbare Lücke mit hohem Schweregrad gefunden. Kontentrennung (IDOR), 
 - Ort: `Accounts/ProfileService.swift:44-56`, `Routes.swift:56` (`PUT /me/profile/email`), `SessionService.swift:99-102` (Zähler 60 je 5 Minuten je IP).
 - Beschreibung: Ein Mitglied mit frischer Sitzung kann Codes an beliebige Adressen senden lassen (fester Text, Absender des Betreibers). Es gibt kein Limit je Konto; das IP-Limit ist wegen SEC-01 unter Umständen umgehbar. Missbrauch belastet die Absender-Reputation.
 - Empfehlung: Limit je Konto (zum Beispiel 5 je Stunde und 20 je Tag) und je Zieladresse.
-- Status: offen.
+- Status: behoben (Paket SEC-A): gleiches Mail-Kontingent je Konto, Zieladresse und serverweit für `PUT /me/profile/email` und E-Mail-Recovery-Einrichtung (429).
 
 ### SEC-09 Niedrig (2.7, setzt Administratorrechte voraus): Administrator-konfigurierter S3-Endpunkt und lokaler Pfad ohne Zielprüfung
 
@@ -128,7 +128,7 @@ Keine ausnutzbare Lücke mit hohem Schweregrad gefunden. Kontentrennung (IDOR), 
 
 - Ort: `Configuration.swift:114` (Standard 720 Stunden, absolut, kein Leerlauf-Timeout), `SessionService.swift:48-50` (Cookie `tt_session`, `HttpOnly`, `SameSite=Lax`, `Secure` nur bei HTTPS-Basis-URL, kein `__Host-`-Präfix).
 - Empfehlung: Leerlauf-Timeout (zum Beispiel 14 Tage) und Präfix `__Host-` für die Produktion; Standardwert im Code an den Stack (336 Stunden) angleichen.
-- Status: offen (Info).
+- Status: teilweise behoben (Paket SEC-A): Leerlauf-Timeout `SESSION_IDLE_HOURS` (Standard 336). Das `__Host-`-Cookiepräfix ist nicht umgesetzt (Vertragsbruch für alle Clients, eigener Beschluss nötig); Code-Standard der Sitzungsdauer bleibt 720 (Stack setzt 336).
 
 ### SEC-16 Info: Unbekannte Fehler werden als 500 beantwortet, aber nicht protokolliert
 

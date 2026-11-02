@@ -145,12 +145,12 @@ func registerRoutes(_ app: Application, service: AuthService) {
     }
     api.post("auth", "recovery", "start") { req async throws -> Response in
         let input = try req.content.decode(RecoveryStart.self); try await limit(req, subject: .handle(input.identifier))
-        return try await service.recoveryStart(input, on: req.db).encodeResponse(status: .accepted, for: req)
+        return try await service.recoveryStart(input, ip: req.clientRateLimitKey, on: req.db).encodeResponse(status: .accepted, for: req)
     }
     api.post("auth", "recovery", "complete") { req async throws -> Response in
         let proof = try req.content.decode(RecoveryProof.self)
         try await limit(req, subject: .recovery(proof.recoveryId))
-        return try await sessionResponse(service.recoveryComplete(proof, on: req.db), request: req)
+        return try await sessionResponse(service.recoveryComplete(proof, ip: req.clientRateLimitKey, on: req.db), request: req)
     }
     api.get("admin", "invitations") { req async throws -> [InvitationDTO] in try await service.invitations(req.authContext, on: req.db) }
     api.post("admin", "invitations") { req async throws -> Response in

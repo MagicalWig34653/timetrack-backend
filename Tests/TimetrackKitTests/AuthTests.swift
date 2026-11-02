@@ -136,14 +136,14 @@ final class AuthTests: XCTestCase, @unchecked Sendable {
             checkFalse(try await service.recoveryStatus(context, on: app.db).email.available)
             await expect("not_implemented") { try await service.enableEmail("test@example.test", context: context, on: app.db) }
             await expect("bad_request") { try await service.fallbackPassword("short", context: context, on: app.db) }
-            try await service.fallbackPassword("correct horse battery staple", context: context, on: app.db)
+            try await service.fallbackPassword("violet anvil harbour tangent 42", context: context, on: app.db)
             let stored = try unwrap(try await FallbackPassword.query(on: app.db).first())
             XCTAssertTrue(stored.hash.hasPrefix("$argon2id$v=19$m=65536,t=3,p=1$"))
             let start = try await service.recoveryStart(.init(method: .fallbackPassword, identifier: "admin"), on: app.db)
             await expect("unauthorized") { _ = try await service.recoveryComplete(.init(recoveryId: start.recoveryId, proof: "wrong"), on: app.db) }
-            let recovered = try await service.recoveryComplete(.init(recoveryId: start.recoveryId, proof: "correct horse battery staple"), on: app.db)
+            let recovered = try await service.recoveryComplete(.init(recoveryId: start.recoveryId, proof: "violet anvil harbour tangent 42"), on: app.db)
             XCTAssertTrue(recovered.session.recovery)
-            await expect("unauthorized") { _ = try await service.recoveryComplete(.init(recoveryId: start.recoveryId, proof: "correct horse battery staple"), on: app.db) }
+            await expect("unauthorized") { _ = try await service.recoveryComplete(.init(recoveryId: start.recoveryId, proof: "violet anvil harbour tangent 42"), on: app.db) }
             for method in [RecoveryKind.email, .fallbackPassword, .recoveryCode] {
                 for identifier in ["admin", "unknown"] {
                     try await app.test(.POST, "/api/v1/auth/recovery/start", beforeRequest: { try $0.content.encode(RecoveryStart(method: method, identifier: identifier)) }, afterResponse: { response async throws in
@@ -170,10 +170,12 @@ final class AuthTests: XCTestCase, @unchecked Sendable {
             let proof = RecoveryProof(recoveryId: start.recoveryId, proof: code)
             _ = try await service.recoveryComplete(proof, on: app.db)
             await expect("unauthorized") { _ = try await service.recoveryComplete(proof, on: app.db) }
+            try await MailQuotaEvent.query(on: app.db).delete() // the one-minute recovery cooldown (SEC-04)
             let expired = try await service.recoveryStart(.init(method: .email, identifier: "admin"), on: app.db)
             let expiredCode = await sender.lastCode()
             try await RecoveryAttempt.query(on: app.db).filter(\.$id == expired.recoveryId).set(\.$expiresAt, to: Date().addingTimeInterval(-1)).update()
             await expect("unauthorized") { _ = try await service.recoveryComplete(.init(recoveryId: expired.recoveryId, proof: expiredCode), on: app.db) }
+            try await MailQuotaEvent.query(on: app.db).delete()
             let limited = try await service.recoveryStart(.init(method: .email, identifier: "admin"), on: app.db)
             let correct = await sender.lastCode()
             for _ in 0..<5 { await expect("unauthorized") { _ = try await service.recoveryComplete(.init(recoveryId: limited.recoveryId, proof: "wrong"), on: app.db) } }

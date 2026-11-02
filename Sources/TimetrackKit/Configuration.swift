@@ -28,6 +28,8 @@ public struct Configuration: Sendable {
     /// Apple app IDs (`<TeamID>.<BundleID>`) served in the apple-app-site-association file; empty disables the endpoint.
     public let appleAppIDs: [String]
     public let sessionTTLHours: Int
+    /// A session unused for this long ends, even before its absolute expiry (SEC-15).
+    public let sessionIdleHours: Int
     public let autoMigrate: Bool
     public let pwaStaticDirectory: String
     public let smtpHost: String?
@@ -112,6 +114,7 @@ public struct Configuration: Sendable {
         appleAppIDs = try Self.parseAppleAppIDs(environment["APPLE_APP_IDS"] ?? "")
         publicBaseURL = try url("PUBLIC_BASE_URL", "http://localhost:18080")
         sessionTTLHours = try integer("SESSION_TTL_HOURS", "720", 1...8760)
+        sessionIdleHours = try integer("SESSION_IDLE_HOURS", "336", 1...8760)
         switch environment["AUTO_MIGRATE"] ?? "false" {
         case "true": autoMigrate = true
         case "false": autoMigrate = false
