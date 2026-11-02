@@ -280,7 +280,7 @@ https://developer.apple.com/foundation-models-framework/
 - **Fenster:** Bereichsendpunkte laden nur die Zeilen des Fensters (Segmente mit Rand von −3/+4 Tagen); nur das Zeitkonto lädt die gesamte Historie.
 - **Indizes:** `work_models(account_id)`, `work_segments(account_id)` und `work_segments(account_id, started_at)`, `absences(account_id, start_date)`, `day_preferences(account_id, date)` (eindeutig). Neue Abfragen mit `EXPLAIN` auf MariaDB prüfen.
 - **Kein blockierendes Rechnen im Request-Pfad** über Sekunden: es blockiert Event-Loop, Pool und `/ready` (Swarm-Healthcheck: 3 s). Lesende Routen laufen ohne `auth_lock`; schreibende Routen weiter damit (ADR-0017).
-- **Verbindungen:** MariaDB-Pool mit Keep-Alive-Ping (45 s), `/ready` wiederholt einmal.
+- **Verbindungen:** MariaDB-Pool mit Keep-Alive-Ping (45 s, je Event-Loop eigene Aufgabe, nicht antwortende Verbindung wird nach 5 s geschlossen und ersetzt). `/ready` prüft den Pool **jedes** Event-Loops mit Frist (1,2 s je Versuch, ein Wiederholungsversuch), damit ein festgefahrener Loop den Healthcheck rot macht (POOL-FIX, `PoolHealth.swift`).
 
 ## 7b. E-Mail-Vorlagen (Paket M1-Mail)
 

@@ -35,11 +35,17 @@ func registerRoutes(_ app: Application, service: AuthService) {
         // One transient failure (a pooled connection the server or a firewall dropped, a pool wait while the
         // server is busy) must not flip readiness: the probe is retried once on a fresh attempt. Migrations
         // pending is a definite answer and is not retried.
+        // POOL-FIX: the pool of EVERY event loop has to answer (a connection dropped silently by a firewall never answers and
+        // keeps its loop's only pooled connection leased for good), and the whole probe has a hard deadline below the health
+        // check timeout of 3 s, so a stuck pool turns into 503 instead of a hanging probe.
         func probe() async -> Bool? {
-            do {
-                try await requireSQL(request.db).raw("SELECT 1").run()
-                return try await app.migrator.previewPrepareBatch().get().isEmpty
-            } catch { return nil }
+            await PoolHealth.withDeadline(seconds: 1.2) { () -> Bool? in
+                do {
+                    guard await PoolHealth.allLoopsAnswer(app, within: 1.0) else { return nil }
+                    if PoolHealth.loopDatabases(app).isEmpty { try await requireSQL(request.db).raw("SELECT 1").run() }
+                    return try await app.migrator.previewPrepareBatch().get().isEmpty
+                } catch { return nil }
+            } ?? nil
         }
         var outcome = await probe()
         if outcome == nil { try? await Task.sleep(nanoseconds: 200_000_000); outcome = await probe() }

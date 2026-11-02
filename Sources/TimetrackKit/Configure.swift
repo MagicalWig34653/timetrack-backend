@@ -23,7 +23,7 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
         // proxies; the next request that drew such a connection failed ("server not ready", fine after reload).
         // A cheap ping per event loop every 45 s keeps them alive and replaces dead ones before users hit them.
         app.lifecycle.use(DatabaseStartupCheck(host: config.dbHost, port: config.dbPort, tls: config.dbTLS == .off ? "off" : "required", perLoop: config.dbPoolConnectionsPerLoop, timeout: config.dbPoolTimeoutSeconds))
-        if config.dbKeepAliveSeconds > 0 { app.lifecycle.use(DatabaseKeepAlive(intervalSeconds: config.dbKeepAliveSeconds, connectionsPerLoop: config.dbPoolConnectionsPerLoop)) }
+        if config.dbKeepAliveSeconds > 0 { app.lifecycle.use(DatabaseKeepAlive(intervalSeconds: config.dbKeepAliveSeconds, connectionsPerLoop: config.dbPoolConnectionsPerLoop, pingDeadlineSeconds: Double(min(5, config.dbPoolTimeoutSeconds)))) }
     }
     // Change marks first: the middleware registered below writes to this table during every later data migration.
     app.migrations.add(CreateTimeChangeMarks())
@@ -95,21 +95,33 @@ struct NotReadyResponse: Content {
     var error = Detail()
 }
 
+private struct UncheckedDatabase: @unchecked Sendable { let database: any Database }
+
 /// Pings the MariaDB pool of every event loop periodically (see `configure`).
 final class DatabaseKeepAlive: LifecycleHandler, @unchecked Sendable {
     private var task: Task<Void, Never>?
-    let intervalSeconds: Int, connectionsPerLoop: Int
-    init(intervalSeconds: Int, connectionsPerLoop: Int) { self.intervalSeconds = intervalSeconds; self.connectionsPerLoop = connectionsPerLoop }
+    let intervalSeconds: Int, connectionsPerLoop: Int, pingDeadlineSeconds: Double
+    init(intervalSeconds: Int, connectionsPerLoop: Int, pingDeadlineSeconds: Double = PoolHealth.pingDeadlineSeconds) {
+        self.intervalSeconds = intervalSeconds; self.connectionsPerLoop = connectionsPerLoop; self.pingDeadlineSeconds = pingDeadlineSeconds
+    }
     func didBoot(_ application: Application) throws {
         let app = application
+        let interval = intervalSeconds, perLoop = connectionsPerLoop, deadline = pingDeadlineSeconds
         task = Task {
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: UInt64(intervalSeconds) * 1_000_000_000)
-                for loop in app.eventLoopGroup.makeIterator() {
-                    guard let db = app.databases.database(.mysql, logger: app.logger, on: loop) else { continue }
-                    for _ in 0..<connectionsPerLoop {
-                        do { try await db.withConnection { try await requireSQL($0).raw("SELECT 1").run() }; break }
-                        catch { app.logger.warning("database keep-alive ping failed: \(String(describing: error))") }
+                try? await Task.sleep(nanoseconds: UInt64(interval) * 1_000_000_000)
+                // One task per event loop: a ping that hangs on a dead connection must not stop the pings of the other loops.
+                // The ping closes a connection that does not answer in time (PoolHealth), so the pool replaces it.
+                let databases = PoolHealth.loopDatabases(app)
+                await withTaskGroup(of: Void.self) { group in
+                    for (index, database) in databases.enumerated() {
+                        let box = UncheckedDatabase(database: database)
+                        group.addTask {
+                            for _ in 0..<perLoop {
+                                do { try await PoolHealth.ping(box.database, deadline: deadline); break }
+                                catch { app.logger.warning("database keep-alive ping failed (event loop \(index)): \(String(describing: error))") }
+                            }
+                        }
                     }
                 }
             }
