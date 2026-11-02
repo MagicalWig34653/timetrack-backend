@@ -255,7 +255,8 @@ enum CalendarFeedBuilder {
         }
 
         // C3: explicit day marks (vacation, sick, exempt, school day) that no absence entry already shows. Notes and places never leave the account.
-        if options.contains("absences") {
+        // Day marks belong to the planning module: with planning off they are not exported (the snapshot still carries them).
+        if planning, options.contains("absences") {
             let marked = snapshot.preferences.compactMap { key, value -> (LocalDate, DayMarkKind)? in
                 guard dayMarkLabel(value.mark) != nil, !absenceDays.contains(key), let date = try? LocalDate(key), date >= from, date <= to else { return nil }
                 return (date, value.mark)

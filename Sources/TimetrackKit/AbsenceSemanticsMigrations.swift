@@ -59,24 +59,28 @@ struct NormaliseAbsenceStatuses: AsyncMigration {
     let name = "c3.normalise_absence_statuses"
     func prepare(on db: any Database) async throws {
         if !(await columnExists(db, table: "absences", column: "legacy_status")) { try await db.schema("absences").field("legacy_status", .string).update() }
-        let sql = try requireSQL(db)
-        let affected = try await sql.raw("""
-            SELECT DISTINCT account_id FROM absences WHERE (kind IN ('sick', 'excused') AND status <> 'recorded' AND status <> 'cancelled') \
-            OR (kind = 'other' AND status IN ('requested', 'approved', 'taken', 'rejected'))
-            """).all()
-        let accounts = try affected.map { try $0.decode(column: "account_id", as: UUID.self) }
-        try await sql.raw("""
-            UPDATE absences SET legacy_status = status, status = 'recorded' \
-            WHERE kind IN ('sick', 'excused') AND status IN ('planned', 'requested', 'approved', 'taken')
-            """).run()
-        try await sql.raw("""
-            UPDATE absences SET legacy_status = status, status = 'cancelled' \
-            WHERE kind IN ('sick', 'excused', 'other') AND status = 'rejected'
-            """).run()
-        try await sql.raw("UPDATE absences SET legacy_status = status, status = 'planned' WHERE kind = 'other' AND status = 'requested'").run()
-        try await sql.raw("UPDATE absences SET legacy_status = status, status = 'recorded' WHERE kind = 'other' AND status IN ('approved', 'taken')").run()
-        // Former planned/requested sick days now count as sick days: cached balance checkpoints of these accounts are stale.
-        for account in accounts { try await TimeChangeTracker.touch(account: account, months: [TimeChangeTracker.everything], on: db) }
+        // Data steps and the checkpoint invalidation commit together: after a failure nothing is half-applied, so a re-run
+        // still finds every affected account (the column itself is added above, DDL is not transactional on MariaDB).
+        try await db.transaction { tx in
+            let sql = try requireSQL(tx)
+            let affected = try await sql.raw("""
+                SELECT DISTINCT account_id FROM absences WHERE (kind IN ('sick', 'excused') AND status <> 'recorded' AND status <> 'cancelled') \
+                OR (kind = 'other' AND status IN ('requested', 'approved', 'taken', 'rejected'))
+                """).all()
+            let accounts = try affected.map { try $0.decode(column: "account_id", as: UUID.self) }
+            try await sql.raw("""
+                UPDATE absences SET legacy_status = status, status = 'recorded' \
+                WHERE kind IN ('sick', 'excused') AND status IN ('planned', 'requested', 'approved', 'taken')
+                """).run()
+            try await sql.raw("""
+                UPDATE absences SET legacy_status = status, status = 'cancelled' \
+                WHERE kind IN ('sick', 'excused', 'other') AND status = 'rejected'
+                """).run()
+            try await sql.raw("UPDATE absences SET legacy_status = status, status = 'planned' WHERE kind = 'other' AND status = 'requested'").run()
+            try await sql.raw("UPDATE absences SET legacy_status = status, status = 'recorded' WHERE kind = 'other' AND status IN ('approved', 'taken')").run()
+            // Former planned/requested sick days now count as sick days: cached balance checkpoints of these accounts are stale.
+            for account in accounts { try await TimeChangeTracker.touch(account: account, months: [TimeChangeTracker.everything], on: tx) }
+        }
     }
     func revert(on db: any Database) async throws {
         let sql = try requireSQL(db)

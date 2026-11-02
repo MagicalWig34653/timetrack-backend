@@ -62,15 +62,19 @@ struct PublicGroups: Sendable {
     }
 
     /// Writes: stricter per-IP and per-link counters, executed in the serialized authentication transaction so the size limits
-    /// and the name check cannot be raced.
+    /// and the name check cannot be raced. A business failure (invalid input, closed group, wrong edit secret, ...) rolls the
+    /// transaction back, and with it the counters it just wrote; those counters are therefore re-recorded outside afterwards.
     func write(_ req: Request, token: String, _ operation: @escaping @Sendable (GroupTarget, any Database, Date) async throws -> Response) async throws -> Response {
         let now = Date(), client = req.clientRateLimitKey, db = req.db, auth = auth
         let missKey = "grp-miss:" + client
+        let charged = ChargedKeys()
         do {
             return try await auth.transaction(on: db) { tx in
                 guard try await !GroupRateLimit.exceeded(missKey, limit: GroupRateLimit.miss, now: now, on: tx),
-                      try await GroupRateLimit.hit("grp-ip:" + client, limit: GroupRateLimit.ipRead, now: now, on: tx),
-                      try await GroupRateLimit.hit("grp-write-ip:" + client, limit: GroupRateLimit.ipWrite, now: now, on: tx) else { return Self.tooMany() }
+                      try await GroupRateLimit.hit("grp-ip:" + client, limit: GroupRateLimit.ipRead, now: now, on: tx) else { return Self.tooMany() }
+                charged.add("grp-ip:" + client)
+                guard try await GroupRateLimit.hit("grp-write-ip:" + client, limit: GroupRateLimit.ipWrite, now: now, on: tx) else { return Self.tooMany() }
+                charged.add("grp-write-ip:" + client)
                 guard let target = try await resolve(token, on: tx) else {
                     try await GroupRateLimit.record(missKey, now: now, on: tx)
                     return Response(status: .notFound, headers: ["X-Group-Miss": "1"])
@@ -78,14 +82,24 @@ struct PublicGroups: Sendable {
                 let id: UUID
                 switch target { case .poll(let poll): id = try poll.requireID(); case .order(let order): id = try order.requireID() }
                 guard try await GroupRateLimit.hit("grp-write-tok:" + id.uuidString, limit: GroupRateLimit.tokenWrite, now: now, on: tx) else { return Self.tooMany() }
+                charged.add("grp-write-tok:" + id.uuidString)
                 return try await operation(target, tx, now)
             }.unmissed()
-        } catch let error as APIError where error.code == "edit_secret_invalid" {
-            // The failed transaction rolled back; guessing edit secrets still counts against the client.
-            try? await GroupRateLimit.record(missKey, now: now, on: db)
+        } catch let error as APIError {
+            // The failed transaction rolled back its counters: count the attempt against the client anyway.
+            for key in charged.keys { try? await GroupRateLimit.record(key, now: now, on: db) }
+            if error.code == "edit_secret_invalid" { try? await GroupRateLimit.record(missKey, now: now, on: db) }
             throw error
         }
     }
+}
+
+/// Counter keys written inside the current write transaction (re-recorded when a business failure rolls it back).
+private final class ChargedKeys: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [String] = []
+    func add(_ key: String) { lock.lock(); storage.append(key); lock.unlock() }
+    var keys: [String] { lock.lock(); defer { lock.unlock() }; return storage }
 }
 
 private extension Response {

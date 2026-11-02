@@ -135,6 +135,8 @@ struct AccountExportService: Sendable {
                                                          "companyDays": .array(($0.companyDays ?? []).map { .object(["month": .number(Double($0.month)), "day": .number(Double($0.day)), "treatment": .string($0.treatment.rawValue), "name": Self.opt($0.name)]) })] })
         let vacationAdjustments = try await VacationAdjustmentRecord.query(on: db).filter(\.$accountId == id).sort(\.$date).all()
         try table("vacation-adjustments", vacationAdjustments.map { ["date": .string($0.date), "halfDays": .number(Double($0.halfDays)), "reason": .string($0.reason), "createdAt": Self.iso($0.createdAt)] })
+        let vacationSnapshots = try await VacationSnapshotRecord.query(on: db).filter(\.$accountId == id).sort(\.$date).all()
+        try table("vacation-snapshots", vacationSnapshots.map { ["id": .string($0.id?.uuidString ?? ""), "date": .string($0.date), "remainingHalfDays": .number(Double($0.remainingHalfDays))] })
         if let form = try await VacationRequestFormRecord.query(on: db).filter(\.$accountId == id).first(),
            let file = try await StoredFileRecord.query(on: db).filter(\.$id == form.fileId).first() {
             // The PDF itself is part of `files/` below; this entry links it to its role and carries the mapping.

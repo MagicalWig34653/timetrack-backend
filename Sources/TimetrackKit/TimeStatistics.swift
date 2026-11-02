@@ -108,7 +108,8 @@ struct StatisticsService: Sendable {
             let label = Self.label(date, granularity)
             if buckets.last?.label != label { buckets.append(TimeStatisticsBucket(label: label, from: date, to: date)) }
             let model = snapshot.models.first { $0.validFrom <= date && ($0.validTo.map { date <= $0 } ?? true) }
-            let view = scope.weeks.dto(day, model: model, absences: snapshot.absences, plan: nil, today: today, now: now)
+            let view = scope.weeks.dto(day, model: model, absences: snapshot.absences, plan: nil, today: today, now: now,
+                                     holidayName: prepared.holidayName(on: date), companyDayTreatment: prepared.companyDayTreatment(on: date))
             Self.add(&buckets[buckets.count - 1], day: day, view: view, basis: basis, now: now)
             buckets[buckets.count - 1].to = date
             date = date.addingDays(1)
@@ -173,16 +174,16 @@ struct StatisticsService: Sendable {
             case .travel: bucket.kindSeconds.travel += length
             }
         }
-        let half = view.absences.contains { $0.kind == .vacation && $0.halfDay } ? 0.5 : 1
+        let vacation = view.vacationDays
         switch view.mark {
-        case "vacation": bucket.absences.vacation += half
+        case "vacation": bucket.absences.vacation += vacation
         case "sick": bucket.absences.sick += 1
         case "excused": bucket.absences.excused += 1
         case "holiday": bucket.absences.holiday += 1
         case "school": bucket.absences.school += 1
         default: break
         }
-        if view.mark == "vacation" { bucket.absenceDays += half } else if view.mark == "sick" || view.mark == "excused" { bucket.absenceDays += 1 }
+        if view.mark == "vacation" { bucket.absenceDays += vacation } else if view.mark == "sick" || view.mark == "excused" { bucket.absenceDays += 1 }
         if view.workSeconds > 0 { bucket.workDays += 1 }
         if day.provisional { bucket.provisional = true }
         if !day.legalWarnings.isEmpty { bucket.legalWarningDays += 1 }

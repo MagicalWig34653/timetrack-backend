@@ -263,8 +263,11 @@ enum GroupPurge {
 struct AddGroupLinkTokens: AsyncMigration {
     let name = "g1b.add_group_link_tokens"
     func prepare(on db: any Database) async throws {
-        try await db.schema("group_polls").field("link_token", .string).update()
-        try await db.schema("group_orders").field("link_token", .string).update()
+        // Resumable after a partial failure (MariaDB DDL is not transactional): only add what is missing.
+        for table in ["group_polls", "group_orders"] {
+            if await columnExists(db, table: table, column: "link_token") { continue }
+            try await db.schema(table).field("link_token", .string).update()
+        }
     }
     func revert(on db: any Database) async throws {
         try await db.schema("group_polls").deleteField("link_token").update()

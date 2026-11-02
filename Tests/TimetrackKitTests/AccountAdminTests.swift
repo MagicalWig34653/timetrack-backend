@@ -61,6 +61,7 @@ extension AuthTests {
         try await api(app, context, .PUT, "plan/days/2026-10-14", ["mode": "office", "placeId": place, "note": "Plan"])
         try await api(app, context, .PUT, "vacation/settings", ["region": "DE-ST", "annualEntitlementHalfDays": 60, "carryOverByYear": ["2026": 8], "carryOverExpiry": "03-31"])
         try await api(app, context, .POST, "vacation/adjustments", ["date": "2026-10-01", "halfDays": 2, "reason": "Adjustment"], .created)
+        try await api(app, context, .POST, "vacation/snapshots", ["date": "2026-10-02", "remainingHalfDays": 17], .created)
         let absence = try await createAbsence(app, context, absenceBody("2026-10-19"))
         let absenceId = try XCTUnwrap(absence["id"] as? String)
         if let with { try await api(app, context, .POST, "shares", ["recipientHandle": with, "scopes": ["plan": true, "actual": true, "vacation": true]], .created) }
@@ -472,6 +473,9 @@ extension AuthTests {
             XCTAssertEqual(adjustments?.first?["kind"] as? String, "opening")
             XCTAssertNotNil(adjustments?.first?["id"] as? String)
             XCTAssertNotNil(adjustments?.first?["createdAt"] as? String)
+            let snapshots = try JSONSerialization.jsonObject(with: try XCTUnwrap(files["vacation-snapshots.json"])) as? [[String: Any]]
+            XCTAssertEqual(snapshots?.count, 1); XCTAssertEqual(snapshots?.first?["date"] as? String, "2026-10-02"); XCTAssertEqual(snapshots?.first?["remainingHalfDays"] as? Int, 17)
+            XCTAssertEqual((try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(files["manifest.json"])) as? [String: Any])["counts"] as? [String: Int])?["vacation-snapshots"], 1)
             let csv = String(decoding: try XCTUnwrap(files["time-entries.csv"]), as: UTF8.self)
             XCTAssertTrue(csv.hasPrefix("id,kind,rawStartedAt,rawEndedAt,startedAt,endedAt,placeId,source,note,voidedAt,voidReason,needsReview,version\r\n")); XCTAssertEqual(csv.split(separator: "\r\n").count, 2)
             let reports = String(decoding: try XCTUnwrap(files["report-entries.csv"]), as: UTF8.self)

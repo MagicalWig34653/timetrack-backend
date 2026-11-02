@@ -113,6 +113,29 @@ extension AuthTests {
         }
     }
 
+    /// F08: the data steps and the checkpoint invalidation commit together; a failure in between leaves the rows
+    /// untouched, so a re-run still finds every affected account.
+    func testC3NormalisationIsAtomicAndRepeatable() async throws {
+        try await withApp { app, auth in
+            let (context, _) = try await registered(auth, db: app.db)
+            let accountId = try context.account.requireID()
+            let old = AbsenceRecord(); old.id = UUID(); old.accountId = accountId; old.kind = "sick"; old.startDate = "2031-05-05"; old.endDate = "2031-05-05"
+            old.halfDayStart = false; old.halfDayEnd = false; old.status = "approved"; old.documentStatus = "not_needed"; old.version = 1
+            old.createdAt = Date(); old.updatedAt = Date()
+            try await old.create(on: app.db)
+            // Make the invalidation step fail after the status updates ran: the whole data part must roll back.
+            try await requireSQL(app.db).raw("ALTER TABLE time_change_marks RENAME TO time_change_marks_hidden").run()
+            do { try await NormaliseAbsenceStatuses().prepare(on: app.db); XCTFail("expected the invalidation to fail") } catch {}
+            try await requireSQL(app.db).raw("ALTER TABLE time_change_marks_hidden RENAME TO time_change_marks").run()
+            let untouched = try await XCTUnwrapAsync(try await AbsenceRecord.find(old.id!, on: app.db))
+            XCTAssertEqual(untouched.status, "approved"); XCTAssertNil(untouched.legacyStatus)
+            // The retry finds the account again and completes.
+            try await NormaliseAbsenceStatuses().prepare(on: app.db)
+            let done = try await XCTUnwrapAsync(try await AbsenceRecord.find(old.id!, on: app.db))
+            XCTAssertEqual(done.status, "recorded"); XCTAssertEqual(done.legacyStatus, "approved")
+        }
+    }
+
     func testAccountBalanceExcludesTheRunningDay() async throws {
         try await withApp { app, auth in
             let (context, _) = try await registered(auth, db: app.db)

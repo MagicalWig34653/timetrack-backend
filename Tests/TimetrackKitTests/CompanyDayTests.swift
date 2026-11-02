@@ -219,6 +219,23 @@ extension AuthTests {
         }
     }
 
+    func testHalfCompanyDayCountsHalfVacationDayInWeekAndStatistics() async throws {
+        try await withApp { app, auth in
+            let (context, _) = try await registered(auth, db: app.db)
+            try await timeRequest(app, context, .POST, "work-models", modelBody("2020-01-01"), status: .created)
+            _ = try await setCompanyDays(app, context, [["month": 12, "day": 24, "treatment": "half"]])
+            // Wed 23.12. counts 1, Thu 24.12. (half company day) counts 0.5 although the request has no half-day flag.
+            try await createAbsence(app, context, absenceBody("2026-12-23", "2026-12-24"))
+            let week = try await weekDays(app, context, "2026-W52")
+            XCTAssertEqual(week.summary["vacationDays"] as? Double, 1.5)
+            let stats = try object(await timeRequest(app, context, .GET, "time/statistics?from=2026-12-21&to=2026-12-27&granularity=week"))
+            let buckets = try XCTUnwrap(stats["buckets"] as? [[String: Any]])
+            let bucket = try XCTUnwrap(buckets.first)
+            XCTAssertEqual((bucket["absences"] as? [String: Any])?["vacation"] as? Double, 1.5)
+            XCTAssertEqual(bucket["absenceDays"] as? Double, 1.5)
+        }
+    }
+
     func testCompanyDaysInCalendarFeed() async throws {
         try await withApp { app, auth in
             let (context, _) = try await registered(auth, db: app.db)

@@ -79,6 +79,19 @@ final class MinorLegalProfileTests: XCTestCase {
         XCTAssertFalse(results.contains { $0.legalWarnings.contains(.init(.weeklyLimit)) })
     }
 
+    /// F10 characterization (decision pending, ADR-0028): ADR-0028 values "five school days with eight hours each" of a block week,
+    /// but the engine credits every school day of the Monday-Sunday week. With six school days the credit exceeds the 40 hours
+    /// of the statute. Which days stay uncredited (the first five, workdays first, ...) is not decided; this test only pins the
+    /// current behaviour so that the change becomes visible once the rule is decided.
+    func testBlockSchoolWeekWithSixSchoolDaysCharacterization() throws {
+        let days = ["2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16", "2026-10-17"]
+        let preferences = Dictionary(uniqueKeysWithValues: days.map { ($0, DayPreferences(schoolLessonCount: 5)) })
+        let snapshot = TimeEvaluationSnapshot(models: [try model()],
+            segments: days.map { segment($0, "08:00", "12:00", kind: .school) }, preferences: preferences)
+        let results = try days.map { try snapshot.evaluate(date($0), now: instant("2026-10-20", "12:00")) }
+        XCTAssertEqual(results.reduce(0) { $0 + $1.creditSeconds }, 172_800, "current behaviour: 6 x 8 h = 48 h (statute: at most 40 h)")
+    }
+
     func testOnlyOneFullSchoolDayPerOrdinaryWeek() throws {
         let first = "2026-10-12", second = "2026-10-13"
         let preferences = [first: DayPreferences(schoolLessonCount: 6), second: DayPreferences(schoolLessonCount: 6)]

@@ -576,6 +576,21 @@ extension AuthTests {
         }
     }
 
+    /// F06: g1b can be run again after a partial failure (one table already has the column).
+    func testG1bMigrationIsResumable() async throws {
+        try await gWithApp { app, _ in
+            // Complete state: nothing to do, must not fail.
+            try await AddGroupLinkTokens().prepare(on: app.db)
+            // Partial state (MariaDB only: SQLite cannot drop columns on every build): only the second table got its column.
+            guard ProcessInfo.processInfo.environment["G1_ON_MARIADB"] == "1" else { return }
+            try await app.db.schema("group_polls").deleteField("link_token").update()
+            try await AddGroupLinkTokens().prepare(on: app.db)
+            let polls = await columnExists(app.db, table: "group_polls", column: "link_token")
+            let orders = await columnExists(app.db, table: "group_orders", column: "link_token")
+            XCTAssertTrue(polls); XCTAssertTrue(orders)
+        }
+    }
+
     // MARK: Rate limits
 
     func testG1RateLimits() async throws {
@@ -606,6 +621,29 @@ extension AuthTests {
             try await RateLimitEvent.query(on: app.db).delete()
             for _ in 0..<GroupRateLimit.ipRead { try await RateLimitEvent(key: "grp-ip:unknown", occurredAt: Date().addingTimeInterval(-GroupRateLimit.window - 5)).create(on: app.db) }
             try await gPublic(app, .GET, poll.token)
+        }
+    }
+
+    /// F05: a business failure rolls the write transaction back; its counters must still count against the client.
+    func testG1FailedWritesStillCountAgainstTheRateLimits() async throws {
+        try await gWithApp { app, auth in
+            let (owner, _) = try await registered(auth, db: app.db)
+            let poll = try await gTextPoll(app, owner, mode: "multi")
+            let good = [["optionId": poll.options[0], "answer": "yes"]]
+            let bad = [["optionId": UUID().uuidString, "answer": "yes"]]
+            func count(_ key: String) async throws -> Int { try await RateLimitEvent.query(on: app.db).filter(\.$key == key).count() }
+            let first = try await app.testable().sendRequest(.POST, "/api/v1/public/groups/" + poll.token + "/votes",
+                headers: ["Content-Type": "application/json"], body: ByteBuffer(data: JSONSerialization.data(withJSONObject: ["name": "Anna", "answers": bad])))
+            XCTAssertEqual(try errorCode(first), "answers_invalid")
+            try await eq(try await GroupPollVoteRecord.query(on: app.db).count(), 0)
+            try await eq(try await count("grp-ip:unknown"), 1)
+            try await eq(try await count("grp-write-ip:unknown"), 1)
+            try await eq(try await count("grp-write-tok:" + poll.id.uppercased()), 1)
+            // Failing writes alone exhaust the per-client write limit; the next (valid) vote is rejected.
+            for _ in 1..<GroupRateLimit.ipWrite {
+                try await gPublic(app, .POST, poll.token, "/votes", ["name": "Anna", "answers": bad], secret: nil, first.status)
+            }
+            try await gPublic(app, .POST, poll.token, "/votes", ["name": "Bob", "answers": good], secret: nil, .tooManyRequests)
         }
     }
 

@@ -37,6 +37,12 @@ struct TimeWeekDayDTO: Encodable, Sendable {
     /// `full` behaves like a public holiday (`mark` holiday on workdays); `half` keeps `mark` work with a halved `targetSeconds`.
     var companyDayTreatment: CompanyDayTreatment?
     var provisional: Bool; var isToday: Bool; var isFuture: Bool
+    /// Vacation consumed on this date in days (same rule as `VacationEngine.count`): a half-day request or a half company day
+    /// (ADR-0029) counts 0.5, any other vacation day 1, every other day 0.
+    var vacationDays: Double {
+        guard mark == "vacation" else { return 0 }
+        return absences.contains { $0.kind == .vacation && $0.halfDay } || companyDayTreatment == .half ? 0.5 : 1
+    }
     func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(date, forKey: .date); try c.encode(weekday, forKey: .weekday); try c.encode(mark, forKey: .mark)
@@ -204,9 +210,7 @@ struct TimeWeekService: Sendable {
         let worked = days.filter { $0.workSeconds > 0 }
         let longest = worked.max { $0.workSeconds == $1.workSeconds ? $0.date > $1.date : $0.workSeconds < $1.workSeconds }
         let hasPlan = days.contains { $0.plannedSeconds != nil }
-        let vacation = days.filter { $0.mark == "vacation" }.reduce(0.0) { total, day in
-            total + (day.absences.contains { $0.kind == .vacation && $0.halfDay } ? 0.5 : 1)
-        }
+        let vacation = days.reduce(0.0) { $0 + $1.vacationDays }
         return .init(targetSeconds: days.reduce(0) { $0 + $1.targetSeconds },
                      targetToDateSeconds: days.filter { !$0.isFuture && !$0.isToday }.reduce(0) { $0 + $1.targetSeconds },
                      workSeconds: days.reduce(0) { $0 + $1.workSeconds }, creditSeconds: days.reduce(0) { $0 + $1.creditSeconds },

@@ -240,6 +240,21 @@ extension AuthTests {
         }
     }
 
+    func testCalendarFeedHidesDayMarksWithPlanningOff() async throws {
+        try await withApp { app, auth in
+            let (context, _) = try await registered(auth, db: app.db)
+            try await timeRequest(app, context, .POST, "work-models", modelBody("2026-01-01"), status: .created)
+            let day = berlinToday(offset: 4)
+            try await timeRequest(app, context, .PUT, "time/days/" + day.description, ["mark": "sick"])
+            let feed = try await createFeed(app, context, include: ["absences", "tracked"])
+            let on = try await fetchFeed(app, feed.token).body.string
+            XCTAssertTrue(on.contains("UID:daymark-\(day)-"), on)
+            try await setModules(app, context, ["planning": false])
+            let off = try await fetchFeed(app, feed.token).body.string
+            XCTAssertFalse(off.contains("UID:daymark-"), off)
+        }
+    }
+
     // MARK: HTTP behaviour
 
     func testCalendarFeedCachingHeadersAndConditionalGet() async throws {
