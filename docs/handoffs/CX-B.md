@@ -1,6 +1,6 @@
 # Handoff CX-B (Codex-Befunde F05-F11, 02.11.2026)
 
-Code-Commit `9fcc8de` (Paket-ID `CX-B`), Befundstatus: `docs/reviews/2026-11-01-codex-review-gpt-6.1-sol.md`, Abschnitt „Umsetzung CX-B“.
+Code-Commit `52cd8e9` (Paket-ID `CX-B`), Befundstatus: `docs/reviews/2026-11-01-codex-review-gpt-6.1-sol.md`, Abschnitt „Umsetzung CX-B“.
 
 ## Geändert
 
