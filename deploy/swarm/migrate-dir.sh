@@ -13,8 +13,11 @@ Aufruf: migrate-dir.sh --old-stack DATEI --old-env DATEI [--new-stack DATEI] [--
   --old-env DATEI    bisherige .env
   --new-stack DATEI  neue Stack-Datei (Standard: stack.yaml neben dem Skript)
   --full-diff        zusätzlich das vollständige diff -u ausgeben
-Ausgabe: lokale Umgebungsvariablen und Secrets der alten Datei, die die neue nicht kennt (Overlay-Kandidaten),
+Ausgabe: lokale Umgebungsvariablen und Secrets der alten Datei, die die neue nicht kennt (Sonderfälle für override.yaml),
 Pflichtvariablen der neuen Datei, die in der alten .env fehlen, und .env-Variablen, die die neue Datei nicht liest.
+Zusätzlich ein VORSCHLAG für .env-Zeilen (als .env-Ausschnitt): feste Werte aus der alten Stack-Datei, die die neue Datei
+über eine Variable gleichen Namens steuert. Werte von Passwörtern, Schlüsseln und Tokens werden nie ausgegeben (die liegen
+als Docker-Secrets und werden mit create-secrets.sh angelegt).
 Exit 0 = nichts Auffälliges, Exit 1 = Unterschiede oder fehlende Pflichtvariablen (zur Prüfung, kein Fehler im Betrieb).
 USAGE
 }
@@ -56,8 +59,8 @@ section "Umgebungsvariablen nur in der ALTEN Stack-Datei (lokale Ergänzungen)"
 only_old="$(comm -23 <(env_keys "$OLD_STACK") <(env_keys "$NEW_STACK"))"
 list_or_none "$only_old"
 if [ -n "$only_old" ]; then
-  echo "  Hinweis: Optionale Blöcke (SMTP, OIDC, APNs) stehen in der neuen Datei auskommentiert; ist ein Eintrag dort"
-  echo "  vorgesehen, reicht es, den Block im Klon zu aktivieren ODER ein Overlay zu verwenden (override.example.yaml)."
+  echo "  Hinweis: SMTP, OIDC, APNs und alle anderen Funktionen der neuen Datei werden über die .env gesteuert (siehe den"
+  echo "  .env-Vorschlag weiter unten). Nur Einträge, für die es dort keine Variable gibt, brauchen eine override.yaml."
   PROBLEMS=1
 fi
 
@@ -67,7 +70,32 @@ list_or_none "$(comm -13 <(env_keys "$OLD_STACK") <(env_keys "$NEW_STACK"))"
 section "Secrets nur in der ALTEN Stack-Datei"
 only_old_s="$(comm -23 <(secret_names "$OLD_STACK") <(secret_names "$NEW_STACK"))"
 list_or_none "$only_old_s"
-[ -z "$only_old_s" ] || { echo "  Hinweis: ein Overlay muss das Secret in services.backend.secrets und im Top-Level secrets (external: true) nennen."; PROBLEMS=1; }
+[ -z "$only_old_s" ] || { echo "  Hinweis: Secrets für SMTP, OIDC und APNs kennt die neue Datei bereits (tt_smtp_password, tt_oidc_client_secret, tt_apns_private_key);"; echo "  andere Namen brauchen eine override.yaml oder die SECRET_*_NAME-Variablen der .env.example."; PROBLEMS=1; }
+
+# --- .env proposal -------------------------------------------------------------------------------------------------------
+# Literal `KEY: value` lines of the old stack file (not ${...}, not *_FILE paths) whose KEY is a variable of the new stack.
+is_secret_key() { case "$1" in *PASSWORD*|*SECRET*|*PRIVATE_KEY*|*TOKEN*) return 0 ;; *) return 1 ;; esac; }
+propose_env() {
+  local key raw val newvars oldvars
+  newvars="$(var_refs "$NEW_STACK")"; oldvars="$(env_vars "$OLD_ENV")"
+  while IFS= read -r line; do
+    key="${line%%$'\t'*}"; raw="${line#*$'\t'}"
+    case "$key" in *_FILE) continue ;; esac
+    printf '%s\n' "$newvars" | grep -qx "$key" || continue
+    printf '%s\n' "$oldvars" | grep -qx "$key" && continue
+    case "$raw" in *'${'*) continue ;; esac
+    if is_secret_key "$key"; then printf '# %s=<geheim: als Docker-Secret mit create-secrets.sh anlegen, nicht in die .env>\n' "$key"; continue; fi
+    val="$(printf '%s' "$raw" | sed -e 's/[[:space:]]\{1,\}#.*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/")"
+    [ -n "$val" ] || continue
+    case "$val" in *[[:space:]]*|*[\;\&\|\<\>\(\)\$\`]*) printf '%s="%s"\n' "$key" "$val" ;; *) printf '%s=%s\n' "$key" "$val" ;; esac
+  done < <(grep -v '^[[:space:]]*#' "$OLD_STACK" | sed -n 's/^[[:space:]]\{1,\}\([A-Z][A-Z0-9_]*\):[[:space:]]\{1,\}\(.*[^[:space:]].*\)$/\1\t\2/p')
+}
+
+section ".env-Vorschlag (Zeilen, die in der alten .env fehlen; ohne Geheimnisse, bitte prüfen und selbst übernehmen)"
+proposal="$(propose_env | sort -u)"
+if [ -n "$proposal" ]; then printf '%s\n' "$proposal" | sed 's/^/  /'; else echo "  (keine zusätzlichen Zeilen nötig)"; fi
+echo "  Feature-Schalter (SMTP_ENABLED, OIDC_ENABLED, APNS_ENABLED, WEB_PUSH_ENABLED, APPLE_APP_IDS_ENABLED) sind optional:"
+echo "  leer = automatisch (an, sobald die Pflichtwerte gesetzt sind)."
 
 section "Pflichtvariablen der neuen Stack-Datei, die in der alten .env fehlen"
 missing="$(comm -23 <(REQUIRED=1 var_refs "$NEW_STACK") <(env_vars "$OLD_ENV"))"

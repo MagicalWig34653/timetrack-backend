@@ -8,7 +8,7 @@
 # Language: code and comments are English, all output for the operator is German.
 set -Eeuo pipefail
 
-SCRIPT_VERSION="2.1.0"
+SCRIPT_VERSION="2.2.0"
 SCRIPT_PATH="${BASH_SOURCE[0]}"
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 
@@ -388,7 +388,7 @@ restore_migrate_service() {
   # shellcheck disable=SC1090
   ( set +u; set -a; . "$ENV_FILE"; set +a; export TIMETRACK_IMAGE="$run_image" BACKEND_REPLICAS="$replicas"
     dkl stack deploy --with-registry-auth --resolve-image never -c "$STACK_FILE" ${STACK_C_ARGS[@]+"${STACK_C_ARGS[@]}"} "$STACK" ) \
-    || die "docker stack deploy ist fehlgeschlagen (Ausgabe siehe oben). Häufige Ursachen: fehlende Variablen in der .env, fehlende Secrets, Zeitüberschreitung."
+    || die "docker stack deploy ist fehlgeschlagen (Ausgabe siehe oben). Häufige Ursachen: fehlende Pflichtvariablen in der .env, fehlende Secrets (alle sechs müssen existieren, fehlende optionale legt create-secrets.sh --add-only als Platzhalter an), Zeitüberschreitung."
   while [ "$tries" -lt 20 ]; do
     if service_exists "$MIGRATE_SERVICE"; then good "Dienst ${MIGRATE_SERVICE} wiederhergestellt."; return 0; fi
     tries=$((tries + 1)); sleep 2
