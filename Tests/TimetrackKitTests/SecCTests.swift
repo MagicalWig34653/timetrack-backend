@@ -15,7 +15,7 @@ extension AuthTests {
         let defaults = try object(await api(app, admin, .GET, "admin/storage"))
         try await eq(defaults["quotaBytes"] as? Int, 200 * 1024 * 1024); try await eq(defaults["quotaFiles"] as? Int, 500)
         try await api(app, admin, .PUT, "admin/storage", ["rules": [rule(nil, "db")], "quotaFiles": -1], .badRequest)
-        let saved = try object(await api(app, admin, .PUT, "admin/storage", ["rules": [rule(nil, "db")], "quotaFiles": 2, "quotaBytes": 1000]))
+        let saved = try object(await api(app, admin, .PUT, "admin/storage", ["rules": [rule(nil, "db")], "quotaFiles": 2, "quotaBytes": 1000000]))
         try await eq(saved["quotaFiles"] as? Int, 2)
 
         // File count: the third file is refused with a German message; other accounts are not affected.
@@ -30,8 +30,8 @@ extension AuthTests {
         _ = try await app.testable().sendRequest(.DELETE, "/api/v1/files/" + (try fileID(first)), headers: headers(member))
         try await fileUpload(app, member, "c.txt", Self.txt)
 
-        // Byte quota: 1000 bytes cannot hold a 300-byte PDF plus two text files.
-        try await api(app, admin, .PUT, "admin/storage", ["rules": [rule(nil, "db")], "quotaFiles": 0, "quotaBytes": 400])
+        // Byte quota: 320 bytes cannot hold the 309-byte PDF next to the 28-byte text file.
+        try await api(app, admin, .PUT, "admin/storage", ["rules": [rule(nil, "db")], "quotaFiles": 0, "quotaBytes": 320])
         try await fileUpload(app, admin, "x.pdf", Self.pdf, .payloadTooLarge)
         // 0 disables the limits.
         try await api(app, admin, .PUT, "admin/storage", ["rules": [rule(nil, "db")], "quotaFiles": 0, "quotaBytes": 0])
