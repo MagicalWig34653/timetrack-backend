@@ -28,7 +28,7 @@ Keine ausnutzbare Lücke mit hohem Schweregrad gefunden. Kontentrennung (IDOR), 
 - Beschreibung: Die Doku verlangt, das Subnetz des `ingress`-Netzes in `TRUSTED_PROXY_CIDRS` einzutragen. Hinter dem Routing Mesh erscheint jede Verbindung, die den veröffentlichten Port eines Knotens erreicht, mit einer Adresse aus diesem Netz (Quell-Adress-Umsetzung), unabhängig davon, ob sie vom Proxy oder direkt aus dem Internet kommt. Ist der Port nicht per Firewall auf den Proxy beschränkt, wird `X-Forwarded-For` jedes Angreifers akzeptiert. Die Stack-Datei weist nur im Kommentar auf die Firewall hin; `docs/BETRIEB.md` warnt vor „zu weitem Netz“, nennt aber den Routing-Mesh-Fall nicht ausdrücklich als „vertraut das ganze Internet, wenn der Port offen ist“.
 - Szenario: Ein Angreifer sendet Anfragen direkt an die Knoten-Adresse und setzt pro Anfrage einen anderen Wert im Header. Alle IP-basierten Zähler (`AuthRateLimitMiddleware`, Gruppen-Zähler `grp-*`, Auslöse-Links `trigger-miss`, ICS-Zähler, OAuth/OIDC) werden umgangen. Das Handle-Limit (15 je 5 Minuten) bleibt bestehen und begrenzt Rateversuche gegen Konten weiter.
 - Empfehlung: In Doku und `stack.yaml` fett als Pflicht formulieren: Port ausschließlich vom Proxy erreichbar (Knoten-Firewall) oder Proxy-Adresse als `/32` eintragen; Prüfschritt „direkter Aufruf mit gefälschtem Header darf den Zähler nicht zurücksetzen“ ergänzen. Optional Startwarnung, wenn ein CIDR breiter als `/16` ist.
-- Status: offen (Konfiguration und Doku, kein Codefehler).
+- Status: behoben (Paket SEC-B, Commit fcd7d2b; Details `docs/handoffs/SEC-B.md`): Pflichtcharakter von Port-Firewall und `TRUSTED_PROXY_CIDRS` in Stack-Datei, Betrieb, Deployment und Installationsdoku; Prüfschritt mit gefälschtem Header; Startwarnungen für leere Liste bei https-Basisadresse, öffentliche Adressbereiche und sehr weite Netze.
 
 ### SEC-02 Mittel (4.9, `AV:N/AC:H/PR:N/UI:N/C:H/I:L/A:N`): Wiederherstellung und Passkey-Widerruf beenden bestehende Sitzungen, OAuth-Grants und Tokens nicht
 
@@ -58,7 +58,7 @@ Keine ausnutzbare Lücke mit hohem Schweregrad gefunden. Kontentrennung (IDOR), 
 - Ort: `PWAStaticMiddleware.swift:20-52` (nur `nosniff` und Cache-Control), `Configure.swift:70-76` (keine zentrale Header-Middleware), vereinzelt `Referrer-Policy` an Token-Routen (`TriggerLinks.swift:244`, `CalendarFeeds.swift:401`, `Groups/GroupSupport.swift:95-100`). Die PWA-Hülle enthält kein CSP-Meta (`deploy/pwa-static/index.html`).
 - Beschreibung: Die PWA wird ohne `Content-Security-Policy`, `frame-ancestors`/`X-Frame-Options`, `Referrer-Policy` und `Permissions-Policy` ausgeliefert, HSTS wird nur dem Proxy überlassen (`docs/DEPLOYMENT.md:320`). Tatsächliche Ausnutzung wird durch `SameSite=Lax` (Cookies gehen in fremden Frames nicht mit) und Svelte-Escaping abgemildert; bei einer XSS-Lücke in der PWA gäbe es keine zweite Verteidigungslinie. Der Einladungslink `/invite/<token>` und `/g/<token>` (Gruppen: Header gesetzt) tragen das Geheimnis im Pfad; für `/invite/` wird keine `Referrer-Policy: no-referrer` gesendet.
 - Empfehlung: Zentrale Middleware oder Proxy-Vorgabe: CSP (`default-src 'self'`, `frame-ancestors 'none'`, `base-uri 'none'`, `form-action 'self'`), `Referrer-Policy: no-referrer`, `X-Content-Type-Options`, HSTS im Proxy-Beispiel der Doku.
-- Status: offen.
+- Status: behoben (Paket SEC-B, Commit fcd7d2b): zentrale `SecurityHeadersMiddleware` (nosniff, `Referrer-Policy: no-referrer`, `X-Frame-Options`, `Permissions-Policy`, CSP, HSTS über `HSTS_MAX_AGE_SECONDS`), PWA-CSP mit Hashes der Inline-Skripte der ausgelieferten HTML-Dateien; vorhandene Header bleiben unverändert. Im Browser gegen den PWA-Produktionsbuild geprüft (keine Verstöße, Service Worker und Offline-Seite laufen).
 
 ### SEC-06 Niedrig (3.5, `AV:N/AC:L/PR:L/UI:N/C:N/I:N/A:L`): Kein Speicherkontingent je Konto
 
@@ -114,7 +114,7 @@ Keine ausnutzbare Lücke mit hohem Schweregrad gefunden. Kontentrennung (IDOR), 
 - Ort: `deploy/compose/compose.yaml:44-46` (`BIND_ADDR:-0.0.0.0`), `deploy/compose/init-secrets.sh` (`chmod 644`, Verzeichnis 0700).
 - Beschreibung: Das Backend lauscht ohne TLS auf allen Schnittstellen des Hosts, wenn `BIND_ADDR` nicht gesetzt ist; Klartext-HTTP kann direkt erreichbar sein. Secrets sind für den Container-Benutzer lesbar (bewusst, durch Verzeichnisrechte 0700 abgesichert).
 - Empfehlung: Standard `127.0.0.1`; Hinweis, dass bei `0.0.0.0` der Port zu firewallen ist.
-- Status: offen.
+- Status: behoben (Paket SEC-B, Commit fcd7d2b): `BIND_ADDR` hat den Standard `127.0.0.1`, Hinweis zur Firewall bei `0.0.0.0`; Secret-Dateien bleiben bewusst 0644 im 0700-Verzeichnis.
 
 ### SEC-14 Info: Lieferkette und Pipeline
 
