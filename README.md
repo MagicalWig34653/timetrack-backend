@@ -5,4 +5,5 @@ Er wird automatisch aus `main` erzeugt (`scripts/sync-deploy-branch.sh`); Änder
 
 - Anleitung: `docs/DEPLOYMENT.md`, Updates: `docs/UPDATE.md`
 - Secrets: `deploy/swarm/create-secrets.sh` (bei bestehendem Stack `--add-only`)
-- Update: `deploy/swarm/update.sh`
+- Update: `deploy/swarm/update.sh` (`--status`, `--rollback`, `--dry-run`); neueste Fassung des Skripts: `deploy/swarm/update.sh --self-update`
+  oder `git pull --ff-only` im Klon dieses Branches

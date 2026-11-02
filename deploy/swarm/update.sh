@@ -1,109 +1,215 @@
 #!/usr/bin/env bash
-# Update a running Swarm stack to the newest published image: find the newest `sha-<commit>` tag on GHCR,
-# write it into .env (TIMETRACK_IMAGE), run the migration job with the new image, then roll the backend.
+# Update a running Swarm stack to the newest published image (or roll it back), and keep this script current.
 #
-# Usage: deploy/swarm/update.sh [options]
-#   --env-file FILE   stack variables (default: ./.env, else the file next to this script)
-#   --tag TAG         use this tag (e.g. sha-6c074f7 or 0.1.0) instead of looking up the newest sha- tag
-#   --stack NAME      stack name (default: timetrack)
-#   --dry-run         only show what would happen (no file change, no docker calls)
-#   --force           also restart the services when the tag did not change
-#   --yes             do not ask for confirmation
-#   --skip-migrate    only update the backend (not recommended)
-#
-# How the newest tag is found: `latest` is pushed together with `sha-<commit>` by the Docker workflow on every
-# main build, so the sha- tag that points to the same digest as `latest` is the newest build. It is found in constant time via
-# the image label org.opencontainers.image.revision (verified against the digest of latest); comparing all tags is only a fallback. Needs curl and docker.
-# Back up the database first (docs/installation/backup.md). See docs/UPDATE.md.
-set -euo pipefail
+# Update flow: find the newest `sha-<commit>` tag on GHCR, write it into .env (TIMETRACK_IMAGE, backup .env.bak), run
+# the migration job with the new image, then roll the backend and check /ready. A missing `<stack>_migrate` service
+# (for example removed by hand) is recreated from the stack file instead of aborting. Every abort is reported loudly
+# (step, line, command, exit code); the script never ends silently. Details: docs/DEPLOYMENT.md, docs/UPDATE.md.
+# Language: code and comments are English, all output for the operator is German.
+set -Eeuo pipefail
+
+SCRIPT_VERSION="2.0.0"
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 
 STACK=timetrack
 ENV_FILE=""
+STACK_FILE=""
 TAG=""
+MODE=update            # update | status | rollback | self-update | version
 DRY=0
 FORCE=0
 YES=0
 MIGRATE=1
+SELF_CHECK="${UPDATE_SELF_CHECK:-1}"
+SCRIPT_URL="${UPDATE_SCRIPT_URL:-}"
+SCRIPT_REF="${UPDATE_SCRIPT_REF:-deploy}"
 # Wall-clock limits (seconds) for the two waiting phases; override through the environment if the node is slow.
 WAIT_SECONDS="${MIGRATE_TIMEOUT:-300}"
 ROLLOUT_SECONDS="${ROLLOUT_TIMEOUT:-600}"
 # Every single docker/curl call is bounded too, so a stuck daemon or registry cannot hang the script silently.
 CALL_TIMEOUT=60
+STACK_DEPLOY_TIMEOUT=180
+
+usage() {
+  cat <<'EOF'
+update.sh: Timetrack-Stack auf Docker Swarm aktualisieren, prüfen, zurücksetzen
+
+Aufruf: update.sh [Modus] [Optionen]
+Modi (Standard: Update auf das neueste Image):
+  --status          Zustand anzeigen (Stand, Dienste, Migrationsjob, /ready); ändert nichts, Exit 1 bei Problemen
+  --rollback        Backend auf das Image aus .env.bak zurücksetzen (das Datenbankschema wird NICHT zurückgesetzt)
+  --self-update     dieses Skript vom deploy-Branch holen (zeigt Unterschiede, fragt nach, sichert update.sh.prev)
+  --version         Skriptversion anzeigen
+Optionen:
+  --env-file FILE   Stack-Variablen (Standard: ./.env, sonst die Datei neben dem Skript)
+  --stack-file FILE Stack-Datei zum Wiederherstellen eines fehlenden Dienstes (Standard: stack.yaml neben dem Skript)
+  --tag TAG         diesen Tag verwenden (z. B. sha-6c074f7 oder 0.1.0) statt des neuesten sha-Tags
+  --stack NAME      Stack-Name (Standard: timetrack)
+  --dry-run         nur anzeigen, was passieren würde (keine Änderung; nur lesende docker-Aufrufe)
+  --force           auch ohne Tag-Wechsel neu starten (idempotent: .env.bak bleibt erhalten)
+  --yes, -y         keine Rückfragen
+  --skip-migrate    nur das Backend aktualisieren (nicht empfohlen)
+  --script-url URL  Quelle für --self-update (Standard: raw-URL des deploy-Branches, aus dem Image-Namen abgeleitet)
+  --script-ref REF  Branch oder Commit-Hash für --self-update (Standard: deploy; ein Commit-Hash pinnt den Stand)
+  --no-self-check   beim Start nicht prüfen, ob es ein neueres update.sh gibt
+Umgebung: MIGRATE_TIMEOUT, ROLLOUT_TIMEOUT (Sekunden), UPDATE_BACKUP_CMD (Befehl, der vor der Migration läuft;
+  Fehlschlag bricht das Update ab), UPDATE_SCRIPT_URL, UPDATE_SCRIPT_REF, UPDATE_SELF_CHECK=0, NO_COLOR.
+EOF
+}
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --env-file) ENV_FILE="${2:?missing value for --env-file}"; shift 2 ;;
-    --tag) TAG="${2:?missing value for --tag}"; shift 2 ;;
-    --stack) STACK="${2:?missing value for --stack}"; shift 2 ;;
+    --env-file) ENV_FILE="${2:?Wert für --env-file fehlt}"; shift 2 ;;
+    --stack-file) STACK_FILE="${2:?Wert für --stack-file fehlt}"; shift 2 ;;
+    --tag) TAG="${2:?Wert für --tag fehlt}"; shift 2 ;;
+    --stack) STACK="${2:?Wert für --stack fehlt}"; shift 2 ;;
+    --script-url) SCRIPT_URL="${2:?Wert für --script-url fehlt}"; shift 2 ;;
+    --script-ref) SCRIPT_REF="${2:?Wert für --script-ref fehlt}"; shift 2 ;;
+    --status) MODE=status; shift ;;
+    --rollback) MODE=rollback; shift ;;
+    --self-update) MODE=self-update; shift ;;
+    --version) MODE=version; shift ;;
     --dry-run) DRY=1; shift ;;
     --force) FORCE=1; shift ;;
     --yes|-y) YES=1; shift ;;
     --skip-migrate) MIGRATE=0; shift ;;
-    -h|--help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    *) echo "unknown option: $1 (see --help)" >&2; exit 64 ;;
+    --no-self-check) SELF_CHECK=0; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unbekannte Option: $1 (siehe --help)" >&2; exit 64 ;;
   esac
 done
+[[ "$STACK" =~ ^[a-z][a-z0-9_-]*$ ]] || { echo "Ungültiger Stack-Name: $STACK" >&2; exit 64; }
+if [ "$MODE" = version ]; then echo "update.sh Version ${SCRIPT_VERSION}"; exit 0; fi
 
+# ---- output ----------------------------------------------------------------------------------------------------------
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then C_RED=$'\033[31m'; C_YEL=$'\033[33m'; C_GRN=$'\033[32m'; C_OFF=$'\033[0m'
+else C_RED=""; C_YEL=""; C_GRN=""; C_OFF=""; fi
 START_TIME=$(date +%s)
 elapsed() { local t=$(( $(date +%s) - START_TIME )); printf '%02d:%02d' $((t / 60)) $((t % 60)); }
 say() { printf '[%s] %s\n' "$(elapsed)" "$*"; }
-STEP=0; STEPS=6
-step() { STEP=$((STEP + 1)); printf '\n[%s] == Step %d/%d: %s\n' "$(elapsed)" "$STEP" "$STEPS" "$*"; }
-die() { echo "[$(elapsed)] error: $*" >&2; [ "$PHASE" = start ] || hints; exit 1; }
-need() { command -v "$1" >/dev/null 2>&1 || die "$1 is required"; }
-need curl
-[ "$DRY" = 1 ] || need docker
+good() { printf '[%s] %s%s%s\n' "$(elapsed)" "$C_GRN" "$*" "$C_OFF"; }
+warn() { printf '[%s] %sWarnung: %s%s\n' "$(elapsed)" "$C_YEL" "$*" "$C_OFF" >&2; }
+STEP=0; STEPS=6; STEP_NAME="Start"
+step() { STEP=$((STEP + 1)); STEP_NAME="$*"; printf '\n[%s] == Schritt %d/%d: %s\n' "$(elapsed)" "$STEP" "$STEPS" "$*"; }
 
-# Bounded wrappers. `timeout` (coreutils) exists on Linux Swarm managers; without it the calls run unbounded as before.
-if command -v timeout >/dev/null 2>&1; then
-  dk() { timeout "$CALL_TIMEOUT" docker "$@"; }
-else
-  dk() { docker "$@"; }
-fi
-# --max-time keeps a stalled registry or proxy from blocking forever (the total wait is also bounded by the phase limits).
-curlb() { curl --connect-timeout 10 --max-time 30 "$@"; }
-
-# Shown when the script stops early or fails: what is running, how to look closer, how to go back.
-PHASE="start"
+# ---- error handling: never end silently --------------------------------------------------------------------------------
+PHASE="start"            # coarse phase for the hints
+REPORTED=0               # 1 once an error message was printed
+ERR_RC=0; ERR_LINE=0; ERR_CMD=""
+HISTORY=0                # 1 once a real run started (then the outcome is appended to the history file)
+LOCK_DIR=""
 OLD_IMAGE_FOR_HINT=""
+NEW_IMAGE=""; CURRENT_IMAGE=""
+trap 'ERR_RC=$?; ERR_LINE=$LINENO; ERR_CMD=$BASH_COMMAND' ERR
+
 hints() {
   [ "$DRY" = 0 ] || return 0
   {
     echo "---- Hinweise (Phase: ${PHASE}) ----"
-    echo "Der Befehl bricht nur dieses Skript ab; Swarm führt Migration bzw. Rolling Update weiter aus."
-    echo "Status ansehen:  docker service ps ${STACK}_migrate --no-trunc"
-    echo "                 docker service ps ${STACK}_backend --no-trunc"
-    echo "                 docker service inspect ${STACK}_backend --format '{{json .UpdateStatus}}'"
-    echo "Logs:            docker service logs --tail 100 ${STACK}_migrate"
-    echo "                 docker service logs --tail 100 ${STACK}_backend"
-    echo "Zurück zum alten Stand (Backend): docker service rollback ${STACK}_backend"
+    echo "Das Skript ist beendet; Swarm führt eine begonnene Migration bzw. ein Rolling Update trotzdem weiter."
+    echo "Zustand ansehen:  $0 --status${ENV_FILE:+ --env-file ${ENV_FILE}}"
+    echo "                  docker service ps ${STACK}_migrate --no-trunc"
+    echo "                  docker service ps ${STACK}_backend --no-trunc"
+    echo "Logs:             docker service logs --tail 100 ${STACK}_migrate"
+    echo "                  docker service logs --tail 100 ${STACK}_backend"
+    echo "Zurück (Backend): $0 --rollback${ENV_FILE:+ --env-file ${ENV_FILE}}   oder   docker service rollback ${STACK}_backend"
     [ -z "$OLD_IMAGE_FOR_HINT" ] || echo "Alter Stand in der .env: ${OLD_IMAGE_FOR_HINT} (Sicherung: ${ENV_FILE:-.env}.bak)"
   } >&2
 }
-on_interrupt() { echo >&2; echo "[$(elapsed)] Abbruch durch Benutzer." >&2; hints; exit 130; }
-trap on_interrupt INT TERM
+die() {
+  REPORTED=1
+  printf '[%s] %sFehler: %s%s\n' "$(elapsed)" "$C_RED" "$1" "$C_OFF" >&2
+  [ "$PHASE" = start ] || hints
+  exit "${2:-1}"
+}
+record_history() {
+  [ "$HISTORY" = 1 ] && [ -n "$ENV_FILE" ] || return 0
+  printf '%s %s mode=%s stack=%s rc=%s from=%s to=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "$MODE" "$STACK" "$2" "${OLD_IMAGE_FOR_HINT:--}" "${NEW_IMAGE:--}" \
+    >> "$(dirname "$ENV_FILE")/update-history.log" 2>/dev/null || true
+}
+on_exit() {
+  local rc=$?
+  trap - EXIT ERR INT TERM
+  [ -z "$LOCK_DIR" ] || rm -rf "$LOCK_DIR"
+  if [ "$rc" -ne 0 ] && [ "$REPORTED" = 0 ]; then
+    {
+      printf '[%s] %sFehler: Das Skript wurde unerwartet beendet (Exit-Code %s).%s\n' "$(elapsed)" "$C_RED" "$rc" "$C_OFF"
+      echo "  Letzter Schritt: ${STEP}/${STEPS} ${STEP_NAME} (Phase: ${PHASE})"
+      [ "$ERR_LINE" = 0 ] || echo "  Fehlgeschlagener Befehl: ${ERR_CMD} (Zeile ${ERR_LINE}, Exit-Code ${ERR_RC})"
+    } >&2
+    [ "$PHASE" = start ] || hints
+  fi
+  if [ "$rc" -eq 0 ]; then record_history ok "$rc"; else record_history failed "$rc"; fi
+}
+on_signal() { REPORTED=1; echo >&2; echo "[$(elapsed)] Abbruch durch Benutzer/Signal ($1)." >&2; [ "$PHASE" = start ] || hints; exit "$2"; }
+trap on_exit EXIT
+trap 'on_signal INT 130' INT
+trap 'on_signal TERM 143' TERM
 
+need() { command -v "$1" >/dev/null 2>&1 || die "$1 wird benötigt, ist aber nicht installiert."; }
+need curl
+# docker is optional only for the read-only parts that can run without it (self-update, dry-run of an update).
+if [ "$MODE" != self-update ] && ! { [ "$MODE" = update ] && [ "$DRY" = 1 ]; }; then need docker; fi
+
+# Bounded wrappers. `timeout` (coreutils) exists on Linux Swarm managers; without it the calls run unbounded.
+if command -v timeout >/dev/null 2>&1; then
+  dk() { timeout "$CALL_TIMEOUT" docker "$@"; }
+  dkl() { timeout "$STACK_DEPLOY_TIMEOUT" docker "$@"; }
+else
+  dk() { docker "$@"; }
+  dkl() { docker "$@"; }
+fi
+curlb() { curl --connect-timeout 10 --max-time 30 "$@"; }
+
+# ---- env file and image names ------------------------------------------------------------------------------------------
 if [ -z "$ENV_FILE" ]; then
   if [ -f ./.env ]; then ENV_FILE=./.env
-  elif [ -f "$(dirname "$0")/.env" ]; then ENV_FILE="$(dirname "$0")/.env"
-  else die "no .env found; pass --env-file"; fi
+  elif [ -f "$SCRIPT_DIR/.env" ]; then ENV_FILE="$SCRIPT_DIR/.env"
+  else die "Keine .env gefunden (weder ./.env noch neben dem Skript). Mit --env-file angeben."; fi
 fi
-[ -f "$ENV_FILE" ] || die "env file not found: $ENV_FILE"
+[ -f "$ENV_FILE" ] || die "Env-Datei nicht gefunden: $ENV_FILE"
+env_get() { sed -n "s/^$2=//p" "$1" | tail -n 1 | tr -d "\"'" || true; }
+if [ -z "$STACK_FILE" ]; then
+  if [ -f "$SCRIPT_DIR/stack.yaml" ]; then STACK_FILE="$SCRIPT_DIR/stack.yaml"; elif [ -f ./stack.yaml ]; then STACK_FILE=./stack.yaml; fi
+fi
 
-CURRENT_IMAGE="$(sed -n 's/^TIMETRACK_IMAGE=//p' "$ENV_FILE" | tail -n 1 | tr -d "\"'")"
-[ -n "$CURRENT_IMAGE" ] || die "TIMETRACK_IMAGE is not set in $ENV_FILE"
+CURRENT_IMAGE="$(env_get "$ENV_FILE" TIMETRACK_IMAGE)"
+[ -n "$CURRENT_IMAGE" ] || die "TIMETRACK_IMAGE ist in $ENV_FILE nicht gesetzt."
 case "$CURRENT_IMAGE" in
   ghcr.io/*) ;;
-  *) [ -n "$TAG" ] || die "automatic lookup only supports ghcr.io images; pass --tag" ;;
+  *) [ -n "$TAG" ] || [ "$MODE" != update ] || die "Die automatische Suche unterstützt nur ghcr.io-Images; mit --tag angeben." ;;
 esac
 # ghcr.io/owner/name:tag -> repository "owner/name", image base "ghcr.io/owner/name"
 IMAGE_BASE="${CURRENT_IMAGE%:*}"
-case "$IMAGE_BASE" in */*) ;; *) die "cannot parse image name: $CURRENT_IMAGE" ;; esac
+case "$IMAGE_BASE" in */*) ;; *) die "Image-Name nicht lesbar: $CURRENT_IMAGE" ;; esac
 REPO="${IMAGE_BASE#*/}"
-CURRENT_TAG="${CURRENT_IMAGE##*:}"
+BACKEND="${STACK}_backend"
+MIGRATE_SERVICE="${STACK}_migrate"
+BASE_URL="$(env_get "$ENV_FILE" PUBLIC_BASE_URL)"
 
+# ---- docker helpers ----------------------------------------------------------------------------------------------------
+# 0 = exists, 1 = does not exist; any other docker failure (daemon, timeout, not a manager) is fatal and loud.
+service_exists() {
+  local out
+  if out="$(dk service inspect --format '{{.ID}}' "$1" 2>&1)"; then return 0; fi
+  case "$out" in
+    *"No such service"*|*"no such service"*) return 1 ;;
+    *) die "docker service inspect $1 ist fehlgeschlagen: ${out:-keine Ausgabe (Zeitüberschreitung?)}" ;;
+  esac
+}
+# Prints the value of a Go template for a service; never fails (empty when the service or field is missing).
+svc_field() { dk service inspect --format "$2" "$1" 2>/dev/null | head -n 1 || true; }
+# Task ids of a service, one per line; never fails (a missing service gives an empty list).
+task_ids() { dk service ps "$1" -q --no-trunc 2>/dev/null || true; }
+ensure_manager() {
+  local out
+  out="$(dk info --format '{{.Swarm.LocalNodeState}} {{.Swarm.ControlAvailable}}' 2>&1)" || die "docker info ist fehlgeschlagen: ${out:-keine Ausgabe}. Läuft der Docker-Dienst, und darfst du ihn benutzen?"
+  [ "$out" = "active true" ] || die "Dieser Host ist kein Swarm-Manager (Zustand: ${out}). Das Skript muss auf einem Manager-Knoten laufen."
+}
+
+# ---- registry lookup (newest sha- tag) ---------------------------------------------------------------------------------
 ACCEPT='application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json'
-
 registry_token() {
   curlb -fsS "https://ghcr.io/token?service=ghcr.io&scope=repository:${REPO}:pull" | sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
 }
@@ -112,34 +218,32 @@ digest_of() {
   curlb -fsSI -H "Authorization: Bearer $TOKEN" -H "Accept: $ACCEPT" "https://ghcr.io/v2/${REPO}/manifests/$1" 2>/dev/null \
     | tr -d '\r' | awk 'tolower($1)=="docker-content-digest:" {print $2}'
 }
-
-# Commit the image of a tag was built from (label org.opencontainers.image.revision); empty when it cannot be read.
 # Prints the value of one image label of a tag (empty when missing).
 label_of() {
   local name="$2" index manifest config
   index="$(curlb -fsS -H "Authorization: Bearer $TOKEN" -H "Accept: $ACCEPT" "https://ghcr.io/v2/${REPO}/manifests/$1")" || return 1
   # An index lists platform manifests (plus attestations); a plain manifest has its own config.
-  manifest="$(printf '%s' "$index" | tr -d '\n ' | grep -o '"digest":"sha256:[0-9a-f]*","size":[0-9]*,"platform":{"architecture":"\(amd64\|arm64\)"' | head -1 | grep -o 'sha256:[0-9a-f]*')"
+  manifest="$(printf '%s' "$index" | tr -d '\n ' | grep -o '"digest":"sha256:[0-9a-f]*","size":[0-9]*,"platform":{"architecture":"\(amd64\|arm64\)"' | head -1 | grep -o 'sha256:[0-9a-f]*' || true)"
   if [ -n "$manifest" ]; then
     index="$(curlb -fsS -H "Authorization: Bearer $TOKEN" -H "Accept: $ACCEPT" "https://ghcr.io/v2/${REPO}/manifests/${manifest}")" || return 1
   fi
-  config="$(printf '%s' "$index" | tr -d '\n ' | grep -o '"config":{[^}]*}' | grep -o 'sha256:[0-9a-f]*' | head -1)"
+  config="$(printf '%s' "$index" | tr -d '\n ' | grep -o '"config":{[^}]*}' | grep -o 'sha256:[0-9a-f]*' | head -1 || true)"
   [ -n "$config" ] || return 1
   curlb -fsSL -H "Authorization: Bearer $TOKEN" "https://ghcr.io/v2/${REPO}/blobs/${config}" \
-    | grep -o "\"${name}\":\"[0-9a-f]*\"" | head -1 | sed 's/.*:"\([0-9a-f]*\)"/\1/'
+    | grep -o "\"${name}\":\"[0-9a-f]*\"" | head -1 | sed 's/.*:"\([0-9a-f]*\)"/\1/' || true
 }
 revision_of() { label_of "$1" org.opencontainers.image.revision; }
 
-step "Find the newest image tag"
-if [ -z "$TAG" ]; then
-  say "Registry: ghcr.io, repository ${REPO}"
-  TOKEN="$(registry_token)"; [ -n "$TOKEN" ] || die "could not get a registry token (is the package public?)"
-  say "Registry token received."
-  LATEST_DIGEST="$(digest_of latest)"; [ -n "$LATEST_DIGEST" ] || die "tag 'latest' not found on ghcr.io"
+find_newest_tag() {
+  say "Registry: ghcr.io, Repository ${REPO}"
+  TOKEN="$(registry_token || true)"; [ -n "$TOKEN" ] || die "Kein Registry-Token erhalten (Netzwerk? Ist das Paket öffentlich?)."
+  say "Registry-Token erhalten."
+  LATEST_DIGEST="$(digest_of latest || true)"; [ -n "$LATEST_DIGEST" ] || die "Tag 'latest' auf ghcr.io nicht gefunden."
   say "latest = ${LATEST_DIGEST}"
   # Fast path (constant time): the image carries its commit in the label org.opencontainers.image.revision, so the
   # tag is sha-<first 7 characters>. latest -> index -> first platform manifest -> config blob -> label (4 requests).
   # The result is verified against the digest of latest; if anything is missing the slow scan below runs instead.
+  local REVISION PWA_REVISION candidates candidate TAGS TOTAL n
   REVISION="$(revision_of latest || true)"
   PWA_REVISION="$(label_of latest dev.timetrack.pwa-revision || true)"
   if [ -n "$REVISION" ]; then
@@ -147,74 +251,143 @@ if [ -z "$TAG" ]; then
     candidates="sha-${REVISION:0:7}"
     [ -z "$PWA_REVISION" ] || candidates="sha-${REVISION:0:7}-${PWA_REVISION:0:7} ${candidates}"
     for candidate in $candidates; do
-      if [ "$(digest_of "$candidate")" = "$LATEST_DIGEST" ]; then TAG="$candidate"; say "latest was built from commit ${REVISION:0:7} -> ${candidate} (verified)"; break; fi
+      if [ "$(digest_of "$candidate" || true)" = "$LATEST_DIGEST" ]; then TAG="$candidate"; say "latest stammt aus Commit ${REVISION:0:7} -> ${candidate} (verifiziert)"; break; fi
     done
   fi
   if [ -z "$TAG" ]; then
-    say "Label lookup did not give a verified tag, falling back to comparing all sha- tags (slow with many images) ..."
+    say "Die Label-Suche ergab keinen verifizierten Tag; vergleiche alle sha-Tags (langsam bei vielen Images) ..."
     TAGS="$(curlb -fsS -H "Authorization: Bearer $TOKEN" "https://ghcr.io/v2/${REPO}/tags/list?n=1000" | grep -o '"sha-[0-9a-f-]*"' | tr -d '"' || true)"
-    [ -n "$TAGS" ] || die "no sha- tags found"
+    [ -n "$TAGS" ] || die "Keine sha-Tags gefunden."
     TOTAL="$(printf '%s\n' "$TAGS" | wc -l | tr -d ' ')"
-    say "${TOTAL} sha- tags found, comparing their digests with latest ..."
+    say "${TOTAL} sha-Tags gefunden, vergleiche ihre Digests mit latest ..."
     n=0
     for candidate in $TAGS; do
       n=$((n + 1))
-      if [ "$(digest_of "$candidate")" = "$LATEST_DIGEST" ]; then TAG="$candidate"; say "  [${n}/${TOTAL}] ${candidate}  <- matches latest"; break; fi
-      say "  [${n}/${TOTAL}] ${candidate}  (not latest)"
+      if [ "$(digest_of "$candidate" || true)" = "$LATEST_DIGEST" ]; then TAG="$candidate"; say "  [${n}/${TOTAL}] ${candidate}  <- entspricht latest"; break; fi
+      say "  [${n}/${TOTAL}] ${candidate}  (nicht latest)"
     done
   fi
-  [ -n "$TAG" ] || die "no sha- tag matches latest (${LATEST_DIGEST}); pass --tag explicitly"
-else
-  say "Using the tag from --tag: ${TAG}"
-fi
+  [ -n "$TAG" ] || die "Kein sha-Tag entspricht latest (${LATEST_DIGEST}); mit --tag ausdrücklich angeben."
+}
 
-NEW_IMAGE="${IMAGE_BASE}:${TAG}"
-echo "Stack:     ${STACK}"
-echo "Env file:  ${ENV_FILE}"
-echo "Current:   ${CURRENT_IMAGE}"
-echo "New:       ${NEW_IMAGE}"
+# ---- self update (from the source-free deploy branch) --------------------------------------------------------------------
+sha_of() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'; else shasum -a 256 "$1" | awk '{print $1}'; fi; }
+script_url() {
+  if [ -n "$SCRIPT_URL" ]; then printf '%s' "$SCRIPT_URL"
+  else printf 'https://raw.githubusercontent.com/%s/%s/deploy/swarm/update.sh' "$REPO" "$SCRIPT_REF"; fi
+}
+# Downloads the published script into $1 and checks that it is complete (shebang, syntax, version, end marker).
+# Returns 1 when the download failed, 2 when the file is not a complete update.sh.
+fetch_script() {
+  local dest="$1" max="${2:-30}"
+  curl --connect-timeout 10 --max-time "$max" -fsSL "$(script_url)" -o "$dest" 2>/dev/null || return 1
+  [ "$(head -n 1 "$dest")" = "#!/usr/bin/env bash" ] || return 2
+  grep -q '^SCRIPT_VERSION="' "$dest" || return 2
+  [ "$(tail -n 1 "$dest")" = "# END update.sh" ] || return 2
+  bash -n "$dest" 2>/dev/null || return 2
+}
+remote_version() { sed -n 's/^SCRIPT_VERSION="\(.*\)"/\1/p' "$1" | head -n 1; }
+# Quiet hint at the start of an update: never overwrites anything, never fails the run.
+self_check_hint() {
+  local tmp rc=0
+  tmp="$(mktemp)"
+  fetch_script "$tmp" 5 || rc=$?
+  if [ "$rc" = 0 ] && [ "$(sha_of "$tmp")" != "$(sha_of "$SCRIPT_PATH")" ]; then
+    warn "Auf dem deploy-Branch liegt ein anderes update.sh (Version $(remote_version "$tmp"), hier ${SCRIPT_VERSION}). Mit '$0 --self-update' ansehen und übernehmen."
+  fi
+  rm -f "$tmp"
+}
+do_self_update() {
+  local tmp rc=0 remote_sha local_sha answer
+  say "update.sh Version ${SCRIPT_VERSION}; Quelle: $(script_url)"
+  tmp="$(mktemp)"
+  fetch_script "$tmp" || rc=$?
+  case "$rc" in
+    0) ;;
+    1) rm -f "$tmp"; die "Download fehlgeschlagen (Netzwerk, falsche URL oder Branch/Commit nicht vorhanden): $(script_url)" ;;
+    *) rm -f "$tmp"; die "Die heruntergeladene Datei ist kein vollständiges update.sh (Kopfzeile, Version, Endmarke oder Syntax falsch). Nichts wurde geändert." ;;
+  esac
+  remote_sha="$(sha_of "$tmp")"; local_sha="$(sha_of "$SCRIPT_PATH")"
+  if [ "$remote_sha" = "$local_sha" ]; then good "Bereits aktuell (Version ${SCRIPT_VERSION}, sha256 ${local_sha:0:16})."; rm -f "$tmp"; return 0; fi
+  say "Lokal:   Version ${SCRIPT_VERSION}, sha256 ${local_sha}"
+  say "Neu:     Version $(remote_version "$tmp"), sha256 ${remote_sha}"
+  if command -v diff >/dev/null 2>&1; then
+    say "Unterschiede (höchstens 80 Zeilen):"
+    { diff -u "$SCRIPT_PATH" "$tmp" || true; } | head -n 80
+  fi
+  if [ "$DRY" = 1 ]; then say "Trockenlauf: nichts wurde geändert."; rm -f "$tmp"; return 0; fi
+  if [ "$YES" = 0 ]; then
+    printf 'Dieses Skript durch die neue Version ersetzen? Die alte bleibt als %s.prev erhalten. [j/N] ' "$SCRIPT_PATH"
+    read -r answer || answer=""
+    case "$answer" in y|Y|yes|j|J|ja) ;; *) rm -f "$tmp"; say "Abgebrochen, nichts wurde geändert."; return 0 ;; esac
+  fi
+  cp -p "$SCRIPT_PATH" "${SCRIPT_PATH}.prev"
+  chmod 755 "$tmp"
+  mv "$tmp" "$SCRIPT_PATH"
+  good "update.sh wurde auf Version $(remote_version "$SCRIPT_PATH") aktualisiert (alte Version: ${SCRIPT_PATH}.prev). Bitte das Skript neu starten."
+}
 
-if [ "$NEW_IMAGE" = "$CURRENT_IMAGE" ] && [ "$FORCE" = 0 ]; then
-  echo "Already on the newest tag. Nothing to do (use --force to restart anyway)."
-  exit 0
-fi
-if [ "$DRY" = 1 ]; then
-  echo "Dry run: would set TIMETRACK_IMAGE, run ${STACK}_migrate, then update ${STACK}_backend."
-  exit 0
-fi
-step "Confirm"
-# One run at a time: a second run would start the migration job again while the first one is still waiting.
-LOCK_DIR="${TMPDIR:-/tmp}/timetrack-update-${STACK}.lock"
-if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-  die "another update.sh run for stack ${STACK} seems to be active (lock ${LOCK_DIR}, pid $(cat "$LOCK_DIR/pid" 2>/dev/null || echo '?')). If no run is active, remove the directory and retry."
-fi
-echo "$$" > "$LOCK_DIR/pid"
-trap 'rm -rf "$LOCK_DIR"' EXIT
-if [ "$YES" = 0 ]; then
-  printf 'Database backed up? Continue with the update? [y/N] '
-  read -r answer
-  case "$answer" in y|Y|yes|j|J|ja) ;; *) echo "Aborted."; exit 1 ;; esac
-else
-  say "Confirmation skipped (--yes)."
-fi
+# ---- shared actions ----------------------------------------------------------------------------------------------------
+acquire_lock() {
+  # One run at a time: a second run would start the migration job again while the first one is still waiting.
+  local lock="${TMPDIR:-/tmp}/timetrack-update-${STACK}.lock" other
+  if ! mkdir "$lock" 2>/dev/null; then
+    other="$(cat "$lock/pid" 2>/dev/null || true)"
+    if [ -n "$other" ] && ! kill -0 "$other" 2>/dev/null; then
+      warn "Veraltete Sperre von Prozess ${other} (läuft nicht mehr) wird entfernt."
+      rm -rf "$lock"; mkdir "$lock" || die "Sperre ${lock} konnte nicht angelegt werden."
+    else
+      die "Ein anderer update.sh-Lauf für den Stack ${STACK} scheint aktiv zu sein (Sperre ${lock}, PID ${other:-?}). Läuft keiner, das Verzeichnis löschen und neu starten."
+    fi
+  fi
+  LOCK_DIR="$lock"
+  echo "$$" > "$LOCK_DIR/pid"
+}
+confirm() {
+  local answer
+  if [ "$YES" = 1 ]; then say "Rückfrage übersprungen (--yes)."; return 0; fi
+  printf '%s [j/N] ' "$1"
+  read -r answer || answer=""
+  case "$answer" in y|Y|yes|j|J|ja) ;; *) echo "Abgebrochen."; REPORTED=1; exit 1 ;; esac
+}
+# Writes TIMETRACK_IMAGE into the env file. The backup .env.bak is only (re)written when the image changes (or when
+# there is none yet), so repeating a run with --force never overwrites the saved old state with the new one.
+write_env_image() {
+  local image="$1" tmp
+  if [ "$image" != "$CURRENT_IMAGE" ] || [ ! -f "${ENV_FILE}.bak" ]; then cp -p "$ENV_FILE" "${ENV_FILE}.bak"; fi
+  tmp="$(mktemp "${ENV_FILE}.XXXXXX")"
+  awk -v image="$image" 'BEGIN{done=0} /^TIMETRACK_IMAGE=/ {print "TIMETRACK_IMAGE=" image; done=1; next} {print} END{if(!done) print "TIMETRACK_IMAGE=" image}' "$ENV_FILE" > "$tmp"
+  cat "$tmp" > "$ENV_FILE"; rm -f "$tmp"
+  say "TIMETRACK_IMAGE wurde in ${ENV_FILE} geschrieben (Sicherung: ${ENV_FILE}.bak)."
+}
 
-step "Write the new image into ${ENV_FILE}"
+# Recreates the one-shot migrate service from the stack file without changing the running backend: the stack is
+# deployed with the image and replica count the backend runs with right now. (Other changed .env values would
+# roll the backend too; that is what `docker stack deploy` does for any changed service.)
+restore_migrate_service() {
+  local run_image replicas tries=0
+  [ -n "$STACK_FILE" ] && [ -f "$STACK_FILE" ] || die "Der Dienst ${MIGRATE_SERVICE} fehlt und ${STACK_FILE:-stack.yaml} wurde nicht gefunden. Die stack.yaml neben update.sh legen (Branch deploy) oder --stack-file angeben."
+  run_image="$(svc_field "$BACKEND" '{{.Spec.TaskTemplate.ContainerSpec.Image}}' | sed 's/@sha256:.*//' || true)"
+  replicas="$(svc_field "$BACKEND" '{{.Spec.Mode.Replicated.Replicas}}')"
+  [ -n "$run_image" ] || die "Das aktuelle Image von ${BACKEND} ist nicht lesbar; der fehlende Dienst ${MIGRATE_SERVICE} kann nicht sicher wiederhergestellt werden."
+  [ -n "$replicas" ] || replicas=1
+  say "Der Dienst ${MIGRATE_SERVICE} fehlt. Stelle ihn aus ${STACK_FILE} wieder her (docker stack deploy; Backend bleibt bei ${replicas} Replika(s) mit ${run_image}) ..."
+  # shellcheck disable=SC1090
+  ( set +u; set -a; . "$ENV_FILE"; set +a; export TIMETRACK_IMAGE="$run_image" BACKEND_REPLICAS="$replicas"
+    dkl stack deploy --with-registry-auth --resolve-image never -c "$STACK_FILE" "$STACK" ) \
+    || die "docker stack deploy ist fehlgeschlagen (Ausgabe siehe oben). Häufige Ursachen: fehlende Variablen in der .env, fehlende Secrets, Zeitüberschreitung."
+  while [ "$tries" -lt 20 ]; do
+    if service_exists "$MIGRATE_SERVICE"; then good "Dienst ${MIGRATE_SERVICE} wiederhergestellt."; return 0; fi
+    tries=$((tries + 1)); sleep 2
+  done
+  die "Nach dem Stack-Deploy existiert ${MIGRATE_SERVICE} nach 40 s immer noch nicht. Prüfen: docker stack services ${STACK}"
+}
 
-# Write the new image into the env file (keep a backup copy next to it).
-OLD_IMAGE_FOR_HINT="$CURRENT_IMAGE"; PHASE="env-file"
-cp "$ENV_FILE" "${ENV_FILE}.bak"
-TMP="$(mktemp "${ENV_FILE}.XXXXXX")"
-awk -v image="$NEW_IMAGE" 'BEGIN{done=0} /^TIMETRACK_IMAGE=/ {print "TIMETRACK_IMAGE=" image; done=1; next} {print} END{if(!done) print "TIMETRACK_IMAGE=" image}' "$ENV_FILE" > "$TMP"
-cat "$TMP" > "$ENV_FILE"; rm -f "$TMP"
-echo "Wrote TIMETRACK_IMAGE to ${ENV_FILE} (backup: ${ENV_FILE}.bak)."
-
-if [ "$MIGRATE" = 1 ]; then
-  MIGRATE_SERVICE="${STACK}_migrate"
+run_migration() {
+  local before phase_start last_state running_since stall_reported waited outcome shown reason id node state err word
   # Tasks that exist before the update; everything else is a task of this run (docker service ps is not sorted by age).
-  before=" $(dk service ps "$MIGRATE_SERVICE" -q --no-trunc 2>/dev/null | tr '\n' ' ')"
-  step "Run the database migration (job ${MIGRATE_SERVICE})"
-  PHASE="migration"
-  say "Starting the job with ${NEW_IMAGE} (the image is pulled on the node; this can take a minute) ..."
+  before=" $(task_ids "$MIGRATE_SERVICE" | tr '\n' ' ')"
+  say "Starte den Job mit ${NEW_IMAGE} (das Image wird auf dem Knoten geladen, das kann eine Minute dauern) ..."
   dk service update --detach --force --with-registry-auth --image "$NEW_IMAGE" "$MIGRATE_SERVICE" >/dev/null
   # Wall clock (SECONDS), not a sum of sleeps: slow docker calls count against the limit as well.
   phase_start=$SECONDS; last_state=""; running_since=""; stall_reported=""
@@ -227,86 +400,237 @@ if [ "$MIGRATE" = 1 ]; then
       # strip the changing "... 3 seconds ago" part so only real state changes are printed
       word="${state%% *}"
       case "$word" in
-        Complete) outcome=complete; shown="Complete on ${node}"; break ;;
-        Failed|Rejected|Orphaned) outcome=failed; shown="${state} on ${node}"; reason="$err" ;;
-        *) [ -n "$shown" ] || { shown="${word} on ${node:-<not scheduled yet>}"; reason="$err"; } ;;
+        Complete) outcome=complete; shown="Complete auf ${node}"; break ;;
+        Failed|Rejected|Orphaned) outcome=failed; shown="${state} auf ${node}"; reason="$err" ;;
+        *) [ -n "$shown" ] || { shown="${word} auf ${node:-<noch nicht zugewiesen>}"; reason="$err"; } ;;
       esac
     done <<EOF
 $(dk service ps "$MIGRATE_SERVICE" --no-trunc --format '{{.ID}}|{{.Node}}|{{.CurrentState}}|{{.Error}}' 2>/dev/null || true)
 EOF
-    [ -n "$shown" ] || shown="waiting for the scheduler"
-    if [ "$shown" != "$last_state" ]; then say "migration task: ${shown}${reason:+ (${reason})}"; last_state="$shown"; fi
+    [ -n "$shown" ] || shown="warte auf den Scheduler"
+    if [ "$shown" != "$last_state" ]; then say "Migrations-Task: ${shown}${reason:+ (${reason})}"; last_state="$shown"; fi
     case "$outcome" in
-      complete) say "Migration finished."; break ;;
+      complete) good "Migration abgeschlossen."; break ;;
       failed)
-        echo "Migration did NOT succeed (${shown}). Logs:" >&2
+        echo "Die Migration war NICHT erfolgreich (${shown}). Log:" >&2
         dk service logs --tail 40 "$MIGRATE_SERVICE" >&2 || true
-        die "backend not updated; fix the migration first (docs/UPDATE.md)" ;;
+        die "Das Backend wurde nicht aktualisiert; zuerst die Migration reparieren (docs/UPDATE.md)." ;;
     esac
     # A task that stays "Running" although the migration already reported its end means the process hangs on shutdown.
     case "$shown" in Running*) [ -n "$running_since" ] || running_since=$SECONDS ;; *) running_since="" ;; esac
     if [ -n "$running_since" ] && [ $((SECONDS - running_since)) -ge 60 ] && [ -z "$stall_reported" ]; then
       if dk service logs --tail 20 "$MIGRATE_SERVICE" 2>&1 | grep -qE 'No new migrations|Migration successful|Finished prepare'; then
-        say "WARNING: the migration log already shows its end, but the task has been Running for $((SECONDS - running_since))s: the process seems to hang while shutting down (database pool?). The schema is probably current."
+        warn "Das Migrationslog zeigt schon sein Ende, aber der Task läuft seit $((SECONDS - running_since)) s: Der Prozess hängt offenbar beim Beenden (Datenbank-Pool?). Das Schema ist wahrscheinlich aktuell."
         stall_reported=1
       fi
     fi
     if [ "$waited" -ge "$WAIT_SECONDS" ]; then
-      echo "Migration task list:" >&2
+      echo "Task-Liste der Migration:" >&2
       dk service ps "$MIGRATE_SERVICE" --no-trunc >&2 || true
-      echo "Last log lines:" >&2
+      echo "Letzte Logzeilen:" >&2
       dk service logs --tail 40 "$MIGRATE_SERVICE" >&2 || true
-      die "migration did not finish within ${WAIT_SECONDS}s (state: ${shown}). The backend was NOT touched. If the log shows 'No new migrations' the schema is current and a hanging shutdown is the problem; see docs/DEPLOYMENT.md (Fehlersuche beim Update)."
+      die "Die Migration wurde in ${WAIT_SECONDS} s nicht fertig (Zustand: ${shown}). Das Backend wurde NICHT angefasst. Zeigt das Log 'No new migrations', ist das Schema aktuell und ein hängendes Beenden das Problem; siehe docs/DEPLOYMENT.md (Fehlersuche beim Update)."
     fi
     sleep 2
   done
-  say "Migration log (last lines):"
+  say "Migrationslog (letzte Zeilen):"
   dk service logs --tail 15 "$MIGRATE_SERVICE" 2>&1 | sed 's/^/    /' || true
-else
-  step "Database migration"
-  say "Skipped (--skip-migrate)."
-fi
+}
 
-step "Update the backend (rolling update, one replica after the other)"
-PHASE="rollout"
-BACKEND="${STACK}_backend"
-FORCE_FLAG=""; [ "$FORCE" = 1 ] && FORCE_FLAG="--force"
-# shellcheck disable=SC2086
-dk service update --detach --with-registry-auth --image "$NEW_IMAGE" $FORCE_FLAG "$BACKEND" >/dev/null
-say "Update started; watching the rollout ..."
-phase_start=$SECONDS; last=""
-while :; do
-  waited=$((SECONDS - phase_start))
-  ustate="$(dk service inspect "$BACKEND" --format '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{end}}' 2>/dev/null || true)"
-  replicas="$(dk service ls --filter "name=${BACKEND}" --format '{{.Replicas}}' 2>/dev/null | head -n 1 || true)"
-  running="$(dk service ps "$BACKEND" --filter desired-state=running --format '{{.CurrentState}}' 2>/dev/null | sed 's/ .*//' | sort | uniq -c | awk '{printf "%s %s, ", $1, $2}' | sed 's/, $//' || true)"
-  now="update=${ustate:-none} replicas=${replicas} tasks: ${running}"
-  if [ "$now" != "$last" ]; then say "$now"; last="$now"; fi
-  case "$ustate" in
-    completed) say "Rollout completed."; break ;;
-    paused|rollback_started|rollback_completed|rollback_paused)
-      dk service inspect "$BACKEND" --format '{{.UpdateStatus.Message}}' >&2 || true
-      dk service ps "$BACKEND" --no-trunc --format '{{.Name}} {{.CurrentState}} {{.Error}}' | head -n 6 >&2 || true
-      die "rollout did not succeed (${ustate}); Swarm rolls back automatically, see docs/UPDATE.md" ;;
-  esac
-  if [ "$waited" -ge "$ROLLOUT_SECONDS" ]; then
-    echo "Backend task list:" >&2
-    dk service ps "$BACKEND" --no-trunc >&2 || true
-    echo "Last log lines:" >&2
-    dk service logs --tail 40 "$BACKEND" >&2 || true
-    die "rollout did not finish within ${ROLLOUT_SECONDS}s (update=${ustate:-none}). New tasks stay unhealthy while /ready fails (database unreachable, pool timeouts, schema not current). Swarm keeps updating or rolls back on its own."
+watch_rollout() {
+  local phase_start waited ustate replicas running now last=""
+  phase_start=$SECONDS
+  while :; do
+    waited=$((SECONDS - phase_start))
+    ustate="$(dk service inspect "$BACKEND" --format '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{end}}' 2>/dev/null || true)"
+    replicas="$(dk service ls --filter "name=${BACKEND}" --format '{{.Replicas}}' 2>/dev/null | head -n 1 || true)"
+    running="$(dk service ps "$BACKEND" --filter desired-state=running --format '{{.CurrentState}}' 2>/dev/null | sed 's/ .*//' | sort | uniq -c | awk '{printf "%s %s, ", $1, $2}' | sed 's/, $//' || true)"
+    now="Update=${ustate:-keins} Replikas=${replicas} Tasks: ${running}"
+    if [ "$now" != "$last" ]; then say "$now"; last="$now"; fi
+    case "$ustate" in
+      completed) good "Rollout abgeschlossen."; break ;;
+      paused|rollback_started|rollback_completed|rollback_paused)
+        dk service inspect "$BACKEND" --format '{{.UpdateStatus.Message}}' >&2 || true
+        dk service ps "$BACKEND" --no-trunc --format '{{.Name}} {{.CurrentState}} {{.Error}}' | head -n 6 >&2 || true
+        die "Das Rollout war nicht erfolgreich (${ustate}); Swarm setzt automatisch zurück, siehe docs/UPDATE.md." ;;
+    esac
+    if [ "$waited" -ge "$ROLLOUT_SECONDS" ]; then
+      echo "Task-Liste des Backends:" >&2
+      dk service ps "$BACKEND" --no-trunc >&2 || true
+      echo "Letzte Logzeilen:" >&2
+      dk service logs --tail 40 "$BACKEND" >&2 || true
+      die "Das Rollout wurde in ${ROLLOUT_SECONDS} s nicht fertig (Update=${ustate:-keins}). Neue Tasks bleiben ungesund, solange /ready fehlschlägt (Datenbank nicht erreichbar, Pool-Zeitüberschreitungen, Schema nicht aktuell). Swarm aktualisiert weiter oder setzt selbst zurück."
+    fi
+    sleep 3
+  done
+  dk service ps "$BACKEND" --filter desired-state=running --format 'table {{.Name}}\t{{.Node}}\t{{.Image}}\t{{.CurrentState}}'
+}
+
+check_result() {
+  if [ -n "$BASE_URL" ]; then
+    say "GET ${BASE_URL%/}/ready -> $(curlb -fsS "${BASE_URL%/}/ready" 2>&1 || echo 'noch nicht bereit')"
+    say "GET ${BASE_URL%/}/health -> $(curlb -fsS "${BASE_URL%/}/health" 2>&1 | head -c 300 || echo 'keine Antwort')"
+  else
+    say "PUBLIC_BASE_URL ist in der Env-Datei nicht gesetzt; die Bereitschaftsprüfung entfällt."
   fi
-  sleep 3
-done
-dk service ps "$BACKEND" --filter desired-state=running --format 'table {{.Name}}\t{{.Node}}\t{{.Image}}\t{{.CurrentState}}'
+}
 
-step "Check the result"
-PHASE="check"
-BASE_URL="$(sed -n 's/^PUBLIC_BASE_URL=//p' "$ENV_FILE" | tail -n 1 | tr -d "\"'")"
-if [ -n "$BASE_URL" ]; then
-  say "GET ${BASE_URL%/}/ready -> $(curlb -fsS "${BASE_URL%/}/ready" 2>&1 || echo 'not ready yet')"
-  say "GET ${BASE_URL%/}/health -> $(curlb -fsS "${BASE_URL%/}/health" 2>&1 | head -c 300 || echo 'no answer')"
-else
-  say "PUBLIC_BASE_URL is not set in the env file; skipping the readiness check."
-fi
-say "Done in $(elapsed). If the app shows a white page once, remove the site data of the domain in your browser."
+# Sets BACKEND_OK and MIGRATE_MISSING (read-only docker calls).
+preflight_services() {
+  BACKEND_OK=0; MIGRATE_MISSING=0
+  if service_exists "$BACKEND"; then BACKEND_OK=1; fi
+  if [ "$BACKEND_OK" = 1 ] && [ "$MIGRATE" = 1 ] && ! service_exists "$MIGRATE_SERVICE"; then MIGRATE_MISSING=1; fi
+}
+
+# ---- mode: status ------------------------------------------------------------------------------------------------------
+do_status() {
+  local problems=0 bak_image mig_line mig_state mig_err ustate replicas running_img path
+  say "update.sh Version ${SCRIPT_VERSION}"
+  echo "Stack:            ${STACK}"
+  echo "Env-Datei:        ${ENV_FILE}"
+  echo "Stack-Datei:      ${STACK_FILE:-<nicht gefunden>}"
+  echo "Image in .env:    ${CURRENT_IMAGE}"
+  bak_image="$( [ -f "${ENV_FILE}.bak" ] && env_get "${ENV_FILE}.bak" TIMETRACK_IMAGE || true)"
+  echo "Image in .bak:    ${bak_image:-<keine Sicherung>}"
+  ensure_manager
+  if service_exists "$BACKEND"; then
+    running_img="$(svc_field "$BACKEND" '{{.Spec.TaskTemplate.ContainerSpec.Image}}' | sed 's/@sha256:.*//')"
+    ustate="$(svc_field "$BACKEND" '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{end}}')"
+    replicas="$(dk service ls --filter "name=${BACKEND}" --format '{{.Name}} {{.Replicas}}' 2>/dev/null | awk -v n="$BACKEND" '$1==n {print $2}' | head -n 1 || true)"
+    echo "Backend-Image:    ${running_img:-?}"
+    echo "Backend-Replikas: ${replicas:-?}   Update-Zustand: ${ustate:-keiner}"
+    if [ "$running_img" != "$CURRENT_IMAGE" ]; then echo "PROBLEM: das laufende Backend-Image weicht von der .env ab (Update unvollständig oder nicht per Skript?)"; problems=$((problems + 1)); fi
+    case "$ustate" in ""|completed) ;; *) echo "PROBLEM: Rollout-Zustand '${ustate}'"; problems=$((problems + 1)) ;; esac
+    case "$replicas" in */*) if [ "${replicas%%/*}" != "${replicas##*/}" ]; then echo "PROBLEM: nicht alle Replikas laufen (${replicas})"; problems=$((problems + 1)); fi ;; esac
+  else
+    echo "PROBLEM: der Dienst ${BACKEND} existiert nicht."; problems=$((problems + 1))
+  fi
+  if service_exists "$MIGRATE_SERVICE"; then
+    mig_line="$(dk service ps "$MIGRATE_SERVICE" --no-trunc --format '{{.CurrentState}}|{{.Error}}' 2>/dev/null | head -n 1 || true)"
+    mig_state="${mig_line%%|*}"; mig_err="${mig_line#*|}"
+    echo "Migrationsdienst: vorhanden; letzter Task: ${mig_state:-keiner}${mig_err:+ (${mig_err})}"
+    case "${mig_state%% *}" in Failed|Rejected|Orphaned) echo "PROBLEM: der letzte Migrations-Task ist fehlgeschlagen."; problems=$((problems + 1)) ;; esac
+  else
+    echo "PROBLEM: der Dienst ${MIGRATE_SERVICE} fehlt. Ein normaler Lauf von update.sh stellt ihn aus der Stack-Datei wieder her."; problems=$((problems + 1))
+  fi
+  if [ -n "$BASE_URL" ]; then
+    for path in ready health; do
+      if curlb -fsS -o /dev/null "${BASE_URL%/}/${path}" 2>/dev/null; then echo "GET /${path}: ok"
+      else echo "PROBLEM: GET ${BASE_URL%/}/${path} antwortet nicht mit 2xx."; problems=$((problems + 1)); fi
+    done
+  else
+    echo "PUBLIC_BASE_URL nicht gesetzt: keine Health-Prüfung."
+  fi
+  if [ "$problems" -eq 0 ]; then good "Ergebnis: alles in Ordnung."; else echo "Ergebnis: ${problems} Problem(e) gefunden." >&2; REPORTED=1; return 1; fi
+}
+
+# ---- mode: rollback ----------------------------------------------------------------------------------------------------
+do_rollback() {
+  local prev
+  STEPS=5
+  step "Rollback vorbereiten"
+  if [ -n "$TAG" ]; then prev="${IMAGE_BASE}:${TAG}"
+  else
+    [ -f "${ENV_FILE}.bak" ] || die "Keine Sicherung ${ENV_FILE}.bak gefunden. Mit --tag TAG den Zielstand angeben."
+    prev="$(env_get "${ENV_FILE}.bak" TIMETRACK_IMAGE)"
+    [ -n "$prev" ] || die "In ${ENV_FILE}.bak ist TIMETRACK_IMAGE nicht gesetzt. Mit --tag TAG den Zielstand angeben."
+  fi
+  NEW_IMAGE="$prev"; OLD_IMAGE_FOR_HINT="$CURRENT_IMAGE"
+  echo "Aktuell:   ${CURRENT_IMAGE}"
+  echo "Zurück zu: ${prev}"
+  [ "$prev" != "$CURRENT_IMAGE" ] || die "Das Zielimage entspricht dem aktuellen Stand; nichts zu tun."
+  if [ "$DRY" = 1 ]; then echo "Trockenlauf: würde TIMETRACK_IMAGE zurücksetzen und ${BACKEND} per Rolling Update auf ${prev} stellen (Migrationsdienst und Schema bleiben unberührt)."; return 0; fi
+  ensure_manager
+  service_exists "$BACKEND" || die "Der Dienst ${BACKEND} existiert nicht."
+  step "Bestätigen"
+  acquire_lock
+  warn "Das Datenbankschema wird NICHT zurückgesetzt. Nach einer angewendeten Migration ist der alte Stand nur sicher, wenn die Migration abwärtskompatibel war; im Zweifel das Backup einspielen."
+  confirm "Backend wirklich auf ${prev} zurücksetzen?"
+  HISTORY=1
+  step "Image in ${ENV_FILE} zurücksetzen"; PHASE="env-file"
+  write_env_image "$prev"
+  step "Backend zurücksetzen (Rolling Update)"; PHASE="rollout"
+  dk service update --detach --with-registry-auth --image "$prev" "$BACKEND" >/dev/null
+  say "Update gestartet; beobachte das Rollout ..."
+  watch_rollout
+  step "Ergebnis prüfen"; PHASE="check"
+  check_result
+  good "Rollback fertig nach $(elapsed). Die vorherige .env steht jetzt in ${ENV_FILE}.bak (ein zweiter --rollback geht wieder vor)."
+}
+
+# ---- mode: update ------------------------------------------------------------------------------------------------------
+do_update() {
+  local force_flag=""
+  say "update.sh Version ${SCRIPT_VERSION}"
+  if [ "$SELF_CHECK" != 0 ]; then self_check_hint; fi
+  step "Neuesten Image-Tag suchen und Umgebung prüfen"
+  if [ -z "$TAG" ]; then find_newest_tag; else say "Verwende den Tag aus --tag: ${TAG}"; fi
+  NEW_IMAGE="${IMAGE_BASE}:${TAG}"
+  OLD_IMAGE_FOR_HINT="$CURRENT_IMAGE"
+  echo "Stack:     ${STACK}"
+  echo "Env-Datei: ${ENV_FILE}"
+  echo "Aktuell:   ${CURRENT_IMAGE}"
+  echo "Neu:       ${NEW_IMAGE}"
+  if [ "$NEW_IMAGE" = "$CURRENT_IMAGE" ] && [ "$FORCE" = 0 ]; then
+    good "Bereits auf dem neuesten Stand. Nichts zu tun (--force startet trotzdem neu)."
+    return 0
+  fi
+  if [ "$DRY" = 1 ]; then
+    if command -v docker >/dev/null 2>&1 && dk info >/dev/null 2>&1; then
+      preflight_services
+      if [ "$BACKEND_OK" = 1 ]; then echo "Dienst ${BACKEND}: vorhanden"; else echo "PROBLEM: Dienst ${BACKEND} fehlt (Erstinstallation: docs/DEPLOYMENT.md)"; fi
+      if [ "$MIGRATE_MISSING" = 1 ]; then echo "Dienst ${MIGRATE_SERVICE}: FEHLT, würde aus ${STACK_FILE:-<stack.yaml nicht gefunden>} wiederhergestellt"; fi
+    else
+      echo "(docker nicht erreichbar: Dienste nicht geprüft)"
+    fi
+    echo "Trockenlauf: würde TIMETRACK_IMAGE setzen, ${MIGRATE_SERVICE} mit dem neuen Image ausführen, dann ${BACKEND} per Rolling Update umstellen. Es wurde nichts geändert."
+    return 0
+  fi
+  ensure_manager
+  preflight_services
+  [ "$BACKEND_OK" = 1 ] || die "Der Dienst ${BACKEND} existiert nicht. Das ist eine Erstinstallation: docs/DEPLOYMENT.md, Abschnitt 'Erstes Deployment'."
+  if [ "$MIGRATE_MISSING" = 1 ]; then
+    warn "Der Dienst ${MIGRATE_SERVICE} fehlt; er wird in Schritt 4 aus der Stack-Datei wiederhergestellt."
+    [ -n "$STACK_FILE" ] && [ -f "$STACK_FILE" ] || die "Der Dienst ${MIGRATE_SERVICE} fehlt, aber die Stack-Datei wurde nicht gefunden. stack.yaml neben update.sh legen (Branch deploy) oder --stack-file angeben."
+  fi
+
+  step "Bestätigen"
+  acquire_lock
+  confirm "Datenbank gesichert? Mit dem Update fortfahren?"
+  HISTORY=1
+
+  step "Neues Image in ${ENV_FILE} eintragen"; PHASE="env-file"
+  write_env_image "$NEW_IMAGE"
+
+  if [ "$MIGRATE" = 1 ]; then
+    step "Datenbankmigration ausführen (Job ${MIGRATE_SERVICE})"; PHASE="migration"
+    if [ -n "${UPDATE_BACKUP_CMD:-}" ]; then
+      say "Führe UPDATE_BACKUP_CMD vor der Migration aus ..."
+      bash -c "$UPDATE_BACKUP_CMD" || die "UPDATE_BACKUP_CMD ist fehlgeschlagen; es wurde nicht migriert. Das Backend ist unverändert."
+    fi
+    if [ "$MIGRATE_MISSING" = 1 ]; then restore_migrate_service; fi
+    run_migration
+  else
+    step "Datenbankmigration"
+    say "Übersprungen (--skip-migrate)."
+  fi
+
+  step "Backend aktualisieren (Rolling Update, ein Replikat nach dem anderen)"; PHASE="rollout"
+  if [ "$FORCE" = 1 ]; then force_flag="--force"; fi
+  # shellcheck disable=SC2086
+  dk service update --detach --with-registry-auth --image "$NEW_IMAGE" $force_flag "$BACKEND" >/dev/null
+  say "Update gestartet; beobachte das Rollout ..."
+  watch_rollout
+
+  step "Ergebnis prüfen"; PHASE="check"
+  check_result
+  good "Fertig nach $(elapsed). Zeigt die App einmal eine weiße Seite, die Websitedaten der Domain im Browser löschen."
+}
+
+case "$MODE" in
+  self-update) do_self_update ;;
+  status) do_status ;;
+  rollback) do_rollback ;;
+  update) do_update ;;
+esac
+# END update.sh
