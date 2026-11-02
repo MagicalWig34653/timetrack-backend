@@ -1,5 +1,7 @@
 # Aktueller Projektstand
 
+**VB1 (02.11.2026, Vorschlag, ADR-0034):** Buchungen an Urlaubstagen zählen als Überstunden. Das Backend hat sie nie gesperrt; Regressionstests belegen Saldo, Halbtag, Urlaubskonto unverändert. Keine Vertragsänderung. Offen: Sperren/Hinweise in PWA und Apple-Apps, Entscheidung zu Gutschrift an Urlaubstagen. Details `docs/handoffs/VACATION-BOOKINGS.md`.
+
 **SEC-D (02.11.2026):** optionale Härtung aus dem Sicherheitsreview: XLSX nur UTF-8 (H-01), S3-/Pfad-Allow-Lists (SEC-09), verschlüsselte Gruppenlinks (SEC-10), Fehlertyp-Logging (SEC-16); SEC-14/17 dokumentiert. Details `docs/handoffs/SEC-D.md`.
 
 **Dependabot-Sicherheitswarnungen 01.11.2026:** 21 offene Alerts, alle npm in `site/package-lock.json` (Scope development, Site-/Docs-Build, nicht im Swift-Produktionsimage). `@redocly/cli` 1.34.5 auf 1.34.22 (Patch) angehoben, `npm audit fix` ohne `--force` (u. a. fast-uri 3.1.9); `npm ci` und `npm run build` lokal grün. Offen bleiben Alerts, die nur über Major-Sprünge zu beheben sind (Redocly 2, VitePress/Vite, esbuild); geringes Risiko, da nur lokaler Dev-Server und Build mit eigenen Dateien.

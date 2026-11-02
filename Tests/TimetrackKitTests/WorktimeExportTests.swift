@@ -132,6 +132,18 @@ final class WorktimeExportTests: XCTestCase {
         let school = try cells(evaluate(date, model: model, segments: [segment(date, 28800, 45000, kind: .school)]), model: model)
         XCTAssertEqual(text(school.cells[5]), "Berufsschule"); XCTAssertEqual(try seconds(school.cells[3]), 27720)
     }
+    /// Bookings on an approved vacation day (ADR-0034): the row keeps the label, shows the booked times and the full booked time as balance.
+    func testVacationDayWithBookingsShowsBookedTimeAsBalance() throws {
+        let date = try LocalDate("2026-10-05"), model = try model()
+        let absence = EngineAbsence(startDate: date, endDate: date, status: .approved)
+        let day = try TimeEvaluationSnapshot(models: [model], segments: [segment(date, 28800, 28800 + 6 * 3600)], preferences: [:], absences: [absence])
+            .evaluate(date, now: Date())
+        XCTAssertEqual(day.mark, .vacation); XCTAssertEqual(day.targetSeconds, 0); XCTAssertEqual(day.deltaSeconds, 6 * 3600)
+        let row = try cells(day, model: model, pause: 0)
+        XCTAssertEqual(try seconds(row.cells[1]), 28800); XCTAssertEqual(try seconds(row.cells[2]), 28800 + 6 * 3600)
+        XCTAssertEqual(try seconds(row.cells[3]), 6 * 3600); XCTAssertEqual(try seconds(row.cells[4]), 6 * 3600)
+        XCTAssertTrue(text(row.cells[5])?.hasPrefix("Urlaub") == true)
+    }
     func testRoundingActualTimesRunningDayAndInjectionNotes() throws {
         let date = try LocalDate("2026-10-05"), model = try model(rounding: true)
         let day = try evaluate(date, model: model, segments: [segment(date, 29220, 57720, note: "=1+1")])

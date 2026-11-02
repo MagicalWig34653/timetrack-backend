@@ -85,6 +85,8 @@ Nachtschicht, Sommerzeit, Property-Tests), `TimeHTTPTests` (Timer-Idempotenz und
 je direkter Ressource) und `AutomationHTTPTests` (direkt/Vorschlag/aus, Vorbeifahrt, Reihenfolge, Gerätetoken).
 Nicht belegt: Shortcuts mit echter Standortauslösung auf iPhone/Mac.
 
+Nachtrag VB1 (02.11.2026, Vorschlag, ADR-0034): Buchungen an Urlaubstagen (ganz/halb, beantragt/genehmigt) sind erlaubt und zählen voll als Ist über dem Tages-Soll (Überstunden); der Urlaubstag und der Urlaubskonto-Verbrauch bleiben bestehen. Backend ohne Codeänderung, Regressionstests `VacationBookingTests`; Client-Sperren entfallen (`docs/handoffs/VACATION-BOOKINGS.md`).
+
 ## 3. Planung und Datenaustausch
 
 Urlaubskonto, HO-/Arbeitsplanung, Ferien/Feiertage, Einreichungsdokumente, Planfreigaben,

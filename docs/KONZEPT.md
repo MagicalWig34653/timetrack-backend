@@ -107,6 +107,8 @@ Feiertage und Ferien anzeigen. Bestehenden Resturlaub einfach zu Beginn eintrage
 Urlaubs-/Krankheitsunterlagen mit Bezugsdatum/-zeitraum, Einreichungsstatus und Einreichungsdatum.
 Zunächst keine allgemeine Vertrags-/Abrechnungsablage und kein automatischer Versand.
 
+Nutzerwunsch 02.11.2026: Buchungen sind auch an Urlaubstagen erlaubt und zählen wie Überstunden (Vorschlag zur Ausgestaltung, ADR-0034: der Urlaubstag bleibt Urlaub und verbraucht Urlaubskonto, die gebuchte Zeit steht voll über dem Soll von 0 bzw. dem Resttag-Soll). Das Backend sperrt nichts; Sperren in PWA und Apple-Apps sind zu entfernen.
+
 Umsetzungsstand: **umgesetzt** (ADR-0005, Stufe 3a) – Urlaubskonto in halben Tagen, Übertrag, Korrekturen, Stichtagsbestand,
 Statusfolge, Vorschau, Abwesenheiten mit Anhängen und Einreichungsstatus, Planung (Arbeit/HO), Feiertage. Schulferien nur als
 vom Nutzer erfasste Zeiträume (keine eingebauten Ferientermine). Anspruch 30 Tage/5-Tage-Woche sind Standardwerte für
