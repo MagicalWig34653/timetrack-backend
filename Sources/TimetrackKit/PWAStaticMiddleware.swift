@@ -48,6 +48,14 @@ struct PWAStaticMiddleware: AsyncMiddleware {
         let hashed = decoded.hasPrefix("/_app/immutable/")
         response.headers.replaceOrAdd(name: .cacheControl, value: file.lastPathComponent == "index.html" ? "no-cache" : hashed ? "public, max-age=31536000, immutable" : "no-cache")
         response.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
+        // SEC-05: the app shell gets the strict policy with hashes of its inline bootstrap scripts (see PWAContentSecurityPolicy).
+        if file.pathExtension == "html", let policy = PWAContentSecurityPolicy.policy(forHTMLFileAt: file.path) {
+            response.headers.replaceOrAdd(name: "Content-Security-Policy", value: policy)
+        } else {
+            // Other static files must not receive the restrictive API default (`default-src 'none'`): the CSP of a service
+            // worker script governs the worker itself and would block its precache fetches. 'self' is what the worker needs.
+            response.headers.replaceOrAdd(name: "Content-Security-Policy", value: PWAContentSecurityPolicy.assetPolicy)
+        }
         // Vapor has no mapping for .webmanifest; browsers expect the manifest media type.
         if file.pathExtension == "webmanifest" { response.headers.replaceOrAdd(name: .contentType, value: "application/manifest+json") }
         // Same for favicons: with nosniff a missing or wrong type would make browsers drop the icon.

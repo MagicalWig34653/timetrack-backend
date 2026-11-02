@@ -87,10 +87,10 @@ extension AuthTests {
         let pdf = try fileID(await fileUpload(app, admin, "Bescheid.pdf", AuthTests.pdf))
         let png = try fileID(await fileUpload(app, admin, "Foto.png", AuthTests.png))
 
-        // Default stays attachment, no CSP needed.
+        // Default stays attachment: no sandbox CSP, only the global API default (SEC-05).
         let plain = try await download(app, admin, txt)
         XCTAssertTrue(try XCTUnwrap(plain.headers.first(name: .contentDisposition)).hasPrefix("attachment;"))
-        XCTAssertNil(plain.headers.first(name: "Content-Security-Policy"))
+        XCTAssertEqual(plain.headers.first(name: "Content-Security-Policy"), "default-src 'none'; frame-ancestors 'none'")
 
         for (id, type, name) in [(txt, "text/plain", "Notiz.txt"), (pdf, "application/pdf", "Bescheid.pdf"), (png, "image/png", "Foto.png")] {
             let response = try await app.testable().sendRequest(.GET, "/api/v1/files/\(id)?disposition=inline", headers: headers(admin))
@@ -109,7 +109,7 @@ extension AuthTests {
             let response = try await app.testable().sendRequest(.GET, "/api/v1/files/\(txt)?disposition=\(value)", headers: headers(admin))
             XCTAssertEqual(response.status, .ok)
             XCTAssertTrue(try XCTUnwrap(response.headers.first(name: .contentDisposition)).hasPrefix("attachment;"), value)
-            XCTAssertNil(response.headers.first(name: "Content-Security-Policy"), value)
+            XCTAssertEqual(response.headers.first(name: "Content-Security-Policy"), "default-src 'none'; frame-ancestors 'none'", value)
         }
         // A stored type outside the whitelist (HEIC is uploadable) is never served inline.
         let heic = Data([0, 0, 0, 0x18]) + Data("ftypheic".utf8) + Data(repeating: 0, count: 32)
@@ -117,7 +117,7 @@ extension AuthTests {
         let heicResponse = try await app.testable().sendRequest(.GET, "/api/v1/files/\(heicId)?disposition=inline", headers: headers(admin))
         XCTAssertEqual(heicResponse.status, .ok)
         XCTAssertTrue(try XCTUnwrap(heicResponse.headers.first(name: .contentDisposition)).hasPrefix("attachment;"))
-        XCTAssertNil(heicResponse.headers.first(name: "Content-Security-Policy"))
+        XCTAssertEqual(heicResponse.headers.first(name: "Content-Security-Policy"), "default-src 'none'; frame-ancestors 'none'")
         // Whitelist unit check: scriptable and unknown types are out, parameters are ignored, case-insensitive.
         for type in ["text/html", "image/svg+xml", "application/xhtml+xml", "application/javascript", "text/xml", "application/octet-stream", "image/heic", ""] {
             XCTAssertFalse(FilenameSanitizer.isInlineSafe(type), type)
@@ -129,7 +129,7 @@ extension AuthTests {
         for query in ["", "?disposition=inline"] {
             let foreign = try await app.testable().sendRequest(.GET, "/api/v1/files/\(txt)\(query)", headers: headers(member))
             XCTAssertEqual(foreign.status, .notFound, query)
-            XCTAssertNil(foreign.headers.first(name: "Content-Security-Policy"))
+            XCTAssertEqual(foreign.headers.first(name: "Content-Security-Policy"), "default-src 'none'; frame-ancestors 'none'")
         }
         let anonymous = try await app.testable().sendRequest(.GET, "/api/v1/files/\(txt)?disposition=inline")
         XCTAssertEqual(anonymous.status, .unauthorized)

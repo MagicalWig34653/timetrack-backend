@@ -31,6 +31,8 @@ public struct Configuration: Sendable {
     /// A session unused for this long ends, even before its absolute expiry (SEC-15).
     public let sessionIdleHours: Int
     public let autoMigrate: Bool
+    /// `Strict-Transport-Security` max-age in seconds; 0 disables the header. Only sent when `publicBaseURL` is https (SEC-05).
+    public let hstsMaxAgeSeconds: Int
     public let pwaStaticDirectory: String
     public let smtpHost: String?
     public let smtpPort: Int
@@ -115,6 +117,7 @@ public struct Configuration: Sendable {
         publicBaseURL = try url("PUBLIC_BASE_URL", "http://localhost:18080")
         sessionTTLHours = try integer("SESSION_TTL_HOURS", "720", 1...8760)
         sessionIdleHours = try integer("SESSION_IDLE_HOURS", "336", 1...8760)
+        hstsMaxAgeSeconds = try integer("HSTS_MAX_AGE_SECONDS", "15552000", 0...63_072_000)
         switch environment["AUTO_MIGRATE"] ?? "false" {
         case "true": autoMigrate = true
         case "false": autoMigrate = false

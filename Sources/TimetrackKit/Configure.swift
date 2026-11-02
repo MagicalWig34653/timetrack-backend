@@ -66,10 +66,12 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
     let sender = try mailSender ?? config.smtp.map { try SMTPMailSender(configuration: $0, group: app.eventLoopGroup,
         brand: MailBrand(productName: config.webAuthnRPName, operatorName: $0.fromName, baseURL: config.publicBaseURL)) }
     app.trustedProxies = config.trustedProxies
-    if let warning = config.trustedProxies.startupWarning { app.logger.warning("\(warning)") }
+    for warning in config.trustedProxies.startupWarnings(behindTLSProxy: config.publicBaseURL.scheme == "https") { app.logger.warning("\(warning)") }
     let service = AuthService(configuration: config, mailSender: sender)
     // Replace Vapor's default error and URL logging middleware: invite URLs contain secrets.
     app.middleware = Middlewares()
+    // Outermost: also decorates error responses and the responses of every other middleware (SEC-05).
+    app.middleware.use(SecurityHeadersMiddleware(hstsMaxAgeSeconds: config.publicBaseURL.scheme == "https" ? config.hstsMaxAgeSeconds : 0))
     app.middleware.use(GroupPublicMiddleware())
     app.middleware.use(APIErrorMiddleware())
     app.middleware.use(TimeErrorMiddleware())

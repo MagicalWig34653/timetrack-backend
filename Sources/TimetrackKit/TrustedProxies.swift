@@ -132,6 +132,45 @@ public struct TrustedProxies: Sendable, Equatable {
         return "TRUSTED_PROXY_HEADER=X-Real-IP: the header is trusted as sent by the proxy; the proxy must overwrite X-Real-IP with the client address on every request (nginx: proxy_set_header X-Real-IP $remote_addr). If it passes a client-supplied value through, clients can spoof their address and bypass per-address rate limits. X-Forwarded-For is safer because it is read from the right."
     }
 
+    /// Startup warnings for configurations that make the forwarded address spoofable or useless (SEC-01).
+    /// `behindTLSProxy` is true when the public base URL is https (a proxy is then expected in front of the backend).
+    func startupWarnings(behindTLSProxy: Bool) -> [String] {
+        var warnings: [String] = []
+        if let warning = startupWarning { warnings.append(warning) }
+        if cidrs.isEmpty {
+            if behindTLSProxy {
+                warnings.append("TRUSTED_PROXY_CIDRS is empty although PUBLIC_BASE_URL is https: every client is seen with the proxy's address and all clients share one address-based rate limit and lockout (one attacker can lock out everybody). Set TRUSTED_PROXY_CIDRS to the proxy address or network (docs/BETRIEB.md).")
+            }
+            return warnings
+        }
+        for cidr in cidrs {
+            let text = "\(IPAddressValue(bytes: cidr.network).text)/\(cidr.prefix)"
+            if !Self.isPrivateOrLoopback(cidr) {
+                warnings.append("TRUSTED_PROXY_CIDRS entry \(text) contains public addresses: any host in that range can forge X-Forwarded-For / X-Real-IP and bypass the address-based rate limits. Trust only your proxy.")
+            } else if (cidr.network.count == 4 && cidr.prefix < 16) || (cidr.network.count == 16 && cidr.prefix < 48) {
+                warnings.append("TRUSTED_PROXY_CIDRS entry \(text) is a very wide network. With Docker Swarm's routing mesh every connection to a published port arrives with an address of the ingress network, so the whole internet is trusted unless the port is reachable only from the proxy (node firewall). Prefer the proxy address as /32 or the narrowest network (docs/DEPLOYMENT.md).")
+            }
+        }
+        return warnings
+    }
+
+    /// True when the whole network lies inside loopback, RFC 1918, CGNAT, link-local or unique-local space.
+    private static func isPrivateOrLoopback(_ cidr: CIDR) -> Bool {
+        let b = cidr.network, p = cidr.prefix
+        if b.count == 4 {
+            if b[0] == 10 || b[0] == 127 { return p >= 8 }
+            if b[0] == 172, (16...31).contains(b[1]) { return p >= 12 }
+            if b[0] == 192, b[1] == 168 { return p >= 16 }
+            if b[0] == 169, b[1] == 254 { return p >= 16 }
+            if b[0] == 100, (64...127).contains(b[1]) { return p >= 10 }
+            return false
+        }
+        if b == [UInt8](repeating: 0, count: 15) + [1] { return true }
+        if b[0] & 0xfe == 0xfc { return p >= 7 }
+        if b[0] == 0xfe, b[1] & 0xc0 == 0x80 { return p >= 10 }
+        return false
+    }
+
     func isTrusted(_ address: IPAddressValue) -> Bool { cidrs.contains { $0.contains(address) } }
 
     /// Resolves the client address. `peer` is the socket peer; forwarded values are only read when the peer is trusted.

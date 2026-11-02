@@ -73,7 +73,7 @@ services:
       APPLE_APP_IDS: ${APPLE_APP_IDS:-}                         # OPTIONAL: <TeamID>.<BundleID>[,...]; empty = AASA endpoint answers 404
       SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-336}              # OPTIONAL (1..8760; the code default is 720, this stack uses 336 = 14 days)
       # ---- Reverse proxy: networks that may report the client address (without it all clients share one rate-limit bucket) ----
-      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}             # OPTIONAL but strongly recommended behind a proxy
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}             # REQUIRED behind a proxy (see the ports comment: firewall!)
       TRUSTED_PROXY_HEADER: ${TRUSTED_PROXY_HEADER:-X-Forwarded-For}   # OPTIONAL: X-Forwarded-For | X-Real-IP
       # ---- Encryption of stored S3 credentials; S3 itself is configured in the admin UI, not here ----
       STORAGE_SECRET_KEY_FILE: /run/secrets/tt_storage_secret_key      # secret
@@ -129,9 +129,13 @@ services:
     #     source: timetrack-files
     #     target: /data/files
     # The port is published on EVERY node (Swarm routing mesh, mode ingress): any node IP:PUBLISHED_PORT reaches a healthy replica.
-    # Point the reverse proxy (outside or inside Swarm) at one or more node addresses on this port and firewall the port so
-    # that only the proxy can reach it. Behind the routing mesh the backend sees the ingress network as the TCP peer: put
-    # the ingress subnet (docker network inspect ingress) into TRUSTED_PROXY_CIDRS so that X-Forwarded-For is honoured.
+    # SECURITY (SEC-01), MANDATORY: firewall this port so that ONLY the reverse proxy can reach it. Behind the routing mesh
+    # the backend sees the ingress network as the TCP peer, so TRUSTED_PROXY_CIDRS must contain the ingress subnet
+    # (docker network inspect ingress) for X-Forwarded-For to be honoured. Then EVERY connection that reaches the published
+    # port (from the proxy or straight from the internet) is "trusted" and can forge X-Forwarded-For, which bypasses all
+    # address-based rate limits and lockouts. If the port is reachable by anybody else, do not trust the ingress network
+    # (then all clients share one address-based limit, which is the safer failure). The backend logs a warning at start
+    # when TRUSTED_PROXY_CIDRS is empty behind https or too wide. Check: docs/DEPLOYMENT.md, section 9.
     ports:
       - { target: 8080, published: "${PUBLISHED_PORT:-18080}", protocol: tcp, mode: ingress }
     # The container check uses /ready (database reachable AND all migrations applied): a new image whose schema has
