@@ -83,3 +83,13 @@ Diese Regel bei jedem Agent-Auftrag mitgeben.
 - Commit-Hashes in Handoffs vor dem 17.10.2026 sind durch die Historienbereinigung ungültig; mit Paket-ID und `git log --grep` arbeiten.
 
 Build-, Start- und Testbefehle stehen in EINRICHTUNG.md; produktionsnahes Deployment (Swarm) ist noch offen. Dokumentationslandkarte: docs/README.md.
+
+<!-- todolino:begin -->
+## Todolino
+
+Dieses Projekt wird in Todolino geplant (Projekt-ID in `.todolino.json`). Todolino muss aktuell bleiben:
+- Sitzungsstart: `session_start` ausfuehren (Prompt `/mcp__todolino__session_start` bzw. Skill `todolino`) oder `get_sync_status` und `get_command_center` aufrufen.
+- Waehrend der Arbeit: `claim_task`, `post_progress` nach jedem sinnvollen Schritt, `ask_question` statt zu raten, `request_review` bei Fertigstellung.
+- Sitzungsende: Status aktualisieren und `record_sync` aufrufen. Eine Aufgabe gilt erst als erledigt, wenn Todolino sie widerspiegelt.
+- Ist das Board veraltet (`get_sync_status`), zuerst abgleichen (`sync_project`).
+<!-- todolino:end -->
