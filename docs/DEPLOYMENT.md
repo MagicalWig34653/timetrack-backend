@@ -85,26 +85,21 @@ Für einen Manager, auf dem schon ein Stack läuft und das Verzeichnis von Hand 
 | `deploy/swarm/migrate-dir.sh` | lesender Vergleich alter Dateien mit dem Branch (ändert nichts) |
 | `docs/`, `README.md`, `LICENSE` | Betriebsdokumentation |
 
-`update.sh` sucht die Stack-Datei **nur** unter dem festen Namen `stack.yaml` (neben dem Skript, sonst im aktuellen Verzeichnis) oder über `--stack-file FILE`; sie wird nur gebraucht, wenn der Dienst `timetrack_migrate` fehlt und wiederhergestellt werden muss. Beim normalen Update liest das Skript die Stack-Datei nicht: es schreibt das neue Image in die `.env`, startet den Migrationsjob per `docker service update` und rollt das Backend per `docker service update --image` aus. **Eine veränderte Stack-Datei bleibt daher bei Updates unberührt**, wirkt aber nur, wenn man selbst `docker stack deploy` ausführt. Die `.env` sucht das Skript in `./.env` (aktuelles Verzeichnis), sonst neben dem Skript (`deploy/swarm/.env`) oder über `--env-file FILE`. Pflicht in der `.env` sind `TIMETRACK_IMAGE` (das Skript braucht daraus Registry und Repository), `DB_HOST`, `PUBLIC_BASE_URL`, `WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGIN` und `VAPID_SUBJECT` (die Stack-Datei verweigert sonst das Rendern). Die Secrets liegen als Swarm-Secrets (`tt_db_password`, `tt_storage_secret_key`, `tt_vapid_private_key`, optional `tt_smtp_password`, `tt_oidc_client_secret`, `tt_apns_private_key`) im Cluster, **nicht** im Verzeichnis (`create-secrets.sh` liest sie nur einmalig ein und zeigt sie nie wieder); im Klon muss deshalb nichts davon liegen.
+`update.sh` sucht die Stack-Datei **nur** unter dem festen Namen `stack.yaml` (neben dem Skript, sonst im aktuellen Verzeichnis) oder über `--stack-file FILE`; sie wird nur gebraucht, wenn der Dienst `timetrack_migrate` fehlt und wiederhergestellt werden muss. Beim normalen Update liest das Skript die Stack-Datei nicht: es schreibt das neue Image in die `.env`, startet den Migrationsjob per `docker service update` und rollt das Backend per `docker service update --image` aus. **Eine veränderte Stack-Datei bleibt daher bei Updates unberührt**, wirkt aber nur, wenn man selbst `docker stack deploy` ausführt. Die `.env` sucht das Skript in `./.env` (aktuelles Verzeichnis), sonst neben dem Skript (`deploy/swarm/.env`) oder über `--env-file FILE`. Pflicht in der `.env` sind `TIMETRACK_IMAGE` (das Skript braucht daraus Registry und Repository), `DB_HOST`, `PUBLIC_BASE_URL`, `WEBAUTHN_RP_ID` und `WEBAUTHN_ORIGIN` (die Stack-Datei verweigert sonst das Rendern). Alles andere ist optional. Die Secrets liegen als Swarm-Secrets (`tt_db_password`, `tt_storage_secret_key`, `tt_vapid_private_key` sowie `tt_smtp_password`, `tt_oidc_client_secret`, `tt_apns_private_key`) im Cluster, **nicht** im Verzeichnis (`create-secrets.sh` liest sie nur einmalig ein und zeigt sie nie wieder); im Klon muss deshalb nichts davon liegen. **Alle sechs müssen im Cluster existieren**, sonst scheitert `docker stack deploy`; die drei optionalen legt `create-secrets.sh --add-only` bei Bedarf als Platzhalter an (Abschnitt 4).
 
-**Welche lokalen Änderungen schon offiziell unterstützt sind** (Spalte „ohne Stack-Änderung“ = nur `.env`):
+**Alles steuert die `.env`.** Seit ENV-STACK reicht `stack.yaml` jede Backend-Variable durch (leer = nicht gesetzt) und das Backend entscheidet selbst, welche optionalen Funktionen laufen; ein Block zum Einkommentieren und ein Overlay für APNs, SMTP oder OIDC sind nicht mehr nötig:
 
-| Änderung in der eigenen Stack-Datei | Offiziell unterstützt? | Wie |
-|---|---|---|
-| APNs (`APNS_*`, Secret `tt_apns_private_key`) | ja, optionaler Block | Block in `stack.yaml` aktivieren **oder** Overlay (`override.example.yaml`); Werte in `.env`; Secret: `create-secrets.sh --add-only --apns-private-key-file FILE` |
-| SMTP (E-Mail-Wiederherstellung) | ja, optionaler Block | Block aktivieren oder Overlay; Werte in `.env`; Secret `--smtp-password-file` |
-| OIDC | ja, optionaler Block | wie SMTP; Secret `--oidc-client-secret-file` |
-| `TRUSTED_PROXY_CIDRS`, `TRUSTED_PROXY_HEADER` | ja | nur `.env` |
-| `PWA_CSP_MODE` (Notbremse) | ja | nur `.env` |
-| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_TLS`, `DB_POOL_*`, `DB_KEEPALIVE_SECONDS` | ja | nur `.env` |
-| Veröffentlichter Port | ja | `PUBLISHED_PORT` in der `.env` |
-| Replikas | ja | `BACKEND_REPLICAS` in der `.env` |
-| Platzierung | ja | `BACKEND_PLACEMENT` in der `.env` (ein Constraint) |
-| `APPLE_APP_IDS`, `SESSION_TTL_HOURS`, `PUSH_ALLOWED_HOSTS`, `MODULES_DISABLED`, Wartungs- und Aufbewahrungswerte | ja | nur `.env` (Liste: `.env.example`) |
-| Lokales Dateispeicher-Volume | ja, auskommentierter Block | Block aktivieren **oder** Overlay, dazu `BACKEND_PLACEMENT` auf einen Knoten |
-| Eigene Netzwerke (`networks:`), zusätzliche Labels, andere Ressourcenlimits, zusätzliche Variablen | nein | Overlay |
+| Eigene Änderung in der alten Stack-Datei | Jetzt |
+|---|---|
+| APNs (`APNS_*`, Secret `tt_apns_private_key`) | `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_BUNDLE_IDS` in der `.env`; das Secret existiert schon (Schlüssel) |
+| SMTP (E-Mail-Wiederherstellung) | `SMTP_HOST`, `SMTP_PORT`, `SMTP_TLS`, `SMTP_FROM`, `SMTP_FROM_NAME`, `SMTP_USER` in der `.env`; Secret `tt_smtp_password` |
+| OIDC | `OIDC_*` in der `.env`; Secret `tt_oidc_client_secret` |
+| `TRUSTED_PROXY_*`, `PWA_CSP_MODE`, `DB_*`, `PUBLISHED_PORT`, `BACKEND_REPLICAS`, `BACKEND_PLACEMENT`, `APPLE_APP_IDS`, `SESSION_*`, `PUSH_ALLOWED_HOSTS`, `MODULES_DISABLED`, Wartungs- und Aufbewahrungswerte | nur `.env` (Liste: `.env.example`) |
+| Schalter je Funktion | `SMTP_ENABLED`, `OIDC_ENABLED`, `APNS_ENABLED`, `WEB_PUSH_ENABLED`, `APPLE_APP_IDS_ENABLED`: `true`, `false` oder leer (automatisch) |
+| Lokales Dateispeicher-Volume | Overlay (`override.example.yaml`), dazu `BACKEND_PLACEMENT` auf einen Knoten |
+| Eigene Netzwerke (`networks:`), zusätzliche Labels, andere Ressourcenlimits, Variablen, die `stack.yaml` nicht kennt | Overlay |
 
-**Overlay statt Stack-Datei ändern.** Wer die Datei im Klon bearbeitet, bekommt beim `git pull --ff-only` Konflikte oder Abbrüche. Besser bleibt `stack.yaml` unverändert und alles Eigene steht in einer ungetrackten Datei `override.yaml` (Vorlage `override.example.yaml`; `.env`, `.env.bak` und `override.yaml` sind nicht im Git). Sie wird als zweite Compose-Datei angegeben: `docker stack deploy -c stack.yaml -c override.yaml timetrack`. Compose führt die Dateien zusammen: `environment` pro Schlüssel (das Overlay gewinnt), `secrets` und `ports` als Listen, einzelne Werte (zum Beispiel `replicas`) werden ersetzt; ein Eintrag der Basisdatei lässt sich per Overlay nicht entfernen. Mit `docker stack config -c stack.yaml -c override.yaml` sieht man vorher das Ergebnis. `update.sh` braucht das Overlay nur bei der Wiederherstellung eines fehlenden Migrationsdienstes: `--stack-override override.yaml` (wiederholbar) oder `STACK_OVERRIDE_FILES="override.yaml"` (durch Leerzeichen getrennt) ab Version 2.1.0.
+**Overlay nur für Sonderfälle.** Wer die Datei im Klon bearbeitet, bekommt beim `git pull --ff-only` Konflikte oder Abbrüche. Besser bleibt `stack.yaml` unverändert; Sonderfälle (Netzwerke, Labels, Limits, Volumes) stehen in einer ungetrackten Datei `override.yaml` (Vorlage `override.example.yaml`; `.env`, `.env.bak` und `override.yaml` sind nicht im Git). Sie wird als zweite Compose-Datei angegeben: `docker stack deploy -c stack.yaml -c override.yaml timetrack`. Compose führt die Dateien zusammen: `environment` pro Schlüssel (das Overlay gewinnt), `secrets` und `ports` als Listen, einzelne Werte (zum Beispiel `replicas`) werden ersetzt; ein Eintrag der Basisdatei lässt sich per Overlay nicht entfernen. Mit `docker stack config -c stack.yaml -c override.yaml` sieht man vorher das Ergebnis. `update.sh` braucht das Overlay nur bei der Wiederherstellung eines fehlenden Migrationsdienstes: `--stack-override override.yaml` (wiederholbar) oder `STACK_OVERRIDE_FILES="override.yaml"` (durch Leerzeichen getrennt) ab Version 2.1.0. **Ohne Sonderfall brauchst du keine `override.yaml`.**
 
 **Schritt für Schritt.** Alles auf dem Manager-Knoten; `ALT` ist das bisherige Verzeichnis (hier `~/timetrack`), `NEU` das neue Nachbarverzeichnis. `OWNER` und die Repository-URL aus dem Image-Namen übernehmen. Nichts davon ändert das alte Verzeichnis oder den laufenden Stack, bis Schritt 8.
 
@@ -127,20 +122,22 @@ cd ~/timetrack-deploy/deploy/swarm && ./update.sh --version       # erwartet: up
 # 3. .env und lokale Dateien übernehmen (kopieren, nicht verschieben)
 cp -p ~/timetrack/.env ~/timetrack/.env.bak ~/timetrack-deploy/deploy/swarm/
 chmod 600 ~/timetrack-deploy/deploy/swarm/.env
-# Secrets: nichts zu kopieren, sie liegen als Swarm-Secrets im Cluster. Fehlt nur ein optionales (z. B. APNs):
-#   ./create-secrets.sh --add-only --apns-private-key-file /sicherer/pfad/AuthKey_XXXX.p8     (vorher mit --dry-run)
+# Secrets: nichts zu kopieren, sie liegen als Swarm-Secrets im Cluster. Die neue stack.yaml referenziert immer alle sechs;
+# fehlende optionale legt das Skript als Platzhalter an (bestehende bleiben unberührt, nichts wird überschrieben):
+cd ~/timetrack-deploy/deploy/swarm
+./create-secrets.sh --add-only --dry-run                  # zeigt, was fehlt
+./create-secrets.sh --add-only
 
-# 4. Alt gegen neu vergleichen (lesend; ändert nichts)
+# 4. Alt gegen neu vergleichen (lesend; ändert nichts). Der Abschnitt ".env-Vorschlag" nennt die Zeilen, die in die .env gehören
 ./migrate-dir.sh --old-stack ~/timetrack/timetrack-stack.yml --old-env ~/timetrack/.env
 diff -u ~/timetrack/timetrack-stack.yml stack.yaml | less        # vollständiger Vergleich; alt = "-", neu = "+"
 
-# 5. Eigene Änderungen einsortieren (siehe Tabelle): .env ergänzen, sonst override.yaml aus override.example.yaml anlegen
-cp override.example.yaml override.yaml                    # nur falls nötig; nicht benötigte Teile löschen
-${EDITOR:-nano} .env override.yaml
+# 5. Vorgeschlagene Zeilen in die .env übernehmen (kein override.yaml nötig; nur für Sonderfälle: cp override.example.yaml override.yaml)
+${EDITOR:-nano} .env
 
 # 6. Gerenderte Stack-Konfiguration prüfen (rendert nur, deployt nichts) und mit dem Ist-Zustand vergleichen
 set -a; . ./.env; set +a
-docker stack config -c stack.yaml -c override.yaml > ~/neu-gerendert.yml        # ohne Overlay: -c override.yaml weglassen
+docker stack config -c stack.yaml > ~/neu-gerendert.yml        # nur mit Sonderfall-Overlay: zusätzlich -c override.yaml
 docker stack config -c ~/timetrack/timetrack-stack.yml > ~/alt-gerendert.yml
 diff -u ~/alt-gerendert.yml ~/neu-gerendert.yml | less    # jede Zeile erklären können; nur Gewolltes darf übrig bleiben
 
@@ -150,7 +147,7 @@ diff -u ~/alt-gerendert.yml ~/neu-gerendert.yml | less    # jede Zeile erklären
 
 # 8. Deploy mit der neuen Datei. TIMETRACK_IMAGE in .env muss das AKTUELL laufende Image bleiben (Schritt 1),
 #    damit dieser Schritt nur Konfiguration angleicht und kein Update ist.
-docker stack deploy --with-registry-auth --resolve-image never -c stack.yaml -c override.yaml timetrack
+docker stack deploy --with-registry-auth --resolve-image never -c stack.yaml timetrack     # mit Sonderfall-Overlay: zusätzlich -c override.yaml
 docker stack services timetrack; ./update.sh --status
 
 # 9. Erst danach das eigentliche Update, mit festgenageltem Tag (siehe Hinweis unten)
@@ -172,14 +169,14 @@ Das Image-Tag aus Schritt 1 notiert zu haben genügt, um jederzeit auf den alten
 
 **Was in der eigenen Stack-Datei zu prüfen ist** (Ergebnis von Schritt 4 und 6):
 
-1. Lokale `environment`-Einträge, die `stack.yaml` nicht kennt (APNs, SMTP, OIDC, eigene Variablen) und die zugehörigen Einträge unter `secrets:` im Dienst und auf oberster Ebene.
+1. Lokale `environment`-Einträge, die `stack.yaml` nicht kennt (nur eigene Variablen; APNs, SMTP und OIDC sind jetzt `.env`-Variablen) und die zugehörigen Einträge unter `secrets:`.
 2. Die `image:`-Zeilen: in `stack.yaml` kommen sie aus `TIMETRACK_IMAGE` (kein fester Tag in der Datei).
 3. `ports:` (Port, `mode: ingress` oder `host`) und `PUBLISHED_PORT`, die Firewallregel und `TRUSTED_PROXY_CIDRS` (Abschnitt 9).
 4. `deploy:` (Replikas, `placement.constraints`, Ressourcenlimits, `update_config`, `rollback_config`, `restart_policy`) und die Healthcheck-Zeilen.
 5. `networks:` und `volumes:` (die offizielle Datei hat keine eigenen Netzwerke und keine Volumes; ein Volume für lokalen Dateispeicher steht als auskommentierter Block bereit).
 6. Namen der Secrets (`tt_*`; bei einem anderen `--prefix` beim Anlegen müssen die Namen in Stack- oder Overlay-Datei dazu passen).
 7. Zeilen, die der Vergleich als „nur in der alten Datei“ meldet, ob sie noch gebraucht werden (ältere Fassungen enthielten Übergangslösungen).
-8. In der `.env`: `TIMETRACK_IMAGE`, `PUBLIC_BASE_URL`, `WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGIN`, `VAPID_SUBJECT`, `DB_HOST` und, falls die neue Datei sie liest, `PWA_CSP_MODE` (Standard `enforce`) und `TRUSTED_PROXY_CIDRS`.
+8. In der `.env`: `TIMETRACK_IMAGE`, `PUBLIC_BASE_URL`, `WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGIN`, `DB_HOST`, außerdem `VAPID_SUBJECT` (sonst bleibt Web Push aus), die APNs-/SMTP-/OIDC-Zeilen laut Vorschlag, `PWA_CSP_MODE` (Standard `enforce`) und `TRUSTED_PROXY_CIDRS`.
 
 ## 3. Datenbank vorbereiten (vorhandene MariaDB)
 
@@ -206,29 +203,47 @@ Danach:
 2. `/root/tt-keys/tt_storage_secret_key` und `tt_vapid_private_key` in den Passwortmanager übernehmen und das Verzeichnis löschen. **Docker zeigt Secret-Werte nie wieder an.**
 3. Prüfen: `docker secret ls` zeigt `tt_db_password`, `tt_storage_secret_key`, `tt_vapid_private_key`.
 
-Weitere Optionen: `--db-password-file DATEI` (vorhandenes Passwort), `--smtp-password-file`, `--oidc-client-secret-file`, `--apns-private-key-file`, `--prefix` (anderer Namensprefix). Ohne `--db-password-file`/`--generate-db-password` fragt das Skript das Passwort ohne Echo ab.
+Weitere Optionen: `--db-password-file DATEI` (vorhandenes Passwort), `--smtp-password-file`, `--oidc-client-secret-file`, `--apns-private-key-file`, `--prefix` (anderer Namensprefix), `--no-placeholders`, `--name-suffix`. Ohne `--db-password-file`/`--generate-db-password` fragt das Skript das Passwort ohne Echo ab.
 
 | Secret | Inhalt | Folge des Verlusts |
 | --- | --- | --- |
 | `tt_db_password` | Passwort des DB-Benutzers | Neues Passwort setzen und neues Secret anlegen; kein Datenverlust. |
 | `tt_storage_secret_key` | Base64 von 32 Zufallsbytes (AES-256-GCM) | **Gespeicherte S3-Zugangsdaten nicht mehr entschlüsselbar**: S3-Dateien unlesbar (HTTP 503 `storage_unavailable`), bis ein Admin die S3-Daten neu einträgt. DB und lokale Dateien nicht betroffen. Auch **nicht ohne Not rotieren**. Wird S3 nie verwendet, ist der Schaden gering, der Schlüssel muss aber gesetzt sein. |
 | `tt_vapid_private_key` | P-256-Schlüssel (32 Byte, Base64url) | Push-Abonnements ungültig; Geräte müssen neu abonnieren. |
-| `tt_smtp_password`, `tt_oidc_client_secret` | nur falls genutzt | Neu eintragen. |
-| `tt_apns_private_key` | nur falls APNs genutzt: PEM-Text des Apple-`.p8`-Schlüssels (EC P-256) | Push an die Apple-Apps fällt aus; Schlüssel bei Apple neu erzeugen (oder aus dem Passwortmanager) und als neues Secret anlegen. |
+| `tt_smtp_password`, `tt_oidc_client_secret` | nur falls genutzt, sonst Platzhalter | Neu eintragen. |
+| `tt_apns_private_key` | nur falls APNs genutzt (sonst Platzhalter): PEM-Text des Apple-`.p8`-Schlüssels (EC P-256) | Push an die Apple-Apps fällt aus; Schlüssel bei Apple neu erzeugen (oder aus dem Passwortmanager) und als neues Secret anlegen. |
+
+**Platzhalter für optionale Secrets (ENV-STACK).** `stack.yaml` referenziert `tt_smtp_password`, `tt_oidc_client_secret` und `tt_apns_private_key` immer, weil Swarm einen Stack mit nicht vorhandenen Secrets nicht ausrollt. `create-secrets.sh` legt deshalb jedes dieser drei, das nicht mit einem echten Wert angelegt wird, als **Platzhalter** an (Inhalt `TIMETRACK_PLACEHOLDER_UNSET`, Docker erlaubt keine leeren Secrets). Der Einstiegspunkt des Images und das Backend behandeln Platzhalter wie „nicht gesetzt“; die Funktion bleibt aus. Beim ersten Anlegen geschieht das automatisch; für einen bestehenden Stack:
+
+```sh
+./create-secrets.sh --add-only --dry-run     # zeigt, welche Platzhalter fehlen; ändert nichts
+./create-secrets.sh --add-only               # legt nur fehlende an; vorhandene (auch echte) Secrets bleiben unberührt, idempotent
+```
+
+Ein Platzhalter lässt sich nicht an Ort und Stelle durch einen echten Wert ersetzen (Docker-Secrets sind unveränderlich). Für eine Funktion, die später dazukommt, legst du das echte Secret unter neuem Namen an und zeigst die Stack-Datei darauf; das Skript druckt die nötige Zeile:
+
+```sh
+./create-secrets.sh --add-only --oidc-client-secret-file /pfad/secret.txt --name-suffix _2
+#  -> created secret: tt_oidc_client_secret_2
+#  -> add to .env:  SECRET_OIDC_CLIENT_SECRET_NAME=tt_oidc_client_secret_2
+# Zeile in die .env, OIDC_ISSUER/OIDC_CLIENT_ID setzen, dann: docker stack deploy ...
+```
+
+Bewertung der Alternativen: `docs/handoffs/ENV-STACK.md`.
 
 **APNs-Push für die Apple-Apps (optional, ADR-0030).** Ohne diese Schritte bleibt APNs aus (`apnsAvailable:false`), das ist der Normalfall. Aktivieren:
 
 1. Den `.p8`-Schlüssel im Apple-Developer-Konto erzeugen (APNs-Schlüssel) und als Datei sicher ablegen; Key-ID und Team-ID notieren. Den Schlüssel nie ins Repository legen.
-2. Secret anlegen: `./create-secrets.sh --apns-private-key-file /pfad/AuthKey_XXXX.p8` (bei einem bestehenden Stack **mit `--add-only`**, sonst bricht das Skript ab, weil `tt_db_password`, `tt_storage_secret_key` und `tt_vapid_private_key` schon existieren und nie überschrieben werden: `./create-secrets.sh --add-only --apns-private-key-file …`; erst `--dry-run`). Das Skript prüft mit openssl, ohne etwas auszugeben, dass die Datei ein unverschlüsselter EC-P-256-Schlüssel im PEM-Format ist, übergibt den Inhalt per stdin und überschreibt nie ein vorhandenes Secret. Danach die Datei aus dem Arbeitsverzeichnis entfernen (Kopie im Passwortmanager).
-3. In `stack.yaml` den Block „APNs push“, `- tt_apns_private_key` unter `secrets:` des Backends und `tt_apns_private_key:` im Top-Level-`secrets:` einkommentieren (wie bei SMTP/OIDC).
-4. In `.env` `APNS_KEY_ID`, `APNS_TEAM_ID` (je 10 Zeichen) und `APNS_BUNDLE_IDS` (kommagetrennt) setzen; alle vier Werte inklusive Schlüssel sind nötig, sonst bleibt APNs aus.
+2. Secret anlegen: `./create-secrets.sh --apns-private-key-file /pfad/AuthKey_XXXX.p8` (bei einem bestehenden Stack **mit `--add-only`**, sonst bricht das Skript ab, weil `tt_db_password`, `tt_storage_secret_key` und `tt_vapid_private_key` schon existieren und nie überschrieben werden: `./create-secrets.sh --add-only --apns-private-key-file …`; erst `--dry-run`). Existiert `tt_apns_private_key` schon als Platzhalter, verweigert das Skript das Überschreiben und nennt `--name-suffix _2` (siehe oben). Das Skript prüft mit openssl, ohne etwas auszugeben, dass die Datei ein unverschlüsselter EC-P-256-Schlüssel im PEM-Format ist, übergibt den Inhalt per stdin und überschreibt nie ein vorhandenes Secret. Danach die Datei aus dem Arbeitsverzeichnis entfernen (Kopie im Passwortmanager).
+3. `stack.yaml` bleibt unverändert (das Secret und die Variablen sind schon durchgereicht).
+4. In `.env` `APNS_KEY_ID`, `APNS_TEAM_ID` (je 10 Zeichen) und `APNS_BUNDLE_IDS` (kommagetrennt) setzen; alle vier Werte inklusive Schlüssel sind nötig. Unvollständig: im automatischen Modus (`APNS_ENABLED` leer) bleibt APNs aus und das Log warnt mit den fehlenden Variablen; mit `APNS_ENABLED=true` startet das Backend nicht und nennt sie.
 5. Stack neu ausrollen (Variablen: Abschnitt 6). **Wichtig:** `deploy/swarm/update.sh` genügt dafür nicht, es tauscht nur das Image aus; Änderungen an `stack.yaml` und `.env` kommen nur mit `docker stack deploy` an. Prüfen: der Administrator sieht unter „Push (Apple)“ (`/admin/apns`) die Einstellungen und kann die Verbindung zu Apple prüfen; außerdem `GET /api/v1/push/config` meldet `apnsAvailable:true` (angemeldete Sitzung). Eine echte Zustellung ist erst mit den Apple-Apps und einem Testgerät prüfbar.
 
 **VAPID-Schlüssel**: Das Backend bringt keinen Befehl dafür mit (die CLI kennt nur `serve`, `migrate`, `bootstrap-admin`, `maintenance`).
 Das Skript erzeugt ihn mit dem dokumentierten openssl-Verfahren: `openssl ecparam -name prime256v1 -genkey -noout | openssl ec -outform DER | tail -c +8 | head -c 32 | base64 | tr '+/' '-_' | tr -d '=\n'`
 (roher Skalar, 43 Zeichen Base64url ohne Padding). Der öffentliche Schlüssel ergibt sich daraus; die PWA holt ihn über `GET /api/v1/push/config`.
 
-Secrets sind unveränderlich. Rotation: neues Secret mit anderem Namen (`--prefix`), `stack.yaml` anpassen (`secrets:` und `*_FILE`-Pfade), neu ausrollen, altes entfernen.
+Secrets sind unveränderlich. Rotation: neues Secret mit anderem Namen anlegen (`--name-suffix` für die optionalen, sonst `--prefix`), den Namen in der `.env` setzen (`SECRET_DB_PASSWORD_NAME`, `SECRET_STORAGE_KEY_NAME`, `SECRET_VAPID_KEY_NAME`, `SECRET_SMTP_PASSWORD_NAME`, `SECRET_OIDC_CLIENT_SECRET_NAME`, `SECRET_APNS_KEY_NAME`), neu ausrollen, das alte entfernen. Der Pfad im Container (`/run/secrets/tt_...`) bleibt gleich.
 
 ## 5. Port und Netzwerk
 
@@ -250,7 +265,7 @@ Sie können den Stack alternativ an ein gemeinsames Overlay-Netz mit einem Proxy
 
 ## 6. Variablen eintragen (`.env`)
 
-Alle Variablen mit Pflicht/optional, Standardwert und Bedeutung stehen in der **[Konfigurationsreferenz](installation/konfiguration.md)**. Für den Swarm gilt zusätzlich: Öffne `.env` (Vorlage `.env.example`) und ersetze die Beispielwerte; **Pflicht** sind die ersten Zeilen (`TIMETRACK_IMAGE`, `DB_HOST`, `PUBLIC_BASE_URL`, `WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGIN`, `VAPID_SUBJECT`). Die Datei wird von der Shell eingelesen (`set -a; . ./.env; set +a`): keine Leerzeichen um `=`, Werte mit Leerzeichen in Anführungszeichen. Das Backend loggt bei ungültiger Konfiguration einen Fehler mit dem Namen der Variable (z. B. `Invalid configuration for WEBAUTHN_RP_ID: must be a lowercase hostname`) und startet nicht.
+Alle Variablen mit Pflicht/optional, Standardwert und Bedeutung stehen in der **[Konfigurationsreferenz](installation/konfiguration.md)**. Für den Swarm gilt zusätzlich: Öffne `.env` (Vorlage `.env.example`) und ersetze die Beispielwerte; **Pflicht** sind die ersten Zeilen (`TIMETRACK_IMAGE`, `DB_HOST`, `PUBLIC_BASE_URL`, `WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGIN`); `VAPID_SUBJECT` sollte gesetzt sein (sonst bleibt Web Push aus). Jede Variable des Backends ist in der Vorlage enthalten und wird immer durchgereicht; **leer bedeutet „nicht gesetzt“**. Optionale Funktionen (SMTP, OIDC, APNs, Web Push, Apple-App-IDs) haben je einen Schalter `<FUNKTION>_ENABLED` (`true` = muss laufen, sonst Startfehler; `false` = aus; leer = automatisch an, wenn die Pflichtwerte gesetzt sind). Das Backend loggt beim Start eine Übersicht aller Funktionen (an/aus und warum, ohne Geheimnisse). Die Datei wird von der Shell eingelesen (`set -a; . ./.env; set +a`): keine Leerzeichen um `=`, Werte mit Leerzeichen in Anführungszeichen. Das Backend loggt bei ungültiger Konfiguration einen Fehler mit dem Namen der Variable (z. B. `Invalid configuration for WEBAUTHN_RP_ID: must be a lowercase hostname`) und startet nicht.
 
 Dateispeicher in der Datenbank: Der Stack hat **keine Volumes**. Hochgeladene Dateien liegen in der Datenbank (und damit im DB-Backup). Stelle nach dem ersten Login im Admin-Bereich bei den Speicherregeln „alles → Datenbank“ ein und setze ein globales Upload-Limit (Beispiel: 50 MiB). Die Speicherart „Lokal“ steht im Stack nicht zur Verfügung (kein beschreibbarer Pfad, Root-Dateisystem schreibgeschützt); S3 ist über den Admin-Bereich weiterhin möglich.
 

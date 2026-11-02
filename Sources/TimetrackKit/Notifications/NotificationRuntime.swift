@@ -45,9 +45,9 @@ public struct NotificationOptions: Sendable {
     /// Test hook: overrides the tick interval (default 60 s).
     var interval: TimeInterval = 60
 
-    public init(environment: [String: String] = ProcessInfo.processInfo.environment) { self.environment = environment }
+    public init(environment: [String: String] = ProcessInfo.processInfo.environment) { self.environment = EnvironmentSanitizer.sanitized(environment) }
     init(environment: [String: String], transport: (any PushTransport)?, interval: TimeInterval = 60) {
-        self.environment = environment; self.transport = transport; self.interval = interval
+        self.environment = EnvironmentSanitizer.sanitized(environment); self.transport = transport; self.interval = interval
     }
     /// `NOTIFICATIONS_ENABLED=false` disables the background runner; the testing environment only runs it when explicitly `true`.
     func runnerEnabled(testing: Bool) -> Bool {
@@ -101,6 +101,9 @@ final class NotificationRuntime: @unchecked Sendable {
         }
     }
 
+    /// Start-up decisions for Web Push, APNs and the reminder runner (no secrets).
+    var featureStatuses: [FeatureStatus] = []
+
     func start() {
         lock.lock(); defer { lock.unlock() }
         guard task == nil else { return }
@@ -140,11 +143,10 @@ extension Application {
         set { storage[RuntimeKey.self] = newValue }
     }
 
-    func installNotifications(auth: AuthService, options: NotificationOptions) {
-        let vapid = VapidConfiguration(environment: options.environment)
-        if vapid == nil, options.environment["VAPID_PRIVATE_KEY"] != nil || options.environment["VAPID_SUBJECT"] != nil {
-            logger.warning("VAPID_PRIVATE_KEY/VAPID_SUBJECT are invalid or incomplete: Web Push stays unavailable")
-        }
+    func installNotifications(auth: AuthService, options: NotificationOptions) throws {
+        let features = try NotificationFeatures.evaluate(environment: options.environment)
+        let vapid = features.vapid
+        for warning in features.warnings { logger.warning("\(warning)") }
         var policy = PushEndpointPolicy()
         policy.pushAllowInsecureLoopback = options.pushAllowInsecureLoopback
         // A blank value (compose passes an unset variable as empty) keeps the ADR-0011 default list.
@@ -153,18 +155,16 @@ extension Application {
             if !parsed.isEmpty { policy.allowedHosts = parsed }
         }
         let transport = options.transport ?? HTTPPushTransport(group: eventLoopGroup)
-        let apnsConfiguration = ApnsConfiguration(environment: options.environment)
-        if apnsConfiguration == nil, ApnsConfiguration.anyConfigured(options.environment) {
-            logger.warning("APNS_* settings are invalid or incomplete: APNs push stays unavailable")
-        }
+        let apnsConfiguration = features.apns
         let apnsTransport = apnsConfiguration == nil ? nil : (options.apnsTransport ?? HTTP2ApnsTransport(group: eventLoopGroup))
         let apns = apnsConfiguration.flatMap { configuration in apnsTransport.map { ApnsSender(configuration: configuration, transport: $0) } }
         var service = NotificationService(auth: auth, vapid: vapid, transport: transport, policy: policy, apns: apns)
-        service.apnsEnvironment = options.environment.filter { $0.key.hasPrefix("APNS_") }
+        service.apnsEnvironment = features.apnsEnvironment
         var scheduler = NotificationScheduler(auth: auth, db: db, vapid: vapid, transport: transport, policy: policy, logger: logger)
         scheduler.apns = apns
         let runtime = NotificationRuntime(scheduler: scheduler, service: service, transport: transport, interval: options.interval)
         runtime.apnsTransport = apnsTransport
+        runtime.featureStatuses = features.statuses
         if let apns {
             let dispatcher = ApnsDispatcher(db: db, sender: apns, modules: auth.modules)
             let coordinator = ApnsSyncCoordinator(timing: options.syncTiming, logger: logger) { account, excluded in

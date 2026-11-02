@@ -3,7 +3,7 @@
 #
 #   deploy/swarm/create-secrets.sh [--dry-run] [--db-password-file FILE | --generate-db-password FILE]
 #                                  [--save-generated DIR] [--smtp-password-file FILE] [--oidc-client-secret-file FILE]
-#                                  [--apns-private-key-file FILE] [--add-only] [--prefix tt_]
+#                                  [--apns-private-key-file FILE] [--add-only] [--no-placeholders] [--name-suffix _2] [--prefix tt_]
 #
 # Secrets:
 #   tt_db_password          the password of the MariaDB user. Either read from --db-password-file, or generated with
@@ -22,9 +22,19 @@
 #                           validated with openssl without printing it; the PEM text (with line breaks) becomes the
 #                           secret value. Needs the APNs block in stack.yaml (docs/DEPLOYMENT.md).
 #
+# Placeholders: stack.yaml ALWAYS references tt_smtp_password, tt_oidc_client_secret and tt_apns_private_key (a Swarm
+#   refuses to deploy a stack whose secrets do not exist). Every one of these that is not created with a real value gets a
+#   placeholder secret holding the text TIMETRACK_PLACEHOLDER_UNSET; the container entrypoint and the backend treat it as
+#   "not configured". An existing secret is never touched, so the script is idempotent. --no-placeholders skips them.
+#
 # --add-only: for an existing stack. Skips tt_db_password, tt_storage_secret_key and tt_vapid_private_key (which must
-#   stay as they are) and creates only the optional secrets given by --smtp-password-file, --oidc-client-secret-file and
-#   --apns-private-key-file, e.g. to add APNs later.
+#   stay as they are). Creates the optional secrets given by --smtp-password-file, --oidc-client-secret-file and
+#   --apns-private-key-file, and a placeholder for each optional secret that does not exist yet. Without any file option it
+#   only adds the missing placeholders (the usual step after updating stack.yaml).
+#
+# --name-suffix SUFFIX: Docker secrets are immutable, so a placeholder (or an old value) cannot be replaced in place. A
+#   secret given with a file option is created as <name><SUFFIX> (for example tt_oidc_client_secret_2) and the script prints
+#   the .env line that makes the stack use it (SECRET_OIDC_CLIENT_SECRET_NAME=...); then run `docker stack deploy` again.
 #
 # Guarantees: values are never printed and never passed as command-line arguments (they travel through stdin and
 # files with mode 0600); existing secrets are never overwritten (the script aborts before creating anything).
@@ -42,6 +52,10 @@ OIDC_SECRET_FILE=""
 APNS_KEY_FILE=""
 SAVE_DIR=""
 ADD_ONLY=0
+PLACEHOLDERS=1
+SUFFIX=""
+# Content of placeholder secrets. Must match scripts/docker-entrypoint.sh and EnvironmentSanitizer in the backend.
+PLACEHOLDER="TIMETRACK_PLACEHOLDER_UNSET"
 
 die() { echo "create-secrets: $*" >&2; exit 1; }
 
@@ -51,6 +65,8 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY_RUN=1 ;;
     --add-only) ADD_ONLY=1 ;;
+    --no-placeholders) PLACEHOLDERS=0 ;;
+    --name-suffix) [ $# -ge 2 ] || die "--name-suffix needs a value"; SUFFIX="$2"; shift ;;
     --prefix) [ $# -ge 2 ] || die "--prefix needs a value"; PREFIX="$2"; shift ;;
     --db-password-file) [ $# -ge 2 ] || die "--db-password-file needs a path"; DB_PASSWORD_FILE="$2"; shift ;;
     --generate-db-password) [ $# -ge 2 ] || die "--generate-db-password needs a path"; GENERATE_DB_PASSWORD_FILE="$2"; shift ;;
@@ -66,8 +82,10 @@ done
 
 if [ "$ADD_ONLY" -eq 1 ]; then
   [ -z "$DB_PASSWORD_FILE$GENERATE_DB_PASSWORD_FILE$SAVE_DIR" ] || die "--add-only cannot be combined with the database password or --save-generated options"
-  [ -n "$SMTP_PASSWORD_FILE$OIDC_SECRET_FILE$APNS_KEY_FILE" ] || die "--add-only needs at least one of --smtp-password-file, --oidc-client-secret-file, --apns-private-key-file"
+  [ -n "$SMTP_PASSWORD_FILE$OIDC_SECRET_FILE$APNS_KEY_FILE" ] || [ "$PLACEHOLDERS" -eq 1 ] || die "--add-only with --no-placeholders needs at least one of --smtp-password-file, --oidc-client-secret-file, --apns-private-key-file"
 fi
+case "$SUFFIX" in *[!a-zA-Z0-9_.-]*) die "--name-suffix may only contain letters, digits, _ . -" ;; esac
+[ -z "$SUFFIX" ] || [ -n "$SMTP_PASSWORD_FILE$OIDC_SECRET_FILE$APNS_KEY_FILE" ] || die "--name-suffix needs one of --smtp-password-file, --oidc-client-secret-file, --apns-private-key-file"
 [ -z "$DB_PASSWORD_FILE" ] || [ -z "$GENERATE_DB_PASSWORD_FILE" ] || die "use either --db-password-file or --generate-db-password"
 case "$PREFIX" in *[!a-zA-Z0-9_.-]*|"") die "--prefix may only contain letters, digits, _ . -" ;; esac
 command -v openssl >/dev/null 2>&1 || die "openssl is required"
@@ -145,7 +163,7 @@ if [ -n "$APNS_KEY_FILE" ]; then
   ORDER+=(apns)
 fi
 
-name_of() {
+base_name() {
   case "$1" in
     db) echo "${PREFIX}db_password" ;;
     storage) echo "${PREFIX}storage_secret_key" ;;
@@ -155,6 +173,27 @@ name_of() {
     apns) echo "${PREFIX}apns_private_key" ;;
   esac
 }
+# Real optional secrets carry the suffix; everything else keeps its base name.
+name_of() {
+  case "$1" in
+    smtp|oidc|apns) echo "$(base_name "$1")${SUFFIX}" ;;
+    *) base_name "$1" ;;
+  esac
+}
+env_var_of() {
+  case "$1" in
+    smtp) echo SECRET_SMTP_PASSWORD_NAME ;;
+    oidc) echo SECRET_OIDC_CLIENT_SECRET_NAME ;;
+    apns) echo SECRET_APNS_KEY_NAME ;;
+  esac
+}
+# Optional secrets that get a placeholder: those not created with a real value in this run.
+PH=()
+if [ "$PLACEHOLDERS" -eq 1 ]; then
+  for key in smtp oidc apns; do
+    case " ${ORDER[*]-} " in *" $key "*) ;; *) PH+=("$key") ;; esac
+  done
+fi
 
 # ---- existence check (before anything is created) ----
 SWARM_OK=0
@@ -167,19 +206,26 @@ fi
 
 existing=()
 if [ "$SWARM_OK" -eq 1 ]; then
-  for key in "${ORDER[@]}"; do
+  for key in ${ORDER[@]+"${ORDER[@]}"}; do
     if docker secret inspect "$(name_of "$key")" >/dev/null 2>&1; then existing+=("$(name_of "$key")"); fi
   done
 fi
 if [ "${#existing[@]}" -gt 0 ]; then
-  die "refusing to overwrite existing secrets: ${existing[*]} (Docker secrets are immutable: create new ones with another --prefix and adapt stack.yaml, or remove them yourself first)"
+  die "refusing to overwrite existing secrets: ${existing[*]} (Docker secrets are immutable. For an optional secret that is only a placeholder, or to replace a value, use --name-suffix _2 and set the printed SECRET_*_NAME line in .env; otherwise use another --prefix or remove the secret yourself first)"
 fi
+# Placeholders are skipped when they exist already (idempotent).
+PH_NEW=(); PH_EXIST=()
+for key in ${PH[@]+"${PH[@]}"}; do
+  if [ "$SWARM_OK" -eq 1 ] && docker secret inspect "$(base_name "$key")" >/dev/null 2>&1; then PH_EXIST+=("$(base_name "$key")"); else PH_NEW+=("$key"); fi
+done
 
 # ---- create ----
 if [ "$DRY_RUN" -eq 1 ]; then
   echo "DRY RUN: nothing is created or written."
   [ "$SWARM_OK" -eq 1 ] || echo "(Swarm manager not reachable: existence of secrets not checked.)"
-  for key in "${ORDER[@]}"; do echo "would create secret: $(name_of "$key") ($(value_of "$key" | wc -c | tr -d ' ') characters)"; done
+  for key in ${ORDER[@]+"${ORDER[@]}"}; do echo "would create secret: $(name_of "$key") ($(value_of "$key" | wc -c | tr -d ' ') characters)"; done
+  for key in ${PH_NEW[@]+"${PH_NEW[@]}"}; do echo "would create placeholder secret: $(base_name "$key") (content: $PLACEHOLDER)"; done
+  for n in ${PH_EXIST[@]+"${PH_EXIST[@]}"}; do echo "exists, unchanged: $n"; done
   [ -z "$SAVE_DIR" ] || echo "would write the generated storage key and VAPID key to: $SAVE_DIR (mode 0600)"
   [ -z "$GENERATE_DB_PASSWORD_FILE" ] || echo "would write the generated database password to: $GENERATE_DB_PASSWORD_FILE (mode 0600)"
   exit 0
@@ -195,9 +241,17 @@ if [ -n "$SAVE_DIR" ]; then
   chmod 600 "$SAVE_DIR/$(name_of storage)" "$SAVE_DIR/$(name_of vapid)"
 fi
 
-for key in "${ORDER[@]}"; do
+for key in ${ORDER[@]+"${ORDER[@]}"}; do
   value_of "$key" | docker secret create "$(name_of "$key")" - >/dev/null
   echo "created secret: $(name_of "$key")"
+  if [ -n "$SUFFIX" ]; then
+    case "$key" in smtp|oidc|apns) echo "  -> add to .env:  $(env_var_of "$key")=$(name_of "$key")   (then docker stack deploy again)" ;; esac
+  fi
 done
+for key in ${PH_NEW[@]+"${PH_NEW[@]}"}; do
+  printf '%s' "$PLACEHOLDER" | docker secret create "$(base_name "$key")" - >/dev/null
+  echo "created placeholder secret: $(base_name "$key") (feature stays off until a real secret is set)"
+done
+for n in ${PH_EXIST[@]+"${PH_EXIST[@]}"}; do echo "exists, unchanged: $n"; done
 [ -z "$GENERATE_DB_PASSWORD_FILE" ] || echo "database password written to $GENERATE_DB_PASSWORD_FILE (mode 0600): use it for CREATE USER, store it in your password manager, then delete the file."
 [ -n "$SAVE_DIR" ] && echo "generated keys saved to $SAVE_DIR (mode 0600): move them into a password manager and delete them from disk." || echo "WARNING: without --save-generated the storage key and VAPID key can no longer be read back (Docker never shows secret values). Losing STORAGE_SECRET_KEY makes stored S3 credentials unrecoverable (docs/BETRIEB.md section 1)."

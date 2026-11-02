@@ -10,8 +10,13 @@ public struct SMTPConfiguration: Sendable {
     public let from: String
     public let fromName: String?
 
-    init?(environment: [String: String]) throws {
-        guard let host = environment["SMTP_HOST"], !host.isEmpty else { return nil }
+    /// `nil` when `SMTP_HOST` is empty or unset. With `required` (SMTP_ENABLED=true) a missing host is an error.
+    init?(environment rawEnvironment: [String: String], required: Bool = false) throws {
+        let environment = EnvironmentSanitizer.sanitized(rawEnvironment)
+        guard let host = environment["SMTP_HOST"] else {
+            if required { throw ConfigurationError(key: "SMTP_HOST", reason: "required when SMTP_ENABLED=true") }
+            return nil
+        }
         func invalid(_ key: String) -> ConfigurationError {
             ConfigurationError(key: key, reason: "invalid SMTP setting")
         }
@@ -24,11 +29,14 @@ public struct SMTPConfiguration: Sendable {
             throw invalid("SMTP_TLS")
         }
         let user = environment["SMTP_USER"], password = environment["SMTP_PASSWORD"]
-        guard (user == nil) == (password == nil),
-              user.map({ !$0.isEmpty && !$0.contains("\0") && $0.utf8.count <= 256 }) ?? true,
+        guard (user == nil) == (password == nil) else {
+            throw ConfigurationError(key: "SMTP_USER", reason: "SMTP_USER and SMTP_PASSWORD must be set together (Swarm: the secret tt_smtp_password must hold the real password, not the placeholder)")
+        }
+        guard user.map({ !$0.isEmpty && !$0.contains("\0") && $0.utf8.count <= 256 }) ?? true,
               password.map({ !$0.contains("\0") && $0.utf8.count <= 256 }) ?? true,
               tls != .off || user == nil else { throw invalid("SMTP_USER") }
-        guard let from = environment["SMTP_FROM"], Self.validAddress(from) else { throw invalid("SMTP_FROM") }
+        guard let from = environment["SMTP_FROM"] else { throw ConfigurationError(key: "SMTP_FROM", reason: "required when SMTP_HOST is set") }
+        guard Self.validAddress(from) else { throw invalid("SMTP_FROM") }
         let name = environment["SMTP_FROM_NAME"]
         guard name.map({ !$0.utf8.contains(13) && !$0.utf8.contains(10) && $0.utf8.count <= 256 }) ?? true else {
             throw invalid("SMTP_FROM_NAME")

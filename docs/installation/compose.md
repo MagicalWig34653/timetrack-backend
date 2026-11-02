@@ -90,7 +90,7 @@ Ersten Admin anlegen und die Instanz einrichten: **[Ersteinrichtung](ersteinrich
 ## Mehr zu Compose
 
 - **Aktualisieren:** `TIMETRACK_IMAGE` ändern, `docker compose pull && docker compose --profile db up -d`. Die Migration läuft dabei vor dem Backend: [Aktualisieren und Migrationen](../UPDATE.md).
-- **Optionale Dienste** (SMTP, OpenID Connect): die auskommentierten Zeilen in `compose.yaml` aktivieren, siehe [Ersteinrichtung](ersteinrichtung.md).
+- **Optionale Dienste** (SMTP, OpenID Connect, APNs): Variablen in der `.env` setzen (alle sind in `compose.yaml` durchgereicht, leer = nicht gesetzt; Schalter `<FUNKTION>_ENABLED`); Passwörter und Schlüssel als Datei in `secrets/` (`init-secrets.sh` legt Platzhalter an). Siehe [Konfigurationsreferenz](konfiguration.md).
 - **Lokale Dateiablage:** die Volume-Zeilen in `compose.yaml` einkommentieren; Standard ist die Datenbank.
 - `secrets/` und `.env` gehören nie in ein Repository.
 - Getestet: `docker compose config` und ein Lauf mit der mitgelieferten Datenbank. Nicht getestet: eigene MariaDB mit TLS, Proxy, echte Domain.

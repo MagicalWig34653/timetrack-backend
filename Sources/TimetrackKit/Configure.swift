@@ -81,9 +81,22 @@ public func configure(_ app: Application, configuration: Configuration? = nil, m
     app.middleware.use(PWAStaticMiddleware(directory: config.pwaStaticDirectory, cspMode: config.pwaCSPMode))
     app.asyncCommands.use(BootstrapAdmin(service: service), as: "bootstrap-admin")
     registerRoutes(app, service: service)
-    app.installNotifications(auth: service, options: notifications)
+    try app.installNotifications(auth: service, options: notifications)
     if let runtime = app.notificationRuntime { registerNotificationRoutes(app, auth: service, service: runtime.service) }
     app.installMaintenance(auth: service, options: try maintenance ?? MaintenanceOptions())
+    logFeatureOverview(app, config: config, notificationStatuses: app.notificationRuntime?.featureStatuses ?? [])
+}
+
+/// One start-up overview of the optional features (which are on or off and why). Never prints secret values.
+func logFeatureOverview(_ app: Application, config: Configuration, notificationStatuses: [FeatureStatus]) {
+    let modules = config.disabledModules.map(\.rawValue).sorted()
+    let storage: [FeatureStatus] = [
+        .on("Files", "storage rules are managed in the admin UI; local-path root restriction " + (EnvironmentSanitizer.processValue("STORAGE_LOCAL_ROOT") == nil ? "none" : "set")
+            + ", S3 credential key " + (EnvironmentSanitizer.processValue("STORAGE_SECRET_KEY") == nil ? "NOT set (S3 unusable)" : "set")),
+        modules.isEmpty ? .on("Modules", "all modules available") : .on("Modules", "disabled by operator: \(modules.joined(separator: ", "))")
+    ]
+    app.logger.notice("\(FeatureSummary.header)")
+    for status in config.featureStatuses + notificationStatuses + storage { app.logger.notice("\(status.logLine)") }
 }
 
 public struct StatusResponse: Content { public let status: String }

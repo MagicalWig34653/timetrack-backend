@@ -9,13 +9,18 @@ public struct OIDCConfiguration: Sendable {
     public let scopes: [String]
 
     /// Returns `nil` when neither OIDC_ISSUER nor OIDC_CLIENT_ID is set. Setting only one of them is a configuration error.
-    public init?(environment: [String: String]) throws {
+    /// With `required` (OIDC_ENABLED=true) missing settings are an error instead of "off".
+    public init?(environment rawEnvironment: [String: String], required: Bool = false) throws {
+        let environment = EnvironmentSanitizer.sanitized(rawEnvironment)
         func trimmed(_ key: String) -> String? {
             let value = environment[key]?.trimmingCharacters(in: .whitespacesAndNewlines)
             return (value?.isEmpty ?? true) ? nil : value
         }
         let issuer = trimmed("OIDC_ISSUER"), clientID = trimmed("OIDC_CLIENT_ID")
-        if issuer == nil && clientID == nil { return nil }
+        if issuer == nil && clientID == nil {
+            if required { throw ConfigurationError(key: "OIDC_ISSUER", reason: "OIDC_ISSUER and OIDC_CLIENT_ID are required when OIDC_ENABLED=true") }
+            return nil
+        }
         guard let issuer else { throw ConfigurationError(key: "OIDC_ISSUER", reason: "required when OIDC_CLIENT_ID is set") }
         guard let clientID else { throw ConfigurationError(key: "OIDC_CLIENT_ID", reason: "required when OIDC_ISSUER is set") }
         guard OIDCConfiguration.isAllowedEndpoint(issuer, allowQuery: false) else {

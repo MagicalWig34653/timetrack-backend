@@ -236,5 +236,74 @@ check "migrate-dir: changes no file" "$([ "$before" = "$(cksum "$D/old-stack.yml
 OUT="$(bash "$D/app/migrate-dir.sh" --old-stack "$SRC/stack.yaml" --old-env "$SRC/.env.example" 2>&1)"; RC=$?
 check "migrate-dir: identical stack and complete env: exit 0" "$([ "$RC" = 0 ] && has 'keine Auffälligkeiten' && echo 0 || echo 1)" "$OUT"
 
+# 18. migrate-dir.sh: .env proposal from an old stack file (no secret values, only keys the new stack takes from .env).
+new_case proposal 1
+cat > "$D/old2.yml" <<'YAML'
+services:
+  backend:
+    environment:
+      DB_HOST: ${DB_HOST}
+      APNS_KEY_ID: ABCDE12345  # key id
+      APNS_TEAM_ID: "ABCDE12345"
+      APNS_BUNDLE_IDS: com.example.timetrack
+      APNS_PRIVATE_KEY_FILE: /run/secrets/tt_apns_private_key
+      SMTP_HOST: smtp.example.test
+      SMTP_FROM_NAME: My Team
+      SMTP_PASSWORD: do-not-print-this
+      SMTP_USER: ${SMTP_USER}
+YAML
+printf 'TIMETRACK_IMAGE=x/y:z\nDB_HOST=h\nSMTP_USER=u\n' > "$D/old2.env"
+OUT="$(bash "$SRC/migrate-dir.sh" --old-stack "$D/old2.yml" --old-env "$D/old2.env" 2>&1)"; RC=$?
+check "proposal: literal values become .env lines" "$(has 'APNS_KEY_ID=ABCDE12345' && has 'APNS_BUNDLE_IDS=com.example.timetrack' && has 'SMTP_HOST=smtp.example.test' && has 'SMTP_FROM_NAME="My Team"' && echo 0 || echo 1)" "$OUT"
+check "proposal: no secret value, no *_FILE line, nothing already in .env" "$(! has 'do-not-print-this' && ! has 'APNS_PRIVATE_KEY_FILE=' && ! has 'SMTP_USER=' && echo 0 || echo 1)" "$OUT"
+
+# 19. create-secrets.sh against a stateful stub docker: placeholders, idempotence, --dry-run, --name-suffix.
+SB="$ROOT/sbin"; SS="$ROOT/secrets-state"; mkdir -p "$SB" "$SS"
+cat > "$SB/docker" <<'STUB'
+#!/usr/bin/env bash
+# Fake `docker` for create-secrets.sh: secrets are files in $SS (content = value).
+case "$1 $2" in
+  "info "*) echo "active/true"; exit 0 ;;
+  "secret inspect") [ -f "$SS/$3" ]; exit $? ;;
+  "secret create") [ ! -f "$SS/$3" ] || { echo "already exists" >&2; exit 1; }; cat > "$SS/$3"; exit 0 ;;
+esac
+case "$1" in info) echo "active/true" ;; esac
+exit 0
+STUB
+chmod +x "$SB/docker"
+cs() { OUT="$(PATH="$SB:$PATH" SS="$SS" bash "$SRC/create-secrets.sh" "$@" 2>&1)"; RC=$?; }
+printf 'existing-smtp-secret' > "$SS/tt_smtp_password"; printf 'existing-apns' > "$SS/tt_apns_private_key"
+cs --add-only --dry-run
+check "create-secrets --add-only --dry-run: plans only the missing placeholder, creates nothing" "$([ "$RC" = 0 ] && has 'would create placeholder secret: tt_oidc_client_secret' && has 'exists, unchanged: tt_smtp_password' && [ ! -f "$SS/tt_oidc_client_secret" ] && echo 0 || echo 1)" "$OUT"
+cs --add-only
+check "create-secrets --add-only: placeholder created, existing real secrets untouched" "$([ "$RC" = 0 ] && [ "$(cat "$SS/tt_oidc_client_secret")" = TIMETRACK_PLACEHOLDER_UNSET ] && [ "$(cat "$SS/tt_smtp_password")" = existing-smtp-secret ] && [ "$(cat "$SS/tt_apns_private_key")" = existing-apns ] && echo 0 || echo 1)" "$OUT"
+cs --add-only
+check "create-secrets --add-only again: idempotent (exit 0, nothing created)" "$([ "$RC" = 0 ] && ! has 'created' && has 'exists, unchanged' && echo 0 || echo 1)" "$OUT"
+printf 'oidc-real-value' > "$ROOT/oidc.txt"
+cs --add-only --oidc-client-secret-file "$ROOT/oidc.txt"
+check "create-secrets: real value over an existing placeholder is refused with a --name-suffix hint" "$([ "$RC" = 1 ] && has 'name-suffix' && [ "$(cat "$SS/tt_oidc_client_secret")" = TIMETRACK_PLACEHOLDER_UNSET ] && echo 0 || echo 1)" "$OUT"
+cs --add-only --oidc-client-secret-file "$ROOT/oidc.txt" --name-suffix _2
+check "create-secrets --name-suffix: new name and the .env line, value never printed" "$([ "$RC" = 0 ] && [ "$(cat "$SS/tt_oidc_client_secret_2")" = oidc-real-value ] && has 'SECRET_OIDC_CLIENT_SECRET_NAME=tt_oidc_client_secret_2' && ! has 'oidc-real-value' && echo 0 || echo 1)" "$OUT"
+rm -f "$SS"/*; printf 'x' > "$SS/tt_db_password"
+cs --add-only --no-placeholders
+check "create-secrets --add-only --no-placeholders without files: refused" "$([ "$RC" = 1 ] && echo 0 || echo 1)" "$OUT"
+
+# 20. docker-entrypoint.sh: placeholder or empty secret file leaves the variable unset; a real one is exported.
+EP="$ROOT/ep"; mkdir -p "$EP"
+sed "s|exec /app/App \"\$@\"|exec env|" "$SRC/../../scripts/docker-entrypoint.sh" > "$EP/entry.sh"
+printf 'TIMETRACK_PLACEHOLDER_UNSET\n' > "$EP/ph"; : > "$EP/empty"; printf 'real-pass\n' > "$EP/real"
+OUT="$(env -i PATH="$PATH" SMTP_PASSWORD_FILE="$EP/ph" OIDC_CLIENT_SECRET_FILE="$EP/empty" APNS_PRIVATE_KEY_FILE="$EP/real" sh "$EP/entry.sh" 2>&1)"; RC=$?
+check "entrypoint: placeholder and empty files leave the variable unset, real file is exported" "$([ "$RC" = 0 ] && ! has 'SMTP_PASSWORD=' && ! has 'OIDC_CLIENT_SECRET=' && has 'APNS_PRIVATE_KEY=real-pass' && has 'SMTP_PASSWORD: secret is a placeholder' && echo 0 || echo 1)" "$OUT"
+
+# 21. stack.yaml renders with the minimal required variables, with the example .env, and a missing required one fails (needs real docker).
+if command -v docker >/dev/null 2>&1 && docker stack config --help >/dev/null 2>&1; then
+  OUT="$(env -i PATH="$PATH" HOME="${HOME:-/}" TIMETRACK_IMAGE=x/y:z DB_HOST=db.example.test PUBLIC_BASE_URL=https://t.example.test WEBAUTHN_RP_ID=t.example.test WEBAUTHN_ORIGIN=https://t.example.test docker stack config -c "$SRC/stack.yaml" 2>&1)"; RC=$?
+  check "stack.yaml: renders with only the required variables, all six secrets referenced" "$([ "$RC" = 0 ] && has 'tt_apns_private_key' && has 'tt_smtp_password' && has 'tt_oidc_client_secret' && has 'SMTP_ENABLED: ""' && echo 0 || echo 1)" "$OUT"
+  OUT="$(env -i PATH="$PATH" HOME="${HOME:-/}" TIMETRACK_IMAGE=x/y:z DB_HOST=db.example.test docker stack config -c "$SRC/stack.yaml" 2>&1)"; RC=$?
+  check "stack.yaml: missing required variables are a clear error" "$([ "$RC" != 0 ] && has 'required variable' && echo 0 || echo 1)" "$OUT"
+  OUT="$( (set -a; . "$SRC/.env.example"; set +a; SMTP_HOST=smtp.example.test SMTP_PORT=465 SMTP_TLS=implicit SECRET_APNS_KEY_NAME=tt_apns_v2 docker stack config -c "$SRC/stack.yaml" -c "$SRC/override.example.yaml") 2>&1)"; RC=$?
+  check "stack.yaml: filled .env, SMTP values and renamed secret reach the rendering, override example merges" "$([ "$RC" = 0 ] && has 'SMTP_PORT: "465"' && has 'name: tt_apns_v2' && echo 0 || echo 1)" "$OUT"
+fi
+
 echo
 if [ "$FAILS" -eq 0 ]; then echo "test-update: all $N checks passed"; else echo "test-update: $FAILS of $N checks FAILED"; exit 1; fi

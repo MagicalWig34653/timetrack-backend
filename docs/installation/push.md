@@ -52,7 +52,7 @@ Der Server braucht vier Werte: `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_BUNDLE_IDS` 
    ```
 
    Das Skript prüft ohne Ausgabe, dass die Datei ein unverschlüsselter EC-P-256-Schlüssel im PEM-Format ist, übergibt ihn nur über stdin und überschreibt nie ein vorhandenes Secret. Danach die Datei aus dem Arbeitsverzeichnis löschen.
-2. In `stack.yaml` den auskommentierten Block „APNs push“ einkommentieren, dazu `- tt_apns_private_key` unter `secrets:` des Backends und `tt_apns_private_key:` im Top-Level-`secrets:` (wie bei SMTP und OIDC).
+2. `stack.yaml` bleibt unverändert: `APNS_*` und das Secret `tt_apns_private_key` sind schon durchgereicht; die Werte stehen in der `.env`.
 3. In `.env` eintragen:
 
    ```

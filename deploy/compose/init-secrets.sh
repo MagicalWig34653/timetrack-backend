@@ -29,4 +29,9 @@ gen_vapid_key() {
     | tail -c +8 | head -c 32 | base64 | tr '+/' '-_' | tr -d '=\n'
 }
 [ -e secrets/tt_vapid_private_key ] || gen_vapid_key | put tt_vapid_private_key
+# Optional features: placeholder files (never overwritten) so that compose.yaml can always reference them. The backend treats the
+# marker as "not configured"; put the real value (SMTP password, OIDC client secret, APNs .p8 text) into the file to use it.
+for optional in tt_smtp_password tt_oidc_client_secret tt_apns_private_key; do
+  [ -e "secrets/$optional" ] || printf '%s' "TIMETRACK_PLACEHOLDER_UNSET" | put "$optional"
+done
 echo "Done. BACK UP secrets/tt_storage_secret_key and secrets/tt_vapid_private_key: without the storage key, stored S3 credentials are unrecoverable."

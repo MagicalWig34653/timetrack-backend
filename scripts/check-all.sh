@@ -70,9 +70,9 @@ PY
 
 shell_syntax() {
   local f rc=0
-  for f in scripts/*.sh scripts/lib/*.sh deploy/swarm/*.sh; do bash -n "$f" || rc=1; done
+  for f in scripts/*.sh scripts/lib/*.sh deploy/swarm/*.sh deploy/compose/*.sh; do bash -n "$f" || rc=1; done
   if command -v shellcheck >/dev/null 2>&1; then
-    shellcheck -x -P SCRIPTDIR -S warning scripts/*.sh scripts/lib/*.sh deploy/swarm/*.sh || rc=1
+    shellcheck -x -P SCRIPTDIR -S warning scripts/*.sh scripts/lib/*.sh deploy/swarm/*.sh deploy/compose/*.sh || rc=1
   else
     echo "shellcheck not installed: only bash -n was run"
   fi
@@ -86,7 +86,12 @@ compose_config() {
 }
 
 stack_config() {
-  (set -a; . deploy/swarm/.env.example; set +a; docker stack config -c deploy/swarm/stack.yaml >/dev/null)
+  (set -a; . deploy/swarm/.env.example; set +a; docker stack config -c deploy/swarm/stack.yaml >/dev/null) || return 1
+  # Only the required variables (everything else empty/unset), and the example overlay merged.
+  env -i PATH="$PATH" HOME="${HOME:-/}" TIMETRACK_IMAGE=x/y:z DB_HOST=db.example.test PUBLIC_BASE_URL=https://t.example.test \
+    WEBAUTHN_RP_ID=t.example.test WEBAUTHN_ORIGIN=https://t.example.test docker stack config -c deploy/swarm/stack.yaml >/dev/null || return 1
+  (set -a; . deploy/swarm/.env.example; set +a; docker stack config -c deploy/swarm/stack.yaml -c deploy/swarm/override.example.yaml >/dev/null) || return 1
+  (cd deploy/compose && docker compose --env-file .env.example config -q)
 }
 
 # --- run ------------------------------------------------------------------------------------------------------------

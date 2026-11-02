@@ -27,7 +27,7 @@ final class ConfigurationTests: XCTestCase {
 
     func testInvalidConfigurationAndSecretRedaction() {
         let invalid = ["DATABASE_DRIVER": "postgres", "DB_PORT": "65536", "DB_TLS": "maybe",
-                       "DB_HOST": "", "SQLITE_PATH": " ", "SESSION_TTL_HOURS": "0", "AUTO_MIGRATE": "1",
+                       "SESSION_TTL_HOURS": "0", "AUTO_MIGRATE": "1",
                        "WEBAUTHN_RP_ID": "https://localhost", "WEBAUTHN_ORIGIN": "http://evil.test",
                        "PUBLIC_BASE_URL": "https://user:private-secret@example.com"]
         for (key, value) in invalid {

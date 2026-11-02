@@ -21,8 +21,11 @@ Der Server stellt die bestehenden Benachrichtigungsarten (`running_timer`, `pend
 
 `ApnsSyncMiddleware` (nur bei konfiguriertem APNs) löst nach einer erfolgreichen (2xx) schreibenden Anfrage auf `time`, `plan`, `vacation`, `absences`, `calendar`, `work-models`, `places` oder `automation` (Gerätetoken-Ereignisse) den `ApnsSyncCoordinator` aus. Dieser fasst je Konto zusammen: Senden nach 3 s Ruhe, höchstens alle 30 s (Apple drosselt stille Pushes), asynchron außerhalb der Anfrage; Fehler werden nur mit Fehlertyp geloggt. Optionaler Header `X-Timetrack-Device` mit der Geräte-ID aus `POST /me/push-devices` schließt das auslösende Gerät aus, wenn alle zusammengefassten Änderungen von ihm stammen (gemischte oder unbekannte Herkunft: alle Geräte). `sendSyncHint` sendet nicht an gesperrte Konten oder wenn alle Push-Kategorien des Kontos aus sind (eigener Schalter fehlt bewusst). Nicht ausgelöst: MCP-Schreibaufrufe (JSON-RPC, Lese-/Schreibart nicht am Pfad erkennbar), Änderungen durch Wartungsjobs und Importe außerhalb der genannten Pfade, Planfreigaben (`shares`). Der Zustand der Zusammenfassung liegt im Prozess; bei mehreren Replikas kann ein Konto je Replika einen Push auslösen.
 
+## Nachtrag ENV-STACK (02.11.2026)
+
+Der Schlüssel ist als Swarm-Secret `tt_apns_private_key` verdrahtet: `stack.yaml` referenziert ihn immer, `create-secrets.sh --add-only` legt bei Bedarf einen Platzhalter an, das Backend behandelt ihn als nicht gesetzt. Schalter `APNS_ENABLED` (`true` = unvollständig ist ein Startfehler, `false` = aus, leer = automatisch wie bisher). Bewertung der Alternativen: `docs/handoffs/ENV-STACK.md`.
+
 ## Offen
 
-- Verdrahtung des Schlüssels als Docker-/Swarm-Secret in `deploy/` (der Entrypoint übersetzt `APNS_PRIVATE_KEY_FILE` bereits).
 - Echter Test gegen Sandbox und Produktion; der Aufruf der Apple-Hosts ist nur gegen einen Testdouble geprüft.
 - Wartungsjob: Geräte ohne Erfolg über lange Zeit werden nur über die APNs-Antworten bereinigt (kein Zeitlimit wie bei Web Push).

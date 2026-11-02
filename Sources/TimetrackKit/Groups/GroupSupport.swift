@@ -53,7 +53,7 @@ enum GroupTokens {
     // MARK: Stored link tokens (SEC-10)
 
     /// Base64 key used to encrypt the owner-visible link token at rest; defaults to `STORAGE_SECRET_KEY`. Tests replace it.
-    nonisolated(unsafe) static var keyProvider: @Sendable () -> String? = { ProcessInfo.processInfo.environment["STORAGE_SECRET_KEY"] }
+    nonisolated(unsafe) static var keyProvider: @Sendable () -> String? = { EnvironmentSanitizer.processValue("STORAGE_SECRET_KEY") }
     private static let prefix = "enc1:"
     private static func box() -> SecretBox? { SecretBox(base64Key: keyProvider(), purpose: "timetrack.groups.linktoken.v1") }
 

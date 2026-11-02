@@ -16,7 +16,8 @@ public struct MaintenanceOptions: Sendable {
     /// Test hook: delay before the first periodic run (default 15...75 s random, so replicas do not align).
     var initialDelay: TimeInterval?
 
-    public init(environment: [String: String] = ProcessInfo.processInfo.environment) throws {
+    public init(environment rawEnvironment: [String: String] = ProcessInfo.processInfo.environment) throws {
+        let environment = EnvironmentSanitizer.sanitized(rawEnvironment)
         func integer(_ key: String, _ fallback: Int, _ range: ClosedRange<Int>) throws -> Int {
             guard let raw = environment[key], !raw.isEmpty else { return fallback }
             guard let value = Int(raw), range.contains(value) else {

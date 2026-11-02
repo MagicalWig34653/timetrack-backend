@@ -36,6 +36,7 @@ public struct Configuration: Sendable {
     public let pwaStaticDirectory: String
     /// `PWA_CSP_MODE` (enforce, report-only, off): operator emergency brake for the Content-Security-Policy of the PWA shell.
     let pwaCSPMode: PWAContentSecurityPolicy.Mode
+    /// `SMTP_HOST` when e-mail is enabled (SMTP_ENABLED), otherwise nil.
     public let smtpHost: String?
     public let smtpPort: Int
     public let smtp: SMTPConfiguration?
@@ -45,8 +46,12 @@ public struct Configuration: Sendable {
     public let trustedProxies: TrustedProxies
     /// Build metadata from the image (TIMETRACK_VERSION / _REVISION / _BUILD_DATE), see SystemInfo.swift.
     public let buildInfo: BuildInfo
+    /// Decisions of the optional features handled here (SMTP, OIDC, Apple app IDs) for the start-up overview, without secrets.
+    public let featureStatuses: [FeatureStatus]
 
-    public init(environment: [String: String] = ProcessInfo.processInfo.environment) throws {
+    /// An empty variable counts as unset (`EnvironmentSanitizer`), so `.env` templates can pass every variable through.
+    public init(environment rawEnvironment: [String: String] = ProcessInfo.processInfo.environment) throws {
+        let environment = EnvironmentSanitizer.sanitized(rawEnvironment)
         func value(_ key: String, _ fallback: String) throws -> String {
             let result = environment[key] ?? fallback
             guard !result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -84,10 +89,27 @@ public struct Configuration: Sendable {
         }
         pwaCSPMode = mode
         buildInfo = BuildInfo(environment: environment)
-        smtpHost = environment["SMTP_HOST"].flatMap { $0.isEmpty ? nil : $0 }
-        smtpPort = try integer("SMTP_PORT", "587", 1...65535)
-        smtp = try SMTPConfiguration(environment: environment)
-        oidc = try OIDCConfiguration(environment: environment)
+        var statuses: [FeatureStatus] = []
+        switch try FeatureMode.read("SMTP_ENABLED", in: environment) {
+        case .disabled: smtp = nil; statuses.append(.offBySwitch("SMTP", "SMTP_ENABLED"))
+        case let mode: smtp = try SMTPConfiguration(environment: environment, required: mode == .enabled)
+        }
+        smtpHost = smtp?.host
+        smtpPort = smtp?.port ?? 587
+        if let smtp {
+            statuses.append(.on("SMTP", "host=\(smtp.host) port=\(smtp.port) tls=\(smtp.tls.rawValue) from=\(smtp.from) authentication=\(smtp.user == nil ? "none" : "user and password")"))
+        } else if !statuses.contains(where: { $0.name == "SMTP" }) {
+            statuses.append(.off("SMTP", "SMTP_HOST is empty"))
+        }
+        switch try FeatureMode.read("OIDC_ENABLED", in: environment) {
+        case .disabled: oidc = nil; statuses.append(.offBySwitch("OIDC", "OIDC_ENABLED"))
+        case let mode: oidc = try OIDCConfiguration(environment: environment, required: mode == .enabled)
+        }
+        if let oidc {
+            statuses.append(.on("OIDC", "issuer=\(oidc.issuer) client secret=\(oidc.clientSecret == nil ? "not set (public client)" : "set") name=\(oidc.name)"))
+        } else if !statuses.contains(where: { $0.name == "OIDC" }) {
+            statuses.append(.off("OIDC", "OIDC_ISSUER and OIDC_CLIENT_ID are empty"))
+        }
         trustedProxies = try TrustedProxies(cidrs: environment["TRUSTED_PROXY_CIDRS"] ?? "", header: environment["TRUSTED_PROXY_HEADER"])
         databaseDriver = driver
         dbHost = try value("DB_HOST", "127.0.0.1")
@@ -120,7 +142,18 @@ public struct Configuration: Sendable {
               originHost == webAuthnRPID || originHost.hasSuffix("." + webAuthnRPID) else {
             throw ConfigurationError(key: "WEBAUTHN_ORIGIN", reason: "host must match RP ID or its subdomain")
         }
-        appleAppIDs = try Self.parseAppleAppIDs(environment["APPLE_APP_IDS"] ?? "")
+        switch try FeatureMode.read("APPLE_APP_IDS_ENABLED", in: environment) {
+        case .disabled:
+            appleAppIDs = []; statuses.append(.offBySwitch("Apple app IDs", "APPLE_APP_IDS_ENABLED"))
+        case let mode:
+            appleAppIDs = try Self.parseAppleAppIDs(environment["APPLE_APP_IDS"] ?? "")
+            if appleAppIDs.isEmpty {
+                if mode == .enabled { throw ConfigurationError(key: "APPLE_APP_IDS", reason: "required when APPLE_APP_IDS_ENABLED=true") }
+                statuses.append(.off("Apple app IDs", "APPLE_APP_IDS is empty, apple-app-site-association answers 404"))
+            } else {
+                statuses.append(.on("Apple app IDs", "\(appleAppIDs.count) app ID(s) in apple-app-site-association"))
+            }
+        }
         publicBaseURL = try url("PUBLIC_BASE_URL", "http://localhost:18080")
         sessionTTLHours = try integer("SESSION_TTL_HOURS", "720", 1...8760)
         sessionIdleHours = try integer("SESSION_IDLE_HOURS", "336", 1...8760)
@@ -130,6 +163,7 @@ public struct Configuration: Sendable {
         case "false": autoMigrate = false
         default: throw ConfigurationError(key: "AUTO_MIGRATE", reason: "expected true or false")
         }
+        featureStatuses = statuses
     }
 
     /// Parses a comma separated list of `<TeamID>.<BundleID>`; blanks are ignored, duplicates removed, invalid entries rejected.

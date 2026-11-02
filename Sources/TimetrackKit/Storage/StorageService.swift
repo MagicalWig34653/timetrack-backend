@@ -22,16 +22,16 @@ enum StorageErrors {
 /// Per-application knobs. Production uses the defaults; tests replace single members.
 struct StorageEnvironment: Sendable {
     /// Base64 key for the S3 secret box; defaults to the process environment variable `STORAGE_SECRET_KEY`.
-    var secretKey: @Sendable () -> String? = { ProcessInfo.processInfo.environment["STORAGE_SECRET_KEY"] }
+    var secretKey: @Sendable () -> String? = { EnvironmentSanitizer.processValue("STORAGE_SECRET_KEY") }
     /// Optional hardening (SEC-09): comma-separated host names the S3 endpoint must match (`STORAGE_S3_ALLOWED_HOSTS`, case-insensitive,
     /// exact host). Empty means no restriction, the default for existing installations.
     var allowedS3Hosts: @Sendable () -> [String] = {
-        (ProcessInfo.processInfo.environment["STORAGE_S3_ALLOWED_HOSTS"] ?? "").split(separator: ",")
+        (EnvironmentSanitizer.processValue("STORAGE_S3_ALLOWED_HOSTS") ?? "").split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }.filter { !$0.isEmpty }
     }
     /// Optional hardening (SEC-09): the local storage path must lie inside this directory (`STORAGE_LOCAL_ROOT`). Unset means no restriction.
     var localRoot: @Sendable () -> String? = {
-        ProcessInfo.processInfo.environment["STORAGE_LOCAL_ROOT"].flatMap { $0.trimmingCharacters(in: .whitespaces).nilIfEmpty }
+        EnvironmentSanitizer.processValue("STORAGE_LOCAL_ROOT").flatMap { $0.trimmingCharacters(in: .whitespaces).nilIfEmpty }
     }
     /// Wraps every resolved adapter (failure injection in tests).
     var decorate: @Sendable (any StorageBackend) -> any StorageBackend = { $0 }
