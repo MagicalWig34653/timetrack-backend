@@ -267,6 +267,19 @@ Verhalten: Das neue Backend wird erst „healthy“, wenn `/ready` 200 liefert (
 
 Manueller Rollback des Images: `docker service rollback timetrack_backend`. **Das Schema wird nicht zurückgerollt.** Ein Rückgang auf eine ältere Version nach einer angewendeten Migration ist nur sicher, wenn die Migration abwärtskompatibel war (nicht zugesichert); im Zweifel Restore aus dem Backup vor Schritt 1 (BETRIEB.md [Eigene MariaDB](installation/mariadb.md)). Bei Migrationen mit zerstörenden Änderungen (Release-Hinweise lesen) das Backend vorher auf 0 skalieren: `docker service scale timetrack_backend=0`.
 
+**`update.sh` hängt oder bricht ab (Fehlersuche beim Update).** Das Skript begrenzt jeden Abschnitt (Migration 300 s, Rollout 600 s, jeder einzelne `docker`/`curl`-Aufruf 60 s bzw. 30 s; über `MIGRATE_TIMEOUT` und `ROLLOUT_TIMEOUT` in Sekunden anpassbar) und zeigt bei Fehlschlag `docker service ps --no-trunc`, die letzten Logzeilen und Rückfallbefehle. Ein zweiter Lauf wird durch eine Sperre (`$TMPDIR` oder `/tmp`, `timetrack-update-<Stack>.lock`) verhindert, weil jeder Lauf den Migrationsjob **neu startet** (`service update --force`): Der Dienst `timetrack_migrate` erscheint im Log also nach jedem Skriptlauf erneut, auch wenn „No new migrations.“ gemeldet wird; Swarm startet einen fertigen Job nicht von selbst neu (`replicated-job`, `restart_policy: none`). Diagnose auf dem Manager:
+
+```sh
+docker service ps timetrack_migrate --no-trunc          # Complete? oder Running trotz fertigem Log
+docker service inspect timetrack_migrate --format '{{json .JobStatus}} {{json .Spec.TaskTemplate.ForceUpdate}}'
+docker service logs --tail 50 timetrack_migrate
+docker service inspect timetrack_backend --format '{{json .UpdateStatus}}'
+docker service ps timetrack_backend --no-trunc          # Tasks "Starting"/"Unhealthy"? Ursache bei Rollout-Timeout
+docker service logs --tail 100 timetrack_backend        # /ready 503, Pool-Zeitüberschreitungen
+```
+
+Abbrechen: `Strg+C` beendet nur das Skript (es zeigt dann die Hinweise); Swarm führt Job und Rolling Update weiter. Ein laufendes Rolling Update stoppt oder macht man rückgängig mit `docker service rollback timetrack_backend`; die alte Image-Zeile steht in `.env.bak`. Zeigt `timetrack_migrate` dauerhaft `Running`, obwohl das Log „No new migrations.“ meldet, hängt der Prozess beim Beenden: `docker service rm timetrack_migrate` ist unkritisch (der Job hält keine Daten; die Migration ist durch), danach `docker stack deploy` mit der aktuellen `.env` legt ihn neu an, oder das Backend mit `update.sh --skip-migrate --tag <Tag> --yes` ausrollen, nachdem `/ready` des laufenden Backends bzw. das Migrationslog die aktuelle Schemaversion bestätigt. Schlägt das Rollout fehl, obwohl die Migration lief, liegt es fast immer an `/ready` (Datenbank nicht erreichbar, Pool-Zeitüberschreitungen im Backend-Log).
+
 PWA aktualisieren: Die PWA ist Teil des Images, ein Update ist ein neues Image-Tag. In GitHub baut der Docker-Workflow die PWA aus dem Repository `timetrack-pwa` (Referenz: Repository-Variable `PWA_REF`, Standard `main`); für eine neue PWA-Version den Workflow neu starten (Push auf `main`, Tag `v*` oder manuell) und das neue Tag wie ein Backend-Update ausrollen (Abschnitt oben). Browser und Service Worker holen die neue Version beim nächsten Besuch.
 
 ## 14. Backup und Restore
