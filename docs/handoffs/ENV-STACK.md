@@ -49,7 +49,7 @@ Bestehende Deployments: `tt_smtp_password` und `tt_apns_private_key` existieren 
 
 - Swift `FeatureSwitchTests` (7): leer == ungesetzt für alle Variablen, Platzhalter, Matrix je Funktion, unvollständig + true = Fehler, keine Geheimnisse in Statuszeilen und Fehlern; `ConfigurationTests` angepasst (leere Werte sind kein Fehler mehr).
 - `scripts/test-update.sh` (54 Prüfungen): `.env`-Vorschlag, `create-secrets.sh` gegen Stub (Platzhalter, idempotent, dry-run, Suffix), Entrypoint, `docker stack config` (leer/minimal/gefüllt, umbenanntes Secret, Overlay).
-- Ergebnisse des vollständigen Laufs: siehe `docs/STATUS.md`.
+- Vollständiger `swift test --build-system native -j 3` (Linux, swift:6.3-noble, SQLite) auf dem Stand vor dem Rebase: 539 Tests, 45 übersprungen, 0 Fehler. Nach Rebase auf 0.44.0 (73c7b01): ein Lauf mit 4 Fehlern (nicht ermittelt, nicht reproduzierbar; vermutlich zeitabhängig), der unmittelbar wiederholte Lauf: 543 Tests, 45 übersprungen, 0 Fehler. MariaDB-Lauf nicht nötig/nicht gemacht: die neuen Tests sind reine Umgebungs-Auswertungen ohne Datenbank.
 
 ## 6. Umstieg des Betreibers (Stack + override.yaml mit APNs und SMTP auf reine `.env`)
 
