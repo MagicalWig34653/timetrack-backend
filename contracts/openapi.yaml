@@ -1,8 +1,9 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.41.1
+  version: 0.42.0
   description: |
+    v0.42.0 (PLAN-OFFDAY, ADR-0035 Vorschlag, Verhaltensänderung ohne neue Felder): Planblöcke an Feiertagen, Urlaubs-, Krank- und Freistellungstagen zählen mit ihrer eigenen Dauer als geplante Mehrzeit. `PlanWeekDay.plannedSeconds` und `TimeWeekDay.plannedSeconds` sind dort nicht mehr 0, sondern die Plandauer; `PlanWeek.totals.differenceSeconds` und `TimeWeek.summary.plannedSeconds` enthalten sie; `TimeWeekDay.planActualDifferenceSeconds` ist auch an solchen Tagen gesetzt (nicht künftig, mit Plandauer). Das Soll bleibt 0 (halber Urlaubstag: halbes Tagessoll), die Tagesmarkierung und der Urlaubsverbrauch bleiben unverändert; `blockedBy` bleibt als reine Information erhalten (der Tag ist weiterhin Urlaub usw., Planen ist erlaubt). Plan bucht weiterhin keine Ist-Zeit: Zeitkonto, Statistik und Auswertung ändern sich nicht.
     v0.39.0 (P15, additiv): Archivierte Orte. `GET /places?archived=true|all` (Standard: nur aktive; `true` nur archivierte, `all` beide) und `POST /places/{id}/restore` stellt einen archivierten Ort wieder her (200 mit dem Ort, idempotent, fremde Orte 404). Kennzahl `archived` am Ort war schon vorhanden.
     v0.38.0 (P14e, ADR-0030 Nachtrag, additiv, nur Admin): APNs-Diagnose. GET /admin/apns (Zustand ohne Geheimnisse, fehlende oder ungültige APNS_*-Variablen, Gerätezahl, Hinweise) und POST /admin/apns/check (prüft live bei Apple, ob Schlüssel, Team und Bundle-IDs akzeptiert werden, mit einem erfundenen Gerätetoken; es wird nichts zugestellt; 6 je 10 Minuten).
     v0.37.1 (G1b): Besitzer-Detailansicht von Umfragen und Bestellrunden zeigt `token`/`path` jederzeit wieder (Migration g1b.add_group_link_tokens; ältere Zeilen erst nach rotate-token). v0.37.0 (G1, ADR-0033): Modul `groups` (sechster Modulschlüssel, ModuleKey/ModuleStatus). Öffentliche Umfragen (Termin- und Textumfragen, Einzel-/Mehrfachwahl, yes/maybe/no) und Bestellrunden (z. B. Dönerstag) mit Katalogen. Besitzer-API unter /api/v1/groups/{polls,orders,catalogs} (Sitzung + CSRF, Modul groups); öffentliche API unter /api/v1/public/groups/{token}/… ohne Anmeldung: das 256-Bit-Token ist die einzige Berechtigung (nur als Hash gespeichert, per rotate-token erneuerbar), Teilnehmer geben einen Anzeigenamen an und ändern ihre Stimme/ihren Eintrag mit einem Bearbeitungsschlüssel (Header X-Edit-Secret, nur als Hash gespeichert). Antworten enthalten keine Kontodaten, immer Cache-Control no-store und X-Robots-Tag noindex. Ratenbegrenzung je Client und Link (429 Retry-After). Freigabeseite der PWA: /g/<token>. Aufbewahrung: beendete/abgelaufene Umfragen und Runden werden nach GROUPS_RETENTION_DAYS (Standard 90) vom Aufräumjob gelöscht; Kontoexport polls/orders/catalogs, Kontolöschung entfernt alles. Neue Fehlercodes: group_closed, group_full, name_taken (409), answers_invalid, deadline_in_past (400), edit_secret_invalid (403), too_many_polls, too_many_orders, too_many_catalogs (409). Neue Migration g1.create_groups.
@@ -1269,7 +1270,7 @@ paths:
     get:
       operationId: getPlanWeek
       summary: Wochenplan abrufen
-      description: Wochenplan (K1, ADR-0021, Modul planning). Sieben Tage mit Plan, Soll aus dem Arbeitsmodell (ohne Ist), effektiv geplanten Sekunden und blockedBy (holiday, vacation, sick, excused), wenn Feiertag oder Abwesenheit den Plan überstimmt (ein halber Urlaubstag blockiert nicht). Summen der Woche.
+      description: Wochenplan (K1, ADR-0021, Modul planning). Sieben Tage mit Plan, Soll aus dem Arbeitsmodell (ohne Ist), geplanten Sekunden und blockedBy (holiday, vacation, sick, excused), wenn Feiertag oder Abwesenheit den Tag bestimmt (ein halber Urlaubstag setzt es nicht). Seit 0.42.0 sperrt blockedBy das Planen nicht, ein Plan dort zählt mit seiner Dauer als geplante Mehrzeit (Soll bleibt 0). Summen der Woche.
       security: [ { session: [] } ]
       parameters: [ { $ref: '#/components/parameters/IsoWeek' } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/PlanWeek' } } } }, '400': { $ref: '#/components/responses/BadRequest' } }
@@ -3184,7 +3185,7 @@ components:
         date: { type: string, format: date }
         weekday: { type: integer, minimum: 1, maximum: 7, description: 'ISO, Montag = 1' }
         targetSeconds: { type: integer }
-        plannedSeconds: { type: [integer, 'null'], description: 'Effektiv: 0 bei blockiertem Tag, null ohne Plan oder ohne Zeiten.' }
+        plannedSeconds: { type: [integer, 'null'], description: 'Dauer des Plans (seit 0.42.0 auch an blockierten Tagen, dort als geplante Mehrzeit bei Soll 0); null ohne Plan oder ohne Zeiten.' }
         blockedBy: { type: [string, 'null'], enum: [holiday, vacation, sick, excused, null] }
         plan: { oneOf: [ { $ref: '#/components/schemas/PlanDay' }, { type: 'null' } ] }
     PlanWeek:
@@ -3212,7 +3213,7 @@ components:
         planMode: { type: [string, 'null'], enum: [office, home, customer, school, off, null] }
         planBlocks: { type: [array, 'null'], items: { $ref: '#/components/schemas/PlanBlock' } }
         planHints: { type: array, items: { type: string } }
-        planActualDifferenceSeconds: { type: [integer, 'null'], description: 'Bewertete Ist-Arbeitszeit plus Gutschrift minus effektive geplante Blockdauer; null für künftige oder blockierte Tage und ohne Plandauer.' }
+        planActualDifferenceSeconds: { type: [integer, 'null'], description: 'Bewertete Ist-Arbeitszeit plus Gutschrift minus geplante Blockdauer; null für künftige Tage und ohne Plandauer (seit 0.42.0 auch an Feiertags-, Urlaubs-, Krank- und Freistellungstagen gesetzt).' }
         workSeconds: { type: integer, description: bewertete Arbeitszeit (evaluatedWorkSeconds) }
         creditSeconds: { type: integer }
         rawWorkSeconds: { type: integer }

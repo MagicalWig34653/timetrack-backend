@@ -148,15 +148,15 @@ extension AuthTests {
         let saved = try object(await api(app, context, .PUT, "plan/weeks/\(Self.week)", ["days": [day("2026-07-20"), day("2026-07-21"), day("2026-07-22"), day("2026-07-23", "home"), day("2026-07-24", "off", nil, nil)]]))
         let days = try XCTUnwrap(saved["days"] as? [[String: Any]])
         XCTAssertEqual(days.map { $0["weekday"] as? Int }, [1, 2, 3, 4, 5, 6, 7])
-        XCTAssertEqual(days[2]["blockedBy"] as? String, "vacation"); XCTAssertEqual(days[2]["plannedSeconds"] as? Int, 0)
+        XCTAssertEqual(days[2]["blockedBy"] as? String, "vacation"); XCTAssertEqual(days[2]["plannedSeconds"] as? Int, 8 * 3600, "PLAN-OFFDAY: a plan on a vacation day counts as planned extra time")
         XCTAssertEqual(days[2]["targetSeconds"] as? Int, 0)
         XCTAssertEqual((days[2]["plan"] as? [String: Any])?["plannedSeconds"] as? Int, 8 * 3600, "the stored plan stays visible")
         XCTAssertTrue(days[0]["blockedBy"] is NSNull); XCTAssertEqual(days[0]["plannedSeconds"] as? Int, 8 * 3600)
         XCTAssertTrue(days[4]["plannedSeconds"] is NSNull); XCTAssertEqual((days[4]["plan"] as? [String: Any])?["mode"] as? String, "off")
         XCTAssertTrue(days[5]["plan"] is NSNull)
         let totals = try XCTUnwrap(saved["totals"] as? [String: Any])
-        XCTAssertEqual(intValue(totals["plannedSeconds"]), 3 * 8 * 3600)
-        XCTAssertEqual(intValue(totals["differenceSeconds"]), 3 * 8 * 3600 - (138_600 - 27_720))
+        XCTAssertEqual(intValue(totals["plannedSeconds"]), 4 * 8 * 3600)
+        XCTAssertEqual(intValue(totals["differenceSeconds"]), 4 * 8 * 3600 - (138_600 - 27_720))
 
         // Without replace the other days stay; with replace=true omitted days are deleted.
         _ = try await api(app, context, .PUT, "plan/weeks/\(Self.week)", ["days": [day("2026-07-25", "home")]])
@@ -278,6 +278,63 @@ extension AuthTests {
         XCTAssertEqual(running.summary.targetSeconds, 138_600)
     }
 
+    /// PLAN-OFFDAY (ADR-0035, proposal): plan blocks on vacation, sick, holiday and excused days count as planned extra time.
+    func scenarioPlanOnBlockedDays(_ app: Application, _ auth: AuthService) async throws {
+        let (context, _) = try await registered(auth, db: app.db)
+        try await planningModel(app, context)
+        try await createAbsence(app, context, absenceBody("2026-07-21"))                      // Tuesday vacation
+        try await createAbsence(app, context, absenceBody("2026-07-22", kind: "sick"))        // Wednesday sick
+        try await api(app, context, .PUT, "time/days/2026-07-23", ["mark": "excused"], .ok)       // Thursday excused
+        try await api(app, context, .PUT, "time/days/2026-07-24", ["mark": "holiday"], .ok)   // Friday explicit holiday mark
+        let accountBefore = try object(await api(app, context, .GET, "time/account?asOf=2026-07-26"))
+        let blocks: [[String: Any]] = [["start": "08:00", "end": "12:00", "kind": "work"], ["start": "13:00", "end": "17:00", "kind": "school"]]
+        for date in ["2026-07-21", "2026-07-22", "2026-07-23", "2026-07-24"] {
+            _ = try await api(app, context, .PUT, "plan/days/\(date)", ["mode": "office", "blocks": blocks])
+        }
+        try await api(app, context, .POST, "time/segments", segmentBody("2026-07-21T06:00:00Z", "2026-07-21T08:00:00Z"), .created)   // 2 h booked on the vacation day
+
+        let plan = try object(await api(app, context, .GET, "plan/weeks/\(Self.week)"))
+        let planDays = try XCTUnwrap(plan["days"] as? [[String: Any]])
+        XCTAssertEqual(planDays.map { $0["blockedBy"] as? String }, [nil, "vacation", "sick", "excused", "holiday", nil, nil])
+        for index in 1...4 {
+            XCTAssertEqual(planDays[index]["targetSeconds"] as? Int, 0, "the target stays 0")
+            XCTAssertEqual(planDays[index]["plannedSeconds"] as? Int, 8 * 3600, "the plan counts with its own duration")
+        }
+        let planTotals = try XCTUnwrap(plan["totals"] as? [String: Any])
+        XCTAssertEqual(intValue(planTotals["plannedSeconds"]), 4 * 8 * 3600)
+        XCTAssertEqual(intValue(planTotals["differenceSeconds"]), 4 * 8 * 3600 - (intValue(planTotals["targetSeconds"]) ?? 0))
+
+        let week = try object(await api(app, context, .GET, "time/weeks/\(Self.week)"))
+        let days = try XCTUnwrap(week["days"] as? [[String: Any]])
+        XCTAssertEqual(days.map { $0["mark"] as? String }, ["work", "vacation", "sick", "excused", "holiday", "off", "off"])
+        for index in 1...4 {
+            XCTAssertEqual(days[index]["targetSeconds"] as? Int, 0)
+            XCTAssertEqual(days[index]["plannedSeconds"] as? Int, 8 * 3600)
+        }
+        XCTAssertEqual(days[1]["planActualDifferenceSeconds"] as? Int, 2 * 3600 - 8 * 3600, "the booking on the vacation day is compared with the plan")
+        XCTAssertEqual(days[2]["planActualDifferenceSeconds"] as? Int, -8 * 3600)
+        XCTAssertEqual(days[1]["balanceSeconds"] as? Int, 2 * 3600, "the booked time stays overtime (ADR-0034)")
+        XCTAssertEqual(days[1]["planBlocks"] is NSNull, false)
+        XCTAssertEqual(intValue((week["summary"] as? [String: Any])?["plannedSeconds"]), 4 * 8 * 3600)
+        XCTAssertEqual((week["summary"] as? [String: Any])?["vacationDays"] as? Double, 1, "the vacation day is still consumed")
+
+        // A plan books no time: the account does not change by planning on blocked days.
+        let accountAfter = try object(await api(app, context, .GET, "time/account?asOf=2026-07-26"))
+        XCTAssertEqual(intValue(accountAfter["balanceSeconds"])! - intValue(accountBefore["balanceSeconds"])!, 2 * 3600)
+        // Shares keep hiding place and note on those days.
+        let member = try await second(app, auth, context)
+        let share = try object(await api(app, context, .POST, "shares", ["recipientHandle": "member", "scopes": ["plan": true]], .created))
+        let view = try object(await api(app, member, .GET, "shares/incoming/\(share["id"] as! String)/view?from=2026-07-21&to=2026-07-21"))
+        let shared = try XCTUnwrap((view["plan"] as? [[String: Any]])?.first)
+        XCTAssertEqual(((shared["blocks"] as? [[String: Any]]) ?? []).map { Set($0.keys) }, [Set(["start", "end", "kind"]), Set(["start", "end", "kind"])])
+        // Half vacation day keeps behaving as before: not blocked, plan counts.
+        try await createAbsence(app, context, absenceBody("2026-07-27", first: true))
+        _ = try await api(app, context, .PUT, "plan/days/2026-07-27", ["mode": "office", "plannedStart": "12:00", "plannedEnd": "16:00"])
+        let nextWeek = try object(await api(app, context, .GET, "plan/weeks/2026-W31"))
+        let monday = try XCTUnwrap((nextWeek["days"] as? [[String: Any]])?.first)
+        XCTAssertTrue(monday["blockedBy"] is NSNull); XCTAssertEqual(monday["plannedSeconds"] as? Int, 4 * 3600)
+    }
+
     func scenarioWeekQueryBudget(_ app: Application, _ auth: AuthService) async throws {
         let (context, _) = try await registered(auth, db: app.db)
         let accountId = try context.account.requireID()
@@ -316,7 +373,7 @@ extension AuthTests {
     }
 
     func weekScenarios() -> [Scenario] {
-        [scenarioPlanDayTimes, scenarioPlanBlocks, scenarioPlanBlocksPlacesAndIsolation, scenarioPlanWeek, scenarioPlanWeekIsolationAndShares, scenarioTimeWeek, scenarioWeekQueryBudget, scenarioWeekEndpointsRequireSession]
+        [scenarioPlanDayTimes, scenarioPlanBlocks, scenarioPlanBlocksPlacesAndIsolation, scenarioPlanWeek, scenarioPlanWeekIsolationAndShares, scenarioTimeWeek, scenarioPlanOnBlockedDays, scenarioWeekQueryBudget, scenarioWeekEndpointsRequireSession]
     }
     func testWeekPlanningSQLite() async throws {
         setenv("DB_SQL_LOG", "1", 1); defer { unsetenv("DB_SQL_LOG") }

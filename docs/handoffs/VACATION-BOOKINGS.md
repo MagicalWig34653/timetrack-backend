@@ -19,7 +19,7 @@ PWA und Apple-Apps: Die Sperre, die der Nutzer erlebt hat, liegt dort (Backend l
 1. Sperren, deaktivierte Schaltflächen und Fehler-/Hinweistexte („An Urlaubstagen kann nicht gebucht werden“ o. ä.) entfernen.
 2. Optionaler Hinweis statt Sperre, nutzerseitig Deutsch: „Buchung an Urlaubstag: Die gebuchte Zeit zählt als Überstunde.“ Ableitbar aus `mark = vacation` und `workSeconds > 0` (oder `segmentsCount > 0`) in Tag/Woche.
 3. Anzeige: Tageszeile mit Urlaubsmarkierung und Buchung zeigt Urlaub und Ist-Zeit; Differenz `balanceSeconds` ist positiv (Ganztag) bzw. Ist minus halbes Soll (Halbtag). Prüfen, dass die Anzeige das Ist nicht bei Urlaub ausblendet (Wochen-, Monats-, Statistikansicht, Widget „heute“).
-4. Plan/Ist: an blockierten Tagen bleibt `planActualDifferenceSeconds` null; Clients sollen die Buchung als Ist zeigen, nicht als Planabweichung.
+4. Plan/Ist: ab Vertrag 0.42.0 (ADR-0035) ist `planActualDifferenceSeconds` auch an blockierten Tagen gesetzt, wenn ein Plan besteht.
 
 ## Offene Entscheidungen
 

@@ -396,7 +396,7 @@ struct PlanService: Sendable {
             let halfDay = evaluation.mark == .vacation && evaluation.targetOverrideSeconds != nil
             let blocked = [DayMarkKind.holiday, .vacation, .sick, .excused].contains(evaluation.mark) && !halfDay ? evaluation.mark.rawValue : nil
             days.append(.init(date: date, weekday: date.isoWeekday, targetSeconds: evaluation.targetSeconds,
-                              plannedSeconds: blocked != nil && plan != nil ? 0 : plan?.plannedSeconds, blockedBy: blocked, plan: plan))
+                              plannedSeconds: plan?.plannedSeconds, blockedBy: blocked, plan: plan))
         }
         let target = days.reduce(0) { $0 + $1.targetSeconds }, planned = days.reduce(0) { $0 + ($1.plannedSeconds ?? 0) }
         return .init(week: week.label, from: week.monday, to: week.sunday, days: days,

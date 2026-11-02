@@ -15,6 +15,8 @@ Ein Zeitfenster pro Plantag kann geteilte Schichten und eine Kombination aus Ber
 - Wochenansichten berechnen die Plansumme aus den Blöcken. Die Zeitwoche zeigt zusätzlich `planBlocks` und `planActualDifferenceSeconds`. `planHints` bewertet die im Plan sichtbaren Lücken und Arbeitsstrecken nach den Schwellen des Erwachsenenprofils (`planned_break_short`, `planned_work_stretch_long`, `planned_break_part_short`); dies sind unverbindliche Planungshinweise. Die bisherige rechtliche Bewertung tatsächlicher Zeitabschnitte bleibt getrennt. Planfreigaben geben pro Block nur Beginn, Ende und Art weiter. Export des eigenen Kontos und MCP enthalten die vollständigen Blöcke unter den bestehenden Kontorechten.
 - Fehler (HTTP 400): `plan_time_invalid`, `plan_blocks_invalid`, `plan_blocks_overlap`, `plan_kind_invalid`, `plan_note_invalid`. Unbekannte oder fremde Orte bleiben 404.
 
+Nachtrag PLAN-OFFDAY (ADR-0035): Auf blockierten Tagen zählt der Plan seit Vertrag 0.42.0 mit seiner Dauer; `planActualDifferenceSeconds` ist dort gesetzt.
+
 ## Folgen
 
 Bestehende Clients können weiterhin lesen und schreiben. Sie sehen bei geteilten Schichten nur den äußeren Rahmen und die aufsummierten Lücken. Ein alter `PUT` ersetzt die feinere Blockaufteilung vollständig; Clients sollen vor dem Schreiben ab API 0.35.0 `blocks` verwenden. Das ICS-Abo (N2) bleibt bei Ganztagsterminen und nennt Blöcke gemischter Tage in der Beschreibung (ohne Ort und Notiz); native Kalenderkonflikte bleiben Arbeit der geplanten EventKit-Brücke.

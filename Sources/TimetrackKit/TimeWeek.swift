@@ -180,16 +180,15 @@ struct TimeWeekService: Sendable {
             else { mark = "off" }
         }
         let isFuture = day.date > today
-        let blocked = [DayMarkKind.holiday, .vacation, .sick, .excused].contains(day.mark)
-            && !(day.mark == .vacation && day.targetOverrideSeconds != nil)
+        // PLAN-OFFDAY (ADR-0035, proposal): a plan on a holiday, vacation, sick or excused day counts with its own duration
+        // (planned extra time); the target stays 0 and the day keeps its mark.
         let planned = plan.flatMap { PlanTimes.blockSeconds($0.blocks ?? []) ?? PlanTimes.seconds(start: $0.plannedStart, end: $0.plannedEnd, breakMinutes: $0.plannedBreakMinutes) }
-        let effectivePlanned = blocked ? (plan == nil ? nil : 0) : planned
         let dayAbsences = absences.filter { $0.contains(day.date) && $0.status.isActive }
             .map { TimeWeekDayDTO.Absence(kind: $0.kind, status: $0.status, halfDay: $0.isHalfDay(day.date)) }
         return .init(date: day.date, weekday: day.date.isoWeekday, mark: mark, markSource: day.markSource, targetSeconds: day.targetSeconds,
-                     plannedSeconds: effectivePlanned, planMode: plan?.mode, planBlocks: plan?.blocks,
+                     plannedSeconds: planned, planMode: plan?.mode, planBlocks: plan?.blocks,
                      planHints: PlanTimes.hints(plan?.blocks ?? []),
-                     planActualDifferenceSeconds: isFuture || blocked ? nil : effectivePlanned.map { day.evaluatedWorkSeconds + day.creditSeconds - $0 },
+                     planActualDifferenceSeconds: isFuture ? nil : planned.map { day.evaluatedWorkSeconds + day.creditSeconds - $0 },
                      workSeconds: day.evaluatedWorkSeconds, creditSeconds: day.creditSeconds, rawWorkSeconds: day.rawWorkSeconds,
                      breakSeconds: gaps, breakDeductionSeconds: day.breakDeductionSeconds, travelSeconds: travel, schoolSeconds: school,
                      balanceSeconds: isFuture ? nil : day.deltaSeconds, firstStart: day.evaluatedStart, lastEnd: day.evaluatedEnd,

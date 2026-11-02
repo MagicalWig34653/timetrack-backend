@@ -18,7 +18,7 @@ Das Backend lehnt Buchungen an Urlaubstagen nirgends ab. Weder `POST /time/segme
 
 - **Krank und Freistellung:** gleiche Auswertung, ebenfalls keine Sperre im Backend (Tests belegen es); nicht geändert, da nicht gefordert.
 - **Ausdrückliche Gutschrift:** Ist an einem Urlaubstag (oder Krank/Freistellung/Feiertag) per `PUT /time/days/{date}` eine Gutschrift (`creditSeconds`) gesetzt, ersetzt diese die Arbeitszeit (`replacesWork`); Buchungen zählen dort nicht und werden nicht gerundet. Das wurde nicht geändert (bewusste Gutschrift, Importe nutzen sie). Entscheidung offen: soll bei Urlaub die Gutschrift zusätzlich statt ersetzend gelten?
-- **Plan/Ist:** An blockierten Tagen (Feiertag, Urlaub, Krank, Freistellung; halber Urlaubstag blockiert nicht) bleibt `planActualDifferenceSeconds = null` (Plan zählt 0, ADR-0021). Eine Buchung erscheint dort als `workSeconds`/`balanceSeconds`, nicht als Abweichung vom Plan.
+- **Plan/Ist:** An blockierten Tagen (Feiertag, Urlaub, Krank, Freistellung; halber Urlaubstag blockiert nicht) bleibt `planActualDifferenceSeconds = null` (Plan zählt 0, ADR-0021). Eine Buchung erscheint dort als `workSeconds`/`balanceSeconds`. **Überholt durch ADR-0035 (Vertrag 0.42.0):** Pläne an blockierten Tagen zählen mit ihrer Dauer, `planActualDifferenceSeconds` ist dort gesetzt.
 - **Zeitnachweis-Export (Arbeitszeit-Tabelle):** Die Zeile trägt weiter die Bemerkung „Urlaub“, zeigt aber die gebuchten Zeiten und die volle gebuchte Zeit als Differenz; die Soll-Formel passt dort nicht zum Tagessoll 0, daher erscheint die vorhandene Warnung „Soll abweichend“ in der Bemerkung. Das ist gewollt sichtbar.
 - **Feiertage:** gleiche Auswertung; Buchungen an Feiertagen zählen ebenfalls vollständig (Soll 0), ohne Änderung.
 
