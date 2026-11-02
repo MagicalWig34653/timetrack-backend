@@ -254,6 +254,20 @@ Regeln der Auflösung:
 Weiterhin sinnvoll: zusätzliches Rate-Limit am Proxy für `/api/v1/auth/`, `/api/v1/me/recovery/`, `/oauth/`, und das Backend nicht öffentlich veröffentlichen.
 Nicht geprüft: Verhalten mit echtem Proxy (nginx/Traefik) und Swarm-Overlay; geprüft sind die Auflösung und ein HTTP-Test mit Socket-Gegenstelle 127.0.0.1 als Proxy.
 
+### Notbremse für die CSP der PWA (`PWA_CSP_MODE`)
+
+Startet die PWA im Browser nicht mehr (Hinweis „Bitte Seite neu laden“, Konsole mit „Refused to execute a script …“ oder „Importing a module script failed“), lässt sich die strenge Richtlinie **ohne neues Image** auf Report-Only stellen oder abschalten:
+
+| Wert | Wirkung |
+| --- | --- |
+| `enforce` (Standard) | strenge Richtlinie, wie oben beschrieben |
+| `report-only` | dieselbe Richtlinie nur als `Content-Security-Policy-Report-Only` (der Browser blockiert nichts und meldet Verstöße in der Konsole); erzwungen bleibt nur `frame-ancestors 'none'` (Hülle zusätzlich `base-uri 'none'`) |
+| `off` | keine Skript-/Ressourcenrichtlinie; nur `frame-ancestors 'none'` (Hülle zusätzlich `base-uri 'none'`) bleibt |
+
+Swarm, sofort (neuer Task mit gleichem Image, Daten unberührt): `docker service update --env-add PWA_CSP_MODE=report-only timetrack_backend`. Zurück: `docker service update --env-add PWA_CSP_MODE=enforce timetrack_backend`. Dauerhaft in der `.env` bzw. Stack-Umgebung `PWA_CSP_MODE` setzen (`stack.yaml` und `compose.yaml` reichen die Variable durch; ein `docker stack deploy` ohne den Wert setzt sie auf `enforce` zurück). Das Backend loggt beim Start eine Warnung, solange der Modus nicht `enforce` ist. Browser danach hart neu laden (Safari: Seite neu laden, notfalls Website-Daten der Domain löschen, damit ein alter Service Worker verschwindet). Die API-Antworten behalten ihre Richtlinie (`default-src 'none'`) in jedem Modus.
+
+**Betreiber-Proxy:** Setzt der Reverse Proxy (oder ein davorliegender Dienst wie ein CDN) ebenfalls einen `Content-Security-Policy`-Header, gilt im Browser die **Schnittmenge beider Richtlinien**; eine strengere Proxy-Richtlinie ohne die Skript-Hashes der Hülle blockiert die PWA, auch wenn das Backend korrekt sendet, und `PWA_CSP_MODE` ändert daran nichts. Dann den Proxy-Header entfernen oder die Skripte der Hülle dort erlauben. Das gilt ebenso für Proxy-Funktionen, die Inline-Skripte in das HTML einfügen oder es umschreiben (Analytics-/Optimierungs-Injektion): die Hashes gelten für die vom Backend gesendeten Bytes. Prüfen: `curl -sI https://timetrack.example.org/` und die Antwort mit dem Backend-Port (`curl -sI http://<Knoten>:<Port>/`) vergleichen; die `Content-Security-Policy`-Zeilen müssen identisch sein. Browser-Erweiterungen (Werbeblocker, Userscript-Manager) injizieren Inline- oder `blob:`-Skripte, die die Richtlinie blockiert; diese Meldungen in der Konsole sind dann erwartet und harmlos.
+
 ## 7. amd64-Build (Emulation) und Multi-Arch
 
 Entwicklungsrechner ist arm64; Produktionsziele sind amd64 und arm64. `scripts/dev-env.sh build-multiarch` baut beide Plattformen per `docker buildx`
