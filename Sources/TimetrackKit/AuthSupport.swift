@@ -33,7 +33,12 @@ struct APIErrorMiddleware: AsyncMiddleware {
                 request.logger.warning("infrastructure error: \(kind.rawValue) (\(type(of: error)))")
                 failure = APIError(.serviceUnavailable, "database_unavailable")
                 retryAfter = kind.retryAfterSeconds
-            } else { failure = APIError(.internalServerError, "not_ready") }
+            } else {
+                // Only the Swift type name and the method are logged (no message text, path, query or parameters),
+                // so unexpected server errors are visible to operators without leaking request data.
+                request.logger.error("unhandled error: \(type(of: error)) on \(request.route?.description ?? "unrouted")")
+                failure = APIError(.internalServerError, "not_ready")
+            }
             struct Envelope: Content { struct Detail: Content { let code: String; let message: String }; let error: Detail }
             let response = try await Envelope(error: .init(code: failure.code, message: ModuleMessages.message(failure.code) ?? (failure.code.replacingOccurrences(of: "_", with: " ") + ".")))
                 .encodeResponse(status: failure.status, for: request)

@@ -181,8 +181,25 @@ final class XLSXPackage {
                 out.append(chunk)
             }
         } catch let error as APIError { throw error } catch { throw ImportErrors.unsupported }
-        if out.range(of: Data("<!DOCTYPE".utf8)) != nil || out.range(of: Data("<!ENTITY".utf8)) != nil { throw ImportErrors.unsupported }
+        guard Self.isSafeXML(out) else { throw ImportErrors.unsupported }
         return out
+    }
+
+    /// Only plain UTF-8 (or ASCII) XML without DTD or entity declarations is parsed. Other encodings (UTF-16/32 with or without
+    /// BOM, declared legacy encodings) would hide `<!DOCTYPE`/`<!ENTITY` from the byte filter below while the XML parser still decodes them.
+    static func isSafeXML(_ data: Data) -> Bool {
+        let bytes = [UInt8](data.prefix(4))
+        if bytes.starts(with: [0xFE, 0xFF]) || bytes.starts(with: [0xFF, 0xFE]) || bytes.starts(with: [0x00, 0x00, 0xFE, 0xFF]) { return false }
+        if data.contains(0) { return false }
+        let head = String(decoding: data.prefix(256), as: UTF8.self)
+        if head.contains("<?xml"), let declaration = head.range(of: "?>").map({ head[head.startIndex..<$0.lowerBound] }),
+           let range = declaration.range(of: "encoding") {
+            let rest = declaration[range.upperBound...].drop { $0 == " " || $0 == "=" || $0 == "\"" || $0 == "'" }
+            let name = rest.prefix { $0 != "\"" && $0 != "'" && $0 != " " }.lowercased()
+            if !["utf-8", "us-ascii"].contains(name) { return false }
+        }
+        if data.range(of: Data("<!DOCTYPE".utf8)) != nil || data.range(of: Data("<!ENTITY".utf8)) != nil { return false }
+        return true
     }
 
     private struct Workbook { var sheets: [(name: String, rid: String)] = []; var date1904 = false }

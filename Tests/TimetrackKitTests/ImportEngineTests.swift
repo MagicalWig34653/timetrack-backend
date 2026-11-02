@@ -329,6 +329,42 @@ final class ImportEngineTests: XCTestCase {
         XCTAssertThrowsError(try ImportWorkbook.open(data: plainZip.data!, filename: "a.xlsx")) { XCTAssertEqual(($0 as? APIError)?.code, "unsupported_type") }
     }
 
+    /// H-01: a DTD/entity declaration hidden in UTF-16/UTF-32 or behind a declared legacy encoding must not reach the XML parser.
+    func testXMLInOtherEncodingsIsRefused() throws {
+        let tall = try TestXLSX.build(sheets: [("S", [[.shared("a")]])], extra: [])
+        let body = "<!DOCTYPE x [<!ENTITY a \"aaaa\">]><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData/></worksheet>"
+        func utf16(_ text: String, bigEndian: Bool, bom: Bool) -> Data {
+            var data = Data(bom ? (bigEndian ? [0xFE, 0xFF] : [0xFF, 0xFE]) : [])
+            for unit in text.utf16 { data.append(contentsOf: bigEndian ? [UInt8(unit >> 8), UInt8(unit & 0xFF)] : [UInt8(unit & 0xFF), UInt8(unit >> 8)]) }
+            return data
+        }
+        var utf32 = Data([0x00, 0x00, 0xFE, 0xFF])
+        for scalar in body.unicodeScalars { utf32.append(contentsOf: [0, 0, UInt8(scalar.value >> 8), UInt8(scalar.value & 0xFF)]) }
+        let variants: [(String, Data)] = [
+            ("utf16le-bom", utf16("<?xml version=\"1.0\" encoding=\"UTF-16\"?>" + body, bigEndian: false, bom: true)),
+            ("utf16be-bom", utf16("<?xml version=\"1.0\" encoding=\"UTF-16\"?>" + body, bigEndian: true, bom: true)),
+            ("utf16le-nobom", utf16(body, bigEndian: false, bom: false)),
+            ("utf16be-nobom", utf16(body, bigEndian: true, bom: false)),
+            ("utf32", utf32),
+            ("declared-latin1", Data(("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>" + body).utf8)),
+            ("declared-ebcdic", Data(("<?xml version='1.0' encoding='IBM037'?><worksheet/>").utf8)),
+        ]
+        for (label, bytes) in variants {
+            let archive = try Archive(data: tall, accessMode: .update)
+            try archive.remove(try XCTUnwrap(archive["xl/worksheets/sheet1.xml"]))
+            try TestXLSX.add(archive, "xl/worksheets/sheet1.xml", bytes)
+            XCTAssertThrowsError(try ImportWorkbook.open(data: archive.data!, filename: "a.xlsx").sheet("S"), label) {
+                XCTAssertEqual(($0 as? APIError)?.code, "unsupported_type", label)
+            }
+        }
+        // Plain UTF-8, with and without BOM and an explicit declaration, still works.
+        let ok = "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData/></worksheet>"
+        for (label, bytes) in [("plain", Data(ok.utf8)), ("bom", Data([0xEF, 0xBB, 0xBF]) + Data(ok.utf8)),
+                               ("declared", Data(("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" + ok).utf8))] {
+            XCTAssertTrue(XLSXPackage.isSafeXML(bytes), label)
+        }
+    }
+
     func testSniffingByContentAndRowLimit() throws {
         let csvData = Data("a;b\n1;2\n".utf8)
         let xlsx = try TestXLSX.build(sheets: [("S", [[.shared("a")]])])

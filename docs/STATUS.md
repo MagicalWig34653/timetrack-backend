@@ -1,5 +1,7 @@
 # Aktueller Projektstand
 
+**SEC-D (02.11.2026):** optionale Härtung aus dem Sicherheitsreview: XLSX nur UTF-8 (H-01), S3-/Pfad-Allow-Lists (SEC-09), verschlüsselte Gruppenlinks (SEC-10), Fehlertyp-Logging (SEC-16); SEC-14/17 dokumentiert. Details `docs/handoffs/SEC-D.md`.
+
 **Dependabot-Sicherheitswarnungen 01.11.2026:** 21 offene Alerts, alle npm in `site/package-lock.json` (Scope development, Site-/Docs-Build, nicht im Swift-Produktionsimage). `@redocly/cli` 1.34.5 auf 1.34.22 (Patch) angehoben, `npm audit fix` ohne `--force` (u. a. fast-uri 3.1.9); `npm ci` und `npm run build` lokal grün. Offen bleiben Alerts, die nur über Major-Sprünge zu beheben sind (Redocly 2, VitePress/Vite, esbuild); geringes Risiko, da nur lokaler Dev-Server und Build mit eigenen Dateien.
 
 **Sitzungsabschluss 01.11.2026:** Backend `main` c05906e (Vertrag **0.39.0**), PWA `main` 4a71c83, Apple `main` 0da7d5e (TestFlight **Build 59**; SET-A noch nicht hochgeladen). Alles gepusht. **Vollständige Übergabe mit offenen Punkten und Stolpersteinen: `docs/handoffs/SESSION-2026-11-01.md`.** Kurz: GitHub-CI auf `main` ist nach den Reparaturen grün (CI inkl. MariaDB 12.3, Docker, Pages, CodeQL; verifiziert 01.11.2026 an f9107c7). Dependabot: #9 (vapor 4.122.3) gemergt; offen #10/#12/#6 (Site-Abhängigkeiten, `npm ci` wegen nicht passender Lock-Datei rot bzw. Redocly-Major 1→2, nicht mergen) und #11 (Sammel-Bump der Actions, nicht gemergt). Server-Update und Geräteprüfungen stehen aus. Regel: keine einseitigen Rahmen/Akzentbalken (`docs/DESIGN.md`).

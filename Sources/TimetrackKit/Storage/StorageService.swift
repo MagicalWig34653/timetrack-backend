@@ -22,11 +22,37 @@ enum StorageErrors {
 struct StorageEnvironment: Sendable {
     /// Base64 key for the S3 secret box; defaults to the process environment variable `STORAGE_SECRET_KEY`.
     var secretKey: @Sendable () -> String? = { ProcessInfo.processInfo.environment["STORAGE_SECRET_KEY"] }
+    /// Optional hardening (SEC-09): comma-separated host names the S3 endpoint must match (`STORAGE_S3_ALLOWED_HOSTS`, case-insensitive,
+    /// exact host). Empty means no restriction, the default for existing installations.
+    var allowedS3Hosts: @Sendable () -> [String] = {
+        (ProcessInfo.processInfo.environment["STORAGE_S3_ALLOWED_HOSTS"] ?? "").split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }.filter { !$0.isEmpty }
+    }
+    /// Optional hardening (SEC-09): the local storage path must lie inside this directory (`STORAGE_LOCAL_ROOT`). Unset means no restriction.
+    var localRoot: @Sendable () -> String? = {
+        ProcessInfo.processInfo.environment["STORAGE_LOCAL_ROOT"].flatMap { $0.trimmingCharacters(in: .whitespaces).nilIfEmpty }
+    }
     /// Wraps every resolved adapter (failure injection in tests).
     var decorate: @Sendable (any StorageBackend) -> any StorageBackend = { $0 }
     /// Runs between the object write and the database commit that marks the file `stored`.
     var beforeFinalize: (@Sendable () async throws -> Void)?
     var s3Timeout: TimeAmount = .seconds(30)
+}
+
+extension StorageEnvironment {
+    /// True when no allow-list is configured or the endpoint host is on it.
+    func permitsEndpoint(_ endpoint: String) -> Bool {
+        let allowed = allowedS3Hosts()
+        guard !allowed.isEmpty else { return true }
+        guard let host = URLComponents(string: endpoint)?.host?.lowercased() else { return false }
+        return allowed.contains(host)
+    }
+    /// True when no root is configured or the resolved path lies inside the resolved root.
+    func permitsLocal(_ path: String) -> Bool {
+        guard let configured = localRoot() else { return true }
+        guard let root = LocalFSBackend.realpath(configured), let real = LocalFSBackend.realpath(path) else { return false }
+        return real == root || real.hasPrefix(root.hasSuffix("/") ? root : root + "/")
+    }
 }
 
 struct StorageEnvironmentKey: StorageKey { typealias Value = StorageEnvironment }
@@ -97,11 +123,11 @@ struct StorageService: Sendable {
         if (usesS3 || input.s3 != nil) && box == nil { throw StorageErrors.notImplemented }
         let localPath = input.localPath?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         if usesLocal && localPath == nil { throw APIError.invalid }
-        if let localPath { try LocalFSBackend.validateRoot(localPath) }
+        if let localPath { try LocalFSBackend.validateRoot(localPath); guard env.permitsLocal(localPath) else { throw APIError.invalid } }
         if usesS3 && input.s3 == nil { throw APIError.invalid }
         let s3: (endpoint: String, region: String, bucket: String, pathStyle: Bool, keyId: String)?
         if let value = input.s3 {
-            guard let endpoint = value.endpoint?.trimmingCharacters(in: .whitespaces).nilIfEmpty, Self.validEndpoint(endpoint),
+            guard let endpoint = value.endpoint?.trimmingCharacters(in: .whitespaces).nilIfEmpty, Self.validEndpoint(endpoint), env.permitsEndpoint(endpoint),
                   let region = value.region?.trimmingCharacters(in: .whitespaces).nilIfEmpty, region.count <= 64,
                   let bucket = value.bucket?.trimmingCharacters(in: .whitespaces).nilIfEmpty, bucket.count <= 255, !bucket.contains("/"),
                   let keyId = value.accessKeyId?.trimmingCharacters(in: .whitespaces).nilIfEmpty, keyId.count <= 128,
@@ -144,11 +170,11 @@ struct StorageService: Sendable {
         switch kind {
         case .db: adapter = DBBackend()
         case .local:
-            guard let path = settings?.localPath, !path.isEmpty else { throw StorageErrors.unavailable }
+            guard let path = settings?.localPath, !path.isEmpty, env.permitsLocal(path) else { throw StorageErrors.unavailable }
             adapter = LocalFSBackend(root: path)
         case .s3:
             guard let row = settings, let endpoint = row.s3Endpoint, let region = row.s3Region, let bucket = row.s3Bucket, let keyId = row.s3AccessKeyId,
-                  let ciphertext = row.s3SecretCiphertext, let nonce = row.s3SecretNonce, let box = SecretBox(base64Key: env.secretKey()),
+                  env.permitsEndpoint(endpoint), let ciphertext = row.s3SecretCiphertext, let nonce = row.s3SecretNonce, let box = SecretBox(base64Key: env.secretKey()),
                   let secret = try? box.open(ciphertext: ciphertext, nonce: nonce) else { throw StorageErrors.unavailable }
             let configuration = S3Configuration(endpoint: endpoint, region: region, bucket: bucket, pathStyle: row.s3PathStyle, accessKeyId: keyId, secretAccessKey: secret)
             adapter = S3Backend(client: S3Client(configuration: configuration, client: client, timeout: env.s3Timeout))

@@ -133,6 +133,34 @@ extension AuthTests {
         }
     }
 
+    /// SEC-10: with a server key the owner-visible link token is stored encrypted; legacy plaintext rows keep working.
+    func testG1LinkTokenIsEncryptedAtRestWhenKeyConfigured() async throws {
+        let previous = GroupTokens.keyProvider
+        defer { GroupTokens.keyProvider = previous }
+        GroupTokens.keyProvider = { AuthTests.testKey }
+        try await gWithApp { app, auth in
+            let (owner, _) = try await registered(auth, db: app.db)
+            let created = try object(await api(app, owner, .POST, "groups/polls",
+                ["title": "Pizza?", "kind": "text", "choiceMode": "single", "options": [["label": "Ja"], ["label": "Nein"]]], .created))
+            let token = try XCTUnwrap(created["token"] as? String), id = try XCTUnwrap(created["id"] as? String)
+            let row = try await XCTUnwrapAsync(try await GroupPollRecord.find(UUID(uuidString: id), on: app.db))
+            let stored = try XCTUnwrap(row.linkToken)
+            XCTAssertTrue(stored.hasPrefix("enc1:")); XCTAssertFalse(stored.contains(token))
+            let again = try object(await api(app, owner, .GET, "groups/polls/" + id))
+            XCTAssertEqual(again["token"] as? String, token)
+            // Legacy plaintext value is still shown; a wrong key hides the link instead of failing.
+            row.linkToken = token; try await row.update(on: app.db)
+            let legacy = try object(await api(app, owner, .GET, "groups/polls/" + id))
+            XCTAssertEqual(legacy["token"] as? String, token)
+            row.linkToken = stored; try await row.update(on: app.db)
+            GroupTokens.keyProvider = { Data(repeating: 7, count: 32).base64EncodedString() }
+            let wrongKey = try object(await api(app, owner, .GET, "groups/polls/" + id))
+            XCTAssertNil(wrongKey["token"] as? String)
+            // Public access never depended on the stored token.
+            try await gPublic(app, .GET, token)
+        }
+    }
+
     func testG1UnknownMalformedAndWrongTypeTokens() async throws {
         try await gWithApp { app, auth in
             let (owner, _) = try await registered(auth, db: app.db)

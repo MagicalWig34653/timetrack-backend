@@ -82,4 +82,27 @@ final class InfrastructureErrorTests: XCTestCase, @unchecked Sendable {
         }
         try await app.asyncShutdown()
     }
+
+    /// SEC-16: unknown errors stay a generic 500 for the client, but the log records the type and the route template only.
+    func testUnknownErrorIsLoggedWithTypeAndRouteTemplateOnly() async throws {
+        let sink = LogSink()
+        let app = try await Application.make(.testing)
+        app.logger = Logger(label: "sec16", factory: { _ in sink })
+        app.middleware.use(APIErrorMiddleware())
+        app.get("api", "things", ":id") { _ async throws -> String in throw Bug() }
+        do {
+            try await app.test(.GET, "api/things/secret-value-123?token=abc") { response async throws in
+                XCTAssertEqual(response.status, .internalServerError)
+                XCTAssertFalse(response.body.string.contains("Bug"))
+            }
+            let all = sink.messages.filter { $0.contains("unhandled error") }.joined(separator: "\n")
+            XCTAssertTrue(all.contains("unhandled error: Bug on GET /api/things/:id"), all)
+            XCTAssertTrue(all.contains("api/things/:id"), all)
+            XCTAssertFalse(all.contains("secret-value-123") || all.contains("token=abc"), all)
+        } catch {
+            try await app.asyncShutdown()
+            throw error
+        }
+        try await app.asyncShutdown()
+    }
 }

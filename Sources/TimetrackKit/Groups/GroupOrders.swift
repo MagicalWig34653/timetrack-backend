@@ -31,7 +31,7 @@ enum OrderCore {
 
     static func dto(_ order: GroupOrderRecord, on db: any Database, now: Date, owner: Bool, token: String? = nil) async throws -> OrderDTO {
         let id = try order.requireID()
-        let shown = owner ? (token ?? order.linkToken) : nil
+        let shown = owner ? (token ?? GroupTokens.reveal(order.linkToken)) : nil
         let entries = try await entries(id, on: db).map(entryDTO)
         var suggestions: [CatalogItemDTO] = []
         if let catalogId = order.catalogId {
@@ -195,7 +195,7 @@ struct OrderService: Sendable {
         }
         let (token, hash) = GroupTokens.create()
         let order = GroupOrderRecord()
-        order.accountId = scope.accountId; order.tokenHash = hash; order.linkToken = token; order.title = title
+        order.accountId = scope.accountId; order.tokenHash = hash; order.linkToken = GroupTokens.seal(token); order.title = title
         order.note = try GroupText.block(input.note, max: GroupLimits.descriptionMax)
         order.deadline = input.deadline; order.catalogId = input.catalogId; order.createdAt = now; order.updatedAt = now
         try await order.create(on: scope.db)
@@ -238,7 +238,7 @@ struct OrderService: Sendable {
     func rotate(_ id: UUID, now: Date = Date()) async throws -> OrderDTO {
         let order = try await record(id)
         let (token, hash) = GroupTokens.create()
-        order.tokenHash = hash; order.linkToken = token; order.updatedAt = now
+        order.tokenHash = hash; order.linkToken = GroupTokens.seal(token); order.updatedAt = now
         try await order.update(on: scope.db)
         return try await OrderCore.dto(order, on: scope.db, now: now, owner: true, token: token)
     }

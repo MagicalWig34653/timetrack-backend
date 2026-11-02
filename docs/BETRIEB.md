@@ -18,6 +18,10 @@ Architektur der Speicherung: [ARCHITEKTUR.md](ARCHITEKTUR.md), Abschnitt 6.
 | Stack-Variablen (`.env`), Proxy-Konfiguration | Betreiber | im Konfigurations-Repository des Betreibers | nein |
 | Gebaute PWA, Image | Registry, PWA-Repo | reproduzierbar aus den Quellen | nein |
 
+Optionale Härtung der Speicher-Einstellungen (SEC-09, Review 01.11.2026): Ohne Angabe darf ein Administrator jeden `http(s)`-Endpunkt und jedes beschreibbare Verzeichnis eintragen (Betreiberrisiko bei kompromittiertem Admin-Konto: Anfragen in interne Netze, Schreiben außerhalb des Datenverzeichnisses). Wer das einschränken will, setzt Umgebungsvariablen: `STORAGE_S3_ALLOWED_HOSTS` (kommagetrennte Hostnamen, exakter Vergleich ohne Beachtung der Groß-/Kleinschreibung) und `STORAGE_LOCAL_ROOT` (Verzeichnis, unterhalb dessen der lokale Speicherpfad liegen muss, nach Auflösen von Symlinks). Gespeicherte Einstellungen außerhalb der Liste werden nicht mehr benutzt (`storage_unavailable`). Weiterleitungen des S3-Clients bleiben unverändert (der Vapor-Client folgt ihnen; mit gesetzter Host-Liste bleibt nur der erste Host kontrolliert).
+
+SEC-10: Mit gesetztem `STORAGE_SECRET_KEY` werden neu erzeugte oder rotierte Gruppenlinks (Umfragen, Bestellrunden) in der Datenbank verschlüsselt abgelegt (Präfix `enc1:`, AES-256-GCM, eigener Kontext). Bestehende Klartextwerte bleiben lesbar und werden erst bei der nächsten Rotation des Links verschlüsselt. Geht der Schlüssel verloren, zeigt die Besitzeransicht den Link nicht mehr an (neuen Link erzeugen); der öffentliche Zugang per Link ist nicht betroffen, weil er über den Hash läuft.
+
 Folgen fehlender Secrets:
 
 - **`STORAGE_SECRET_KEY` verloren**: das gespeicherte S3-Secret ist nicht mehr entschlüsselbar, S3-Dateien sind unlesbar

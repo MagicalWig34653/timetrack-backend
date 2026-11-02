@@ -49,6 +49,29 @@ enum GroupTokens {
         }
     }
     static func matches(_ secret: String, hash: String) -> Bool { Secrets.equal(Secrets.hash(secret), hash) }
+
+    // MARK: Stored link tokens (SEC-10)
+
+    /// Base64 key used to encrypt the owner-visible link token at rest; defaults to `STORAGE_SECRET_KEY`. Tests replace it.
+    nonisolated(unsafe) static var keyProvider: @Sendable () -> String? = { ProcessInfo.processInfo.environment["STORAGE_SECRET_KEY"] }
+    private static let prefix = "enc1:"
+    private static func box() -> SecretBox? { SecretBox(base64Key: keyProvider(), purpose: "timetrack.groups.linktoken.v1") }
+
+    /// Encrypts the token for the `link_token` column when a server key is configured (AES-256-GCM, `enc1:` + base64(nonce + ciphertext + tag));
+    /// otherwise it is stored as before so installations without the key keep the owner-visible link.
+    static func seal(_ token: String) -> String {
+        guard let box = box(), let sealed = try? box.seal(token) else { return token }
+        return prefix + (sealed.nonce + sealed.ciphertext).base64EncodedString()
+    }
+
+    /// Returns the plain token for a stored value: legacy plaintext as is, encrypted values only with the right key (otherwise nil, rotate the link).
+    static func reveal(_ stored: String?) -> String? {
+        guard let stored else { return nil }
+        guard stored.hasPrefix(prefix) else { return stored }
+        guard let box = box(), let data = Data(base64Encoded: String(stored.dropFirst(prefix.count))), data.count > 12 + 16,
+              let token = try? box.open(ciphertext: Data(data.dropFirst(12)), nonce: Data(data.prefix(12))) else { return nil }
+        return token
+    }
 }
 
 /// Fixed-window counters on top of `rate_limit_events` (cleaned up by the maintenance job).

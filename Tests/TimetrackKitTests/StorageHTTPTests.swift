@@ -239,6 +239,34 @@ extension AuthTests {
         let gone = try await StoredFileRecord.find(UUID(uuidString: largeId), on: app.db); XCTAssertNil(gone)
     }
 
+    /// SEC-09: optional operator allow-lists for the S3 endpoint host and the local storage directory.
+    func scenarioStorageAllowLists(_ app: Application, _ auth: AuthService) async throws {
+        let (admin, _) = try await registered(auth, db: app.db)
+        app.storageEnvironment.secretKey = { AuthTests.testKey }
+        let s3: (String) -> [String: Any] = { ["endpoint": $0, "region": "eu-1", "bucket": "b", "accessKeyId": "AK", "secretAccessKey": "S"] }
+        let root = try tempDirectory(); defer { try? FileManager.default.removeItem(atPath: root) }
+        let inside = root + "/data"; try FileManager.default.createDirectory(atPath: inside, withIntermediateDirectories: true)
+        let outside = try tempDirectory(); defer { try? FileManager.default.removeItem(atPath: outside) }
+
+        // No allow-list configured: unchanged behaviour.
+        try await api(app, admin, .PUT, "admin/storage", ["rules": [rule(nil, "db")], "s3": s3("http://169.254.169.254")])
+        try await api(app, admin, .PUT, "admin/storage", ["rules": [rule(nil, "db")], "localPath": outside])
+
+        app.storageEnvironment.allowedS3Hosts = { ["s3.example.com"] }
+        app.storageEnvironment.localRoot = { root }
+        try await api(app, admin, .PUT, "admin/storage", ["rules": [rule(nil, "db")], "s3": s3("http://169.254.169.254")], .badRequest)
+        try await api(app, admin, .PUT, "admin/storage", ["rules": [rule(nil, "db")], "s3": s3("https://127.0.0.1:9000")], .badRequest)
+        try await api(app, admin, .PUT, "admin/storage", ["rules": [rule(nil, "db")], "s3": s3("https://S3.Example.com")])
+        try await api(app, admin, .PUT, "admin/storage", ["rules": [rule(nil, "db")], "localPath": outside], .badRequest)
+        try await api(app, admin, .PUT, "admin/storage", ["rules": [rule(nil, "db")], "localPath": root + "/data/../.."], .badRequest)
+        try await api(app, admin, .PUT, "admin/storage", ["rules": [rule(nil, "local")], "localPath": inside])
+
+        // A previously stored location outside the allow-list is no longer used.
+        app.storageEnvironment.localRoot = { outside }
+        let settings = try await StorageSettingsRecord.find(StorageSettingsRecord.rowId, on: app.db)
+        XCTAssertThrowsError(try storageService(app, auth).backend(.local, settings: settings))
+    }
+
     func scenarioS3EndToEnd(_ app: Application, _ auth: AuthService) async throws {
         let fake = try await FakeS3.start()
         do {
@@ -409,7 +437,7 @@ extension AuthTests {
     }
 
     var storageScenarios: [Scenario] {
-        [scenarioStorageSettings, scenarioFilesCore, scenarioRulesApplyToNewUploadsOnly, scenarioS3EndToEnd, scenarioCompensation, scenarioAttachments, scenarioAttachmentCount, scenarioInlineDownload]
+        [scenarioStorageSettings, scenarioStorageAllowLists, scenarioFilesCore, scenarioRulesApplyToNewUploadsOnly, scenarioS3EndToEnd, scenarioCompensation, scenarioAttachments, scenarioAttachmentCount, scenarioInlineDownload]
     }
 
     func testStorageRESTSQLite() async throws {

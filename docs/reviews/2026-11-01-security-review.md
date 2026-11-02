@@ -86,14 +86,14 @@ Keine ausnutzbare Lücke mit hohem Schweregrad gefunden. Kontentrennung (IDOR), 
 - Ort: `Storage/StorageService.swift:133-137` (`validEndpoint`), `Storage/S3Client.swift:113-120` (verwendet den Vapor-Client, der Weiterleitungen folgt), `Storage/StorageService.swift:359-371` (`validateRoot`).
 - Beschreibung: Jeder `http(s)`-Host (auch Loopback, Link-Local, Metadaten-Adressen) ist als Endpunkt zulässig; der Pfad `localPath` darf jedes beschreibbare Verzeichnis außerhalb von `/` sein. Das ist die Aufgabe des Betreiber-Admins, aber kein Schutz gegen ein kompromittiertes Admin-Konto (SSRF in das interne Netz, Dateilesen/-schreiben außerhalb des Datenverzeichnisses).
 - Empfehlung: Optionale Allow-List (`STORAGE_S3_ALLOWED_HOSTS`, `STORAGE_LOCAL_ROOT`) per Umgebungsvariable; Weiterleitungen für den S3-Client abschalten; Schreiben nur unterhalb eines festen Wurzelverzeichnisses.
-- Status: offen (Akzeptanz möglich, dann in `docs/BETRIEB.md` als Betreiberrisiko vermerken).
+- Status: umgesetzt als optionale Härtung (Paket SEC-D, 01.11.2026): `STORAGE_S3_ALLOWED_HOSTS` und `STORAGE_LOCAL_ROOT` (Prüfung beim Speichern und bei der Nutzung; Test `scenarioStorageAllowLists`). Standard unverändert (keine Einschränkung, Betreiberrisiko in `docs/BETRIEB.md`). Weiterleitungen des S3-Clients bewusst nicht abgeschaltet (Vapor-Client ohne einfachen Schalter; Risiko bei gesetzter Host-Liste klein).
 
 ### SEC-10 Niedrig (2.6): Teilnehmerlinks der Gruppen stehen zusätzlich im Klartext in der Datenbank
 
 - Ort: `Groups/GroupModels.swift:6,33,91` (`link_token`), `Groups/GroupPolls.swift:219,278`, `docs/decisions/ADR-0033-gruppenmodul.md` (Nachtrag g1b).
 - Beschreibung: Entscheidung g1b (Besitzer sieht den Link wieder) hebt den Hash-Schutz auf: ein Datenbank- oder Backup-Leck gibt alle offenen Umfrage- und Bestelllinks frei (Lesen der Teilnehmernamen, Abstimmen). Bewusste, dokumentierte Abwägung; das Risiko ist auf anonyme Teilnahme begrenzt.
 - Empfehlung: Mit `STORAGE_SECRET_KEY` (SecretBox) verschlüsseln statt Klartext; Backups entsprechend behandeln.
-- Status: offen (bewusst akzeptiert, Härtung möglich).
+- Status: umgesetzt (Paket SEC-D): mit `STORAGE_SECRET_KEY` wird `link_token` verschlüsselt (`enc1:`, AES-256-GCM, eigener Kontext); Altwerte im Klartext bleiben lesbar bis zur nächsten Rotation, ohne Schlüssel bleibt das Verhalten wie bisher. Test `testG1LinkTokenIsEncryptedAtRestWhenKeyConfigured`. Keine Migration nötig.
 
 ### SEC-11 Niedrig (3.1, `A:L`): Zähler lassen sich von Dritten ausreizen (Sperre Unbeteiligter) und laufen vor der Prüfung in der globalen Sperre
 
@@ -122,7 +122,7 @@ Keine ausnutzbare Lücke mit hohem Schweregrad gefunden. Kontentrennung (IDOR), 
 - `Argon2Swift` hängt am Zweig `main`, dessen C-Unterpaket `phc-winner-argon2` am Zweig `master` (festgelegt über Revision in `Package.resolved`; ein `swift package update` zieht ungeprüft nach), `webauthn-swift` ist `1.0.0-beta.1`. Actions sind an Tags (`@v4`), nicht an Commit-SHAs gepinnt. Der Docker-Workflow baut zusätzlich zyklisch die PWA von `main` des Schwester-Repositorys ins Image (Vertrauensgrenze: Vertrauen in das PWA-Repository, kein CI-Gate dort). Berechtigungen sind minimal (`contents: read`, `packages: write`/`contents: write` nur in den Jobs, die es brauchen); Eingaben aus Events fließen nur über `env` oder bereinigte Werte (`tr -c 'A-Za-z0-9._-'`) in Skripte; Pull-Request-Läufe haben keinen Schreibzugriff auf die Registry.
 - GitHub meldet beim Push 15 offene Dependabot-Warnungen (5 hoch, 8 mittel, 2 niedrig laut Alert-Liste, Stand heute); alle betreffen ausschließlich `site/package-lock.json` (Dokumentationsseite: `vite`, `undici`, `esbuild`, `minimatch`, `@faker-js/faker`, Entwicklungs-/Build-Abhängigkeiten, kein Laufzeitbestandteil des Backends oder der Images). Keine SwiftPM-Warnung. Einzelne Aktualisierung ohne Hauptversionssprung bleibt offen.
 - Empfehlung: Revisionen als `.package(..., revision:)` festlegen oder Fork mit Tag nutzen; Actions per SHA pinnen (Dependabot hält sie aktuell); Hinweis in `docs/CI.md`.
-- Status: offen (Info).
+- Status: Teilweise entschieden (Paket SEC-D): SHA-Pinning der Actions und `revision:`-Pins bewusst nicht umgesetzt (Begründung in `docs/CI.md`: überwiegend First-Party-Actions, Dependabot aktiv, `Package.resolved` fixiert Revisionen). Dependabot-Alerts: `npm audit fix` mit npm 10.9.9 ändert die Lock-Datei nicht; alle verbleibenden Alerts verlangen den Major-Sprung `@redocly/cli` 2 und bleiben offen (nur Dokumentationsseite, Dev/Build).
 
 ### SEC-15 Info: Sitzungsdauer und Cookie-Härtung
 
@@ -134,17 +134,17 @@ Keine ausnutzbare Lücke mit hohem Schweregrad gefunden. Kontentrennung (IDOR), 
 
 - Ort: `AuthSupport.swift:36` (`APIErrorMiddleware`: unbekannter Fehlertyp wird zu `500 not_ready` ohne Log).
 - Beschreibung: Gut für die Geheimhaltung, schlecht für Erkennung und Betrieb: Angriffsversuche, die Serverfehler auslösen, sind im Log nicht sichtbar. Empfehlung: nur den Fehlertyp (`type(of:)`) und die Routen-Kennung ohne Pfadparameter protokollieren.
-- Status: offen (Info).
+- Status: umgesetzt (Paket SEC-D): `APIErrorMiddleware` protokolliert `unhandled error: <Typ> on <Methode> <Routenvorlage>` (Fehlertyp, Routen-Template ohne Pfadparameter und Query). Test `testUnknownErrorIsLoggedWithTypeAndRouteTemplateOnly`.
 
 ### SEC-17 Info: Konten-Orakel bei Planfreigaben
 
 - Ort: `PlanningServices.swift:427-430` (`create`: `recipient_not_found` gegen Erfolg).
 - Beschreibung: Jedes angemeldete Mitglied kann prüfen, ob ein Handle existiert (bei Einladungsprinzip und kleiner Nutzerzahl geringes Risiko; Handles gelten ohnehin als Name unter Mitgliedern). Empfehlung: einheitliche Antwort oder Ratenbegrenzung; Entscheidung dokumentieren.
-- Status: offen (Info).
+- Status: bewusst nicht geändert (Paket SEC-D). Das Teilen braucht eine eindeutige Rückmeldung („Empfänger nicht gefunden“); eine einheitliche Antwort würde die Bedienung verschlechtern. Das Orakel setzt eine Sitzung voraus, Handles sind unter Mitgliedern sichtbar, Registrierung nur per Einladung. Bekanntes, akzeptiertes Restrisiko; eine Ratenbegrenzung je Konto wäre der nächste Schritt (gemeinsam mit SEC-08).
 
 ## Hypothesen (nicht verifiziert)
 
-- H-01 XLSX-Import: Der Filter gegen DTD/Entities arbeitet auf Bytes (`Import/ImportTable.swift:184`, nur `<!DOCTYPE`/`<!ENTITY` in UTF-8). Ein Teil in UTF-16/UTF-32 würde den Filter umgehen und erst im XML-Parser (`shouldResolveExternalEntities = false`) landen. Ob die Plattform-Bibliothek interne Entity-Expansion (Billion Laughs) bei kleinem Eingang begrenzt, ist nicht geprüft; die Grenzen für Eintragszahl, Gesamtgröße (50 MiB, beim Entpacken erzwungen) und Zeilen begrenzen die Wirkung. Empfehlung: Parser-Test mit Entity-Bombe in UTF-16 oder Kodierung ablehnen (nur UTF-8, BOM-Prüfung).
+- H-01 XLSX-Import (**bestätigt und behoben**, Paket SEC-D; Test `testXMLInOtherEncodingsIsRefused`: UTF-16 mit/ohne BOM, UTF-32 und deklarierte Fremdkodierungen werden nun als `unsupported_type` abgelehnt, nur UTF-8/ASCII erreicht den Parser; durch Code-Lesen bestätigt: der Byte-Filter erkannte nur UTF-8, ob die Plattform-Bibliothek eine UTF-16-Entity-Bombe begrenzt hätte, wurde nicht gemessen, der Test gegen den alten Code lief nicht): Der Filter gegen DTD/Entities arbeitet auf Bytes (`Import/ImportTable.swift:184`, nur `<!DOCTYPE`/`<!ENTITY` in UTF-8). Ein Teil in UTF-16/UTF-32 würde den Filter umgehen und erst im XML-Parser (`shouldResolveExternalEntities = false`) landen. Ob die Plattform-Bibliothek interne Entity-Expansion (Billion Laughs) bei kleinem Eingang begrenzt, ist nicht geprüft; die Grenzen für Eintragszahl, Gesamtgröße (50 MiB, beim Entpacken erzwungen) und Zeilen begrenzen die Wirkung. Empfehlung: Parser-Test mit Entity-Bombe in UTF-16 oder Kodierung ablehnen (nur UTF-8, BOM-Prüfung).
 - H-02 Zu Punkt 7 der Aufgabe (`OIDCTokenTests.testNoSecretsInRedirectsOrLogs`, `log leaks eyJ`): Der Test sammelt über `LogSink` alle Meldungen auf Stufe `trace` ungefiltert (der Produktions-Handler `Sources/App/TimestampedLogHandler.swift:31-34` schwärzt zusätzlich über `TriggerTokenScrubber`). Die Zeichenfolge `eyJ` kommt auch zufällig in base64url-Zufallswerten (State, Nonce, Tokens) vor (Wahrscheinlichkeit je 43-Zeichen-Wert rund 1.6 in 10.000); jeder im Trace-Log ausgegebene Zufallswert kann den Test sporadisch rot färben. Außerdem würde ein im Trace-Log vorhandener JWT-Teil (nur Header) vom Scrubber nicht erfasst, weil dessen Muster drei Segmente verlangt (`TriggerLinks.swift:293`). Nur notiert, die Ursache untersucht ein anderer Agent.
 - H-03 `ModuleGuard` leitet das Modul aus `req.url.path` (roh, prozentkodiert) ab; der Router vergleicht ebenfalls rohe Segmente (`DefaultResponder.getRoute`, `URI.path` ist `percentEncodedPath`). Dadurch ist nach Lesen des Vapor-Codes keine Umgehung des Modulschalters per `%67roups` zu erwarten. Ein Test mit kodierten Pfadsegmenten ist nicht gelaufen.
 
