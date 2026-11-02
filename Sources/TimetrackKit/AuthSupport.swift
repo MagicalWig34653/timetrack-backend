@@ -139,7 +139,9 @@ struct AuthService: Sendable {
         // SEC-11: the anonymous counters run in a plain transaction, not under the global `auth_lock`, so a flood of unauthenticated
         // requests cannot throttle the write throughput of all accounts. A concurrent race can overshoot a limit by a few
         // events, which is irrelevant for these counters. Pruning is a separate best-effort statement (also done by maintenance).
-        let allowed = try await db.transaction { tx in
+        // SQLite has a single writer: unlocked writes there would race with locked ones and fail with "database is locked",
+        // so SQLite keeps the lock (there is no parallel throughput to protect). MariaDB uses a plain transaction.
+        let body: @Sendable (any Database) async throws -> Bool = { tx in
             let now = Date()
             let keys = (ip.map { [("ip:" + Secrets.hash($0), 60)] } ?? []) + (handle.map { [("handle:" + Secrets.hash($0.lowercased()), 15)] } ?? [])
             for (key, limit) in keys {
@@ -148,7 +150,11 @@ struct AuthService: Sendable {
             for (key, _) in keys { try await RateLimitEvent(key: key, occurredAt: now).create(on: tx) }
             return true
         }
-        _ = try? await RateLimitEvent.query(on: db).filter(\.$occurredAt < Date().addingTimeInterval(-600)).delete()
+        let allowed = db is any MySQLDatabase ? try await db.transaction(body) : try await transaction(on: db, body)
+        let prune: @Sendable (any Database) async throws -> Void = { tx in
+            try await RateLimitEvent.query(on: tx).filter(\.$occurredAt < Date().addingTimeInterval(-600)).delete()
+        }
+        if db is any MySQLDatabase { _ = try? await prune(db) } else { _ = try? await transaction(on: db, prune) }
         guard allowed else { throw APIError(.tooManyRequests, "too_many_requests") }
     }
 }
