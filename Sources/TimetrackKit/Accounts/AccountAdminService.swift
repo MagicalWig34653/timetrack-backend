@@ -15,11 +15,11 @@ struct AccountAdminService: Sendable {
 
     func list(_ context: AuthContext, limit: Int?, offset: Int?) async throws -> AdminAccountPage {
         let size = limit ?? 50, start = offset ?? 0
-        guard (1...Self.maxPageSize).contains(size), start >= 0 else { throw APIError.invalid }
+        let window = try Pagination.range(limit: size, offset: start, maxLimit: Self.maxPageSize)
         // Read-only: the session middleware verified the credentials in this request (S1b, like `TimeServices.read`).
         try context.admin()
         let total = try await Account.query(on: db).count()
-        let accounts = try await Account.query(on: db).sort(\.$createdAt).sort(\.$handle).range(start..<start + size).all()
+        let accounts = try await Account.query(on: db).sort(\.$createdAt).sort(\.$handle).range(window).all()
         var items: [AdminAccountDTO] = []
         for account in accounts { items.append(try await dto(account, on: db)) }
         return AdminAccountPage(items: items, total: total, limit: size, offset: start)

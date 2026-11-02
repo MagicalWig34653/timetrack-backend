@@ -59,7 +59,7 @@ struct McpEndpoint: Sendable {
         let message: McpJSON
         do { message = try McpJSON.parse(Data(body.readableBytesView)) }
         catch { return rpc(error: nil, McpRPCCode.parseError, "Parse error", status: .badRequest) }
-        return await dispatch(message, principal: principal, req: req)
+        return await dispatch(message, principal: principal, authenticator: authenticator, req: req)
     }
 
     /// Browser requests carry an Origin; only the public base URL itself is acceptable (DNS-rebinding protection).
@@ -102,7 +102,7 @@ struct McpEndpoint: Sendable {
 
     // MARK: JSON-RPC
 
-    private func dispatch(_ message: McpJSON, principal: McpAuthPrincipal, req: Request) async -> Response {
+    private func dispatch(_ message: McpJSON, principal: McpAuthPrincipal, authenticator: any McpAuthenticator, req: Request) async -> Response {
         if case .array = message { return rpc(error: nil, McpRPCCode.invalidRequest, "Batch requests are not supported", status: .badRequest) }
         guard case .object(let members) = message else { return rpc(error: nil, McpRPCCode.invalidRequest, "Invalid request", status: .badRequest) }
         // Responses sent by the client (to server requests) and notifications are acknowledged without a body.
@@ -156,7 +156,7 @@ struct McpEndpoint: Sendable {
                 arguments = raw
             }
             guard let tool = McpTools.byName[name] else { return rpc(error: id, McpRPCCode.invalidParams, "Unknown tool") }
-            return rpc(result: await call(tool, arguments: arguments, principal: principal, req: req), id: id)
+            return rpc(result: await call(tool, arguments: arguments, principal: principal, authenticator: authenticator, req: req), id: id)
         default:
             return rpc(error: id, McpRPCCode.methodNotFound, "Method not found")
         }
@@ -164,7 +164,7 @@ struct McpEndpoint: Sendable {
 
     // MARK: Tool execution
 
-    private func call(_ tool: McpTool, arguments: McpJSON, principal: McpAuthPrincipal, req: Request) async -> McpJSON {
+    private func call(_ tool: McpTool, arguments: McpJSON, principal: McpAuthPrincipal, authenticator: any McpAuthenticator, req: Request) async -> McpJSON {
         let started = Date()
         let outcome: McpJSON
         do { try await auth.modules.require(ModuleKey.tool(tool.name), account: principal.accountId, on: req.db) }
@@ -179,7 +179,7 @@ struct McpEndpoint: Sendable {
             outcome = Self.failure("invalid_arguments", problem)
         } else {
             do {
-                let value = try await McpToolContext.session(principal, auth: auth, db: req.db) { context in
+                let value = try await McpToolContext.session(principal, authenticator: authenticator, requiredScope: tool.scope, auth: auth, db: req.db) { context in
                     try await auth.modules.require(ModuleKey.tool(tool.name), account: principal.accountId, on: context.db)
                     return try await tool.run(context, arguments)
                 }
@@ -204,6 +204,8 @@ struct McpEndpoint: Sendable {
     }
     static func failure(_ error: any Error) -> McpJSON {
         switch error {
+        case let denied as McpInsufficientScope:
+            return failure("insufficient_scope", "This credential lacks the scope '\(denied.scope)' required by this tool.")
         case let known as APIError:
             let code = known.code == "bad_request" ? "invalid_arguments" : known.code
             return failure(code, ModuleMessages.message(code) ?? (code.replacingOccurrences(of: "_", with: " ") + "."))

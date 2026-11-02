@@ -30,8 +30,10 @@ struct OAuthCredentialService: Sendable {
 
     func revokeGrant(_ id: UUID, _ context: AuthContext, on db: any Database) async throws {
         try context.normal()
-        let accountID = try context.account.requireID()
         try await auth.transaction(on: db) { tx in
+            let current = try await auth.authenticate(context.token, on: tx)
+            try current.normal()
+            let accountID = try current.account.requireID()
             guard let grant = try await OAuthGrant.find(id, on: tx), grant.accountId == accountID, grant.revokedAt == nil else { throw APIError.missing }
             try await oauth.revokeGrant(id, on: tx)
         }
@@ -49,8 +51,11 @@ struct OAuthCredentialService: Sendable {
         var seen = Set<String>()
         let scopes = input.scopes.filter { seen.insert($0).inserted }
         guard (1...80).contains(name.count), !scopes.isEmpty, scopes.allSatisfy(McpScopes.known.contains), (1...365).contains(input.expiresInDays) else { throw APIError.invalid }
-        let accountID = try context.account.requireID()
         return try await auth.transaction(on: db) { tx in
+            // Re-authenticate under the lock: the session may have been revoked or the account disabled since the middleware ran (F02).
+            let current = try await auth.authenticate(context.token, on: tx)
+            try current.fresh()
+            let accountID = try current.account.requireID()
             let now = Date()
             guard try await ApiTokenRecord.query(on: tx).filter(\.$accountId == accountID).filter(\.$revokedAt == nil).filter(\.$expiresAt > now).count() < Self.maxActiveTokens else {
                 throw APIError(.conflict, "too_many_tokens")

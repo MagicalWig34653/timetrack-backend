@@ -161,11 +161,11 @@ struct AccountService: Sendable {
         return try await balance()
     }
     func listAdjustments(limit: Int, offset: Int) async throws -> AdjustmentPage {
-        guard (1...100).contains(limit), (0...100_000).contains(offset) else { throw APIError.invalid }
+        let window = try Pagination.range(limit: limit, offset: offset, maxLimit: 100)
         let query = AdjustmentRecord.query(on: scope.db).filter(\.$accountId == scope.accountId)
         let total = try await query.count()
         let rows = try await AdjustmentRecord.query(on: scope.db).filter(\.$accountId == scope.accountId)
-            .sort(\.$createdAt, .descending).sort(\.$id, .descending).range(offset..<(offset + limit)).all()
+            .sort(\.$createdAt, .descending).sort(\.$id, .descending).range(window).all()
         let items = try rows.map { row in
             guard let createdAt = row.createdAt else { throw APIError.invalid }
             return try AdjustmentDTO(id: row.requireID(), kind: row.kind, date: row.date, seconds: row.seconds,

@@ -41,9 +41,9 @@ extension SegmentService {
 
     /// Cancelled segments, newest start first, paged. `from`/`to` bound the segment start like `list`.
     func listCancelled(_ filter: CancelledFilter, limit: Int, offset: Int) async throws -> CancelledSegmentPage {
-        guard (1...200).contains(limit), offset >= 0 else { throw APIError.invalid }
+        let window = try Pagination.range(limit: limit, offset: offset, maxLimit: 200)
         let total = try await cancelledQuery(filter).count()
-        let rows = try await cancelledQuery(filter).sort(\.$startedAt, .descending).sort(\.$id).range(offset..<(offset + limit)).all()
+        let rows = try await cancelledQuery(filter).sort(\.$startedAt, .descending).sort(\.$id).range(window).all()
         return .init(items: try rows.map { .init(segment: try $0.dto(), cancelledAt: $0.voidedAt ?? $0.startedAt, cancelReason: $0.voidReason) },
                      total: total, limit: limit, offset: offset)
     }

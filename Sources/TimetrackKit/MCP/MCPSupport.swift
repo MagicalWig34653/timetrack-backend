@@ -11,11 +11,20 @@ struct McpAuthPrincipal: Sendable {
     var scopes: Set<String>
     var credentialKind: Kind
     var credentialId: UUID
+    /// Hash of the presented token, so the tool transaction can resolve the same credential again (F03).
+    var tokenHash: String?
 }
 
 protocol McpAuthenticator: Sendable {
     /// Returns nil for unknown, expired, revoked or wrong-audience tokens. Must not throw for plain invalid tokens.
     func authenticate(token: String, db: any Database) async throws -> McpAuthPrincipal?
+    /// Called inside the serialized tool transaction: resolves the credential again and returns it with its CURRENT scopes,
+    /// or nil when it was revoked, expired or disabled in the meantime.
+    func revalidate(_ principal: McpAuthPrincipal, db: any Database) async throws -> McpAuthPrincipal?
+}
+extension McpAuthenticator {
+    /// Default for authenticators without a credential store (test doubles): the principal stays valid.
+    func revalidate(_ principal: McpAuthPrincipal, db: any Database) async throws -> McpAuthPrincipal? { principal }
 }
 
 /// Default until the OAuth/token package is connected: every token is invalid, so `/mcp` answers 401.

@@ -9,9 +9,14 @@ struct McpToolContext: Sendable {
     let reports: ReportService
     let db: any Database
 
-    static func session<T: Sendable>(_ principal: McpAuthPrincipal, auth: AuthService, db: any Database,
+    /// `authenticator` resolves the credential again under the lock (F03): a token or grant revoked, expired or narrowed after the
+    /// request was authenticated must not run a (write) tool. The re-resolved principal (current scopes) is what the tool sees;
+    /// `requiredScope` is checked against it.
+    static func session<T: Sendable>(_ principal: McpAuthPrincipal, authenticator: any McpAuthenticator, requiredScope: String? = nil, auth: AuthService, db: any Database,
                                      operation: @escaping @Sendable (McpToolContext) async throws -> T) async throws -> T {
         try await auth.transaction(on: db) { tx in
+            guard let principal = try await authenticator.revalidate(principal, db: tx) else { throw APIError.unauthorized }
+            if let requiredScope, !principal.scopes.contains(requiredScope) { throw McpInsufficientScope(scope: requiredScope) }
             guard let account = try await Account.find(principal.accountId, on: tx), account.disabledAt == nil else { throw APIError.unauthorized }
             let id = try account.requireID()
             let time = TimeServices(accountId: id, db: tx, disabledModules: auth.configuration.disabledModules)
@@ -20,6 +25,9 @@ struct McpToolContext: Sendable {
         }
     }
 }
+
+/// The credential lost the scope of the tool between authentication and execution.
+struct McpInsufficientScope: Error { let scope: String }
 
 struct McpTool: Sendable {
     let name: String
@@ -107,7 +115,7 @@ enum McpTools {
         read("list_time_adjustments", "List time account adjustments", "time:read",
              "Lists the account's opening balance and dated corrections, newest first, with pagination.",
              McpSchema.object(["limit": McpSchema.integer("Page size (1 to 100; default 50)", minimum: 1),
-                               "offset": McpSchema.integer("Number of entries to skip (default 0)", minimum: 0)])) { ctx, args in
+                               "offset": McpSchema.integer("Number of entries to skip (default 0, at most 100000)", minimum: 0, maximum: 100_000)])) { ctx, args in
             try McpJSON.encoding(await ctx.time.account.listAdjustments(limit: args["limit"]?.int ?? 50,
                                                                        offset: args["offset"]?.int ?? 0))
         },
@@ -127,7 +135,7 @@ enum McpTools {
              + "Permanent deletion of cancelled segments is deliberately not available through MCP.",
              McpSchema.object(["from": McpSchema.dateTime("Range start, inclusive (optional)"), "to": McpSchema.dateTime("Range end, exclusive (optional)"),
                                "limit": McpSchema.integer("Page size, default 50", minimum: 1, maximum: 100),
-                               "offset": McpSchema.integer("Rows to skip, default 0", minimum: 0)])) { ctx, args in
+                               "offset": McpSchema.integer("Rows to skip, default 0, at most 100000", minimum: 0, maximum: 100_000)])) { ctx, args in
             var filter = CancelledFilter()
             if args["from"] != nil { filter.from = try instant(args, "from") }
             if args["to"] != nil { filter.to = try instant(args, "to") }

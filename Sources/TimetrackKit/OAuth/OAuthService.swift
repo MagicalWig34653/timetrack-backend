@@ -178,8 +178,11 @@ struct OAuthService: Sendable {
     func decide(_ id: UUID, approve: Bool, scopes: [String]?, _ context: AuthContext, on db: any Database) async throws -> String {
         try context.normal()
         return try await auth.transaction(on: db) { tx in
-            let record = try await boundRequest(id, context, on: tx)
-            let accountID = try context.account.requireID()
+            // Re-authenticate under the lock so a revoked session cannot approve a request or mint a grant and code (F02).
+            let current = try await auth.authenticate(context.token, on: tx)
+            try current.normal()
+            let record = try await boundRequest(id, current, on: tx)
+            let accountID = try current.account.requireID()
             var chosen: [String] = []
             if approve {
                 chosen = scopes.map { OAuthText.parseScopes($0.joined(separator: " ")) } ?? record.scopes
