@@ -166,3 +166,19 @@ Abgleich durch Claude gegen `main` (Vertrag 0.41.0, nach SEC-A/C/D) und `docs/re
 
 Zusammenfassung: 11 Befunde (2 high, 8 medium, 1 low). Stand nach CX-A: F01, F02, F03 behoben (7e64cb7). Zuvor bestätigt und offen: 10 (F01, F02, F03, F05, F07, F09, F10, F11 sowie F06/F08 als geringes Restrisiko bereits angewendeter Migrationen). Durch SEC-A weitgehend behoben: 1 (F04). Falsch positiv: 0. Doppelt zum Sicherheitsreview: 0 (nur F04 überschneidet sich fachlich mit SEC-03/SEC-04). Keine Befunde des Sicherheitsreviews (SEC-01 bis SEC-17) wurden hier widerlegt. Die Befunde sind nicht umgesetzt; ein Fix-Paket ist nicht angelegt.
 
+
+## Umsetzung CX-B (02.11.2026, Commit 9fcc8de, Paket-ID `CX-B`)
+
+Alle sechs Befunde waren am Code bestätigt (kein Falsch-Positiv). Keine Vertragsänderung (Vertrag bleibt 0.41.0).
+
+| Befund | Status | Umsetzung und Test |
+| --- | --- | --- |
+| F05 | behoben (9fcc8de) | `GroupRoutes.write` merkt sich die in der Transaktion geschriebenen Zähler (`grp-ip`, `grp-write-ip`, `grp-write-tok`) und schreibt sie bei jedem `APIError` (Fachfehler) nach dem Rollback erneut außerhalb der Transaktion; `edit_secret_invalid` zählt zusätzlich den Fehlversuch-Zähler. Test `testG1FailedWritesStillCountAgainstTheRateLimits`. |
+| F06 | behoben (9fcc8de) | `g1b.add_group_link_tokens` legt je Tabelle die Spalte nur an, wenn sie fehlt (`columnExists`). Test `testG1bMigrationIsResumable` (SQLite: vollständiger Zustand; MariaDB mit `G1_ON_MARIADB=1`: Teilzustand durch Löschen einer Spalte). |
+| F07 | behoben (9fcc8de) | Kontoexport enthält `vacation-snapshots.json` (id, date, remainingHalfDays) und `counts["vacation-snapshots"]`. Löschung kannte den Datensatz schon. Test im Export-/Löschszenario in `AccountAdminTests`. Es gibt keinen Importer für das Exportformat, daher keine Importänderung; der Vertragstext nennt `vacation-*` bereits. |
+| F08 | behoben (9fcc8de) | Datenschritte und `TimeChangeTracker.touch` von `c3.normalise_absence_statuses` laufen in einer Transaktion (Spalte `legacy_status` bleibt vorab, DDL ist auf MariaDB nicht transaktional). Nach Fehler bleibt alles unverändert, der Wiederholungslauf findet alle betroffenen Konten. Test `testC3NormalisationIsAtomicAndRepeatable`. |
+| F09 | behoben (9fcc8de) | Der Tagesmarkierungszweig des ICS-Feeds verlangt `planning` wie die Abwesenheiten. Test `testCalendarFeedHidesDayMarksWithPlanningOff`. |
+| F10 | **Entscheidung offen** | Nur Charakterisierungstest `testBlockSchoolWeekWithSixSchoolDaysCharacterization` (6 Schultage = 48 h). Siehe unten. |
+| F11 | behoben (9fcc8de) | Gemeinsame Regel `TimeWeekDayDTO.vacationDays` (halber Abwesenheitstag oder halber Betriebstag zählt 0,5, wie `VacationEngine.count`); Wochenübersicht und Statistik nutzen sie, die Statistik reicht nun auch `companyDayTreatment` an das DTO weiter. Test `testHalfCompanyDayCountsHalfVacationDayInWeekAndStatistics`. |
+
+**F10, Entscheidungsbedarf:** ADR-0028 verlangt „fünf Schultage mit je acht Stunden“, der Code vergibt acht Stunden an jeden Tag der Mo-So-Woche mit Schulsegment. Das Gesetz begrenzt die Anrechnung der Blockwoche auf 40 Stunden. Offen ist, welche Tage gutgeschrieben werden, wenn es mehr als fünf Schultage gibt (die ersten fünf in Kalenderreihenfolge, Arbeitstage des Modells zuerst, oder der Nutzer wählt) und was am überzähligen Schultag gilt (keine Gutschrift, Sollstunden unverändert). Solange das nicht entschieden ist, bleibt das Verhalten unverändert. Der Charakterisierungstest schlägt bei einer Änderung bewusst an.
