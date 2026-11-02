@@ -369,3 +369,8 @@ Codex (Modell `gpt-6-sol`, Aufwand medium, nur lesend, Codex-Auftrag Q1) hat Anm
 2. (niedrig, bestätigt) `/system/info` zeigt normalen Konten Hostname, Datenbanktreiber, Migrationsstand und Laufzeit: Betriebsfelder nur für Administratoren, Versionsfelder für alle (ADR-0023 anpassen).
 3. (niedrig, plausibel) SMTP-Diagnose gibt nach der Anmeldung rohen Serverantworttext von `MAIL FROM` zurück: Text weglassen oder Zugangsdaten schwärzen.
 4. (niedrig, plausibel) `InfrastructureError` klassifiziert allgemeine NIO-Fehler als Datenbankausfall: an der Datenbankgrenze klassifizieren.
+
+## Codex-Review 01.11.2026 (Ausnahme auf ausdrückliche Anweisung)
+
+Review, nicht als Umsetzung gezählt (0 Punkte). Auf ausdrückliche Nutzeranweisung vom 01.11.2026 wurde ein adversariales Backend-Review mit Codex (Modell laut Ausgabe GPT-6.1-sol, Reasoning-Effort nicht verifiziert) durchgeführt; das ist eine Ausnahme von der Entscheidung vom 19.10.2026 „kein Codex mehr“. Ergebnis: 11 Befunde (2 high, 8 medium, 1 low), nur statisch, ohne Laufzeitversuche. Der Abgleich gegen `main` (Vertrag 0.41.0) steht in `docs/reviews/2026-11-01-codex-review-gpt-6.1-sol.md`: 10 Befunde neu und offen (davon 2 als geringes Restrisiko bereits angewendeter Migrationen), F04 durch SEC-A weitgehend überholt, kein falsch positiver Befund. Ein Fix-Paket ist noch nicht angelegt (Vorschlag: F01 und F02 zuerst).
+
