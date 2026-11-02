@@ -1,6 +1,6 @@
 # Übergabe SEC-C: Kontingente und Last (SEC-06, SEC-07, SEC-11, SEC-12)
 
-Branch `sec-c`, Vertrag **0.40.0**, Migration `sec06.add_storage_quota` (wiederholbar: Spalten nur anlegen, wenn sie fehlen; SQLite und MariaDB).
+Branch `sec-c`, Vertrag **0.41.0**, Migration `sec06.add_storage_quota` (wiederholbar: Spalten nur anlegen, wenn sie fehlen; SQLite und MariaDB).
 
 ## Was geändert wurde
 
