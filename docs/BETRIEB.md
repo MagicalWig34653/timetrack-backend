@@ -223,9 +223,15 @@ Der Proxy terminiert TLS und leitet an `http://<Knoten-IP>:18080` (`PUBLISHED_PO
 
 ### Client-IP und Rate-Limit (ADR-0018)
 
+### Sicherheitsheader des Backends (SEC-05)
+
+Das Backend setzt zentral (Middleware `SecurityHeadersMiddleware`) auf jede Antwort, sofern die Route nicht selbst einen Wert wählt: `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, `Permissions-Policy` (Kamera, Mikrofon, Zahlung, USB aus; Standort nur eigene Seite) und eine `Content-Security-Policy`. Die PWA-Hülle (`index.html`, `offline.html`) erhält eine strenge Richtlinie: `default-src 'self'`, `script-src 'self'` plus **SHA-256-Hashes** der Inline-Skripte der jeweiligen Datei (das Backend berechnet sie beim Ausliefern aus dem gebauten HTML und cached sie je Änderungszeit; ein neuer PWA-Build braucht keine Konfiguration), `style-src 'self' 'unsafe-inline'` (Svelte setzt `style=`-Attribute), `img-src 'self' data: blob:`, `frame-src`/`object-src 'self' blob:` (PDF-Vorschau), `connect-src 'self'`, `worker-src`/`manifest-src 'self'`, `base-uri 'none'`, `form-action 'self'`, `frame-ancestors 'none'`. API-Antworten bekommen `default-src 'none'; frame-ancestors 'none'`, andere HTML-Seiten (OAuth, Token-Links) `frame-ancestors 'none'; base-uri 'none'`. Vorhandene Header (CSP-Sandbox der Dateivorschau, `no-store` und `no-referrer` der Token-URLs) bleiben unverändert. `Strict-Transport-Security` (`max-age`, Standard 180 Tage, ohne `includeSubDomains`) sendet das Backend nur, wenn `PUBLIC_BASE_URL` https ist; `HSTS_MAX_AGE_SECONDS=0` schaltet es ab. Setzt der Proxy denselben Header, genügt einer von beiden. **Externe Ressourcen (Schriften, Skripte, Bilder anderer Hosts) blockiert die Richtlinie**; wer die PWA erweitert, muss die Richtlinie in `Sources/TimetrackKit/SecurityHeaders.swift` anpassen.
+
 Alle IP-bezogenen Grenzen (Auth-Middleware, OAuth, OIDC) verwenden eine zentrale Auflösung (`Request.clientRateLimitKey`, `Sources/TimetrackKit/TrustedProxies.swift`).
 Ohne Konfiguration gilt wie bisher die Socket-Gegenstelle. **Hinter einem Proxy muss `TRUSTED_PROXY_CIDRS` gesetzt werden**, sonst teilen alle Clients
 einen Zähler (60 Ereignisse je 5 Minuten, Schlüssel `ip:<Hash>`) und ein Angreifer sperrt die Anmeldung für alle. Die Pro-Handle-Grenzen (15 je 5 Minuten) gelten unabhängig davon.
+
+> **Pflicht (SEC-01):** Hinter dem Docker-Swarm-Routing-Mesh erscheint **jede** Verbindung, die den veröffentlichten Port eines Knotens erreicht, mit einer Adresse aus dem `ingress`-Netz, gleichgültig ob sie vom Proxy oder direkt aus dem Internet kommt. Trägt man das Netz in `TRUSTED_PROXY_CIDRS` ein, wird damit **das gesamte Internet als vertrauenswürdiger Proxy** behandelt, sobald der Port nicht per Firewall auf den Proxy beschränkt ist: ein Angreifer setzt pro Anfrage einen anderen `X-Forwarded-For` und umgeht alle Adresszähler (Anmelde-/Wiederherstellungsversuche je Adresse, Auslöse-Links, Kalender-Feeds, OAuth/OIDC). **Der Port darf deshalb nur vom Proxy erreichbar sein (Knoten-Firewall) oder `TRUSTED_PROXY_CIDRS` enthält nur die feste Proxy-Adresse als `/32`.** Ist `TRUSTED_PROXY_CIDRS` hinter einem Proxy **leer**, teilen alle Clients einen einzigen Adresszähler und eine Adresssperre (ein Angreifer kann alle aussperren). Das Backend schreibt beim Start eine Warnung für leere Liste bei https-Basisadresse, öffentliche Adressbereiche und sehr weite Netze (IPv4 weiter als /16, IPv6 weiter als /48).
 
 Einrichtung:
 
@@ -234,6 +240,7 @@ Einrichtung:
    anderen, von Angreifern erreichbaren Dienste) Verbindungen zum Backend aufbauen kann. Besser ist ein eigenes Netz nur für Proxy und Backend oder die feste Proxy-Adresse als `/32`.
 2. `TRUSTED_PROXY_CIDRS=<Netz>[,<Netz>...]` in `.env` (bzw. `.env`) setzen; optional `TRUSTED_PROXY_HEADER`. Ein ungültiger Eintrag verhindert den Start (Fehler nennt den Schlüssel).
 3. Prüfen: Zwei Clients nacheinander gegen den Proxy (`POST /api/v1/auth/login/options`, mehr als 60-mal von Client A) dürfen Client B nicht sperren.
+4. Prüfen (Firewall): Ein direkter Aufruf des Knoten-Ports von einem anderen Rechner (nicht dem Proxy) muss scheitern. Gelingt er, setzt ein gefälschter Header (`curl -H 'X-Forwarded-For: 203.0.113.9' http://<Knoten>:18080/…`, mehr als 60-mal mit wechselnden Werten) den Zähler zurück: dann ist die Firewall unvollständig. Der Zähler darf durch wechselnde Header nicht umgangen werden.
 
 Regeln der Auflösung:
 

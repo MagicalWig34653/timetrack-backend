@@ -112,7 +112,7 @@ Secrets sind unveränderlich. Rotation: neues Secret mit anderem Namen (`--prefi
 Der Stack veröffentlicht den Port des Backends auf **jedem Swarm-Knoten** (Routing Mesh, `mode: ingress`, Standard `PUBLISHED_PORT=18080`). Jeder Knoten leitet an ein gesundes Replikat weiter, egal auf welchem Knoten es läuft. Ein vorab angelegtes Overlay-Netz ist **nicht** nötig; der Stack nutzt nur sein eigenes Standardnetz.
 
 - Der Reverse Proxy (außerhalb oder innerhalb von Swarm) verbindet sich mit `http://<Knoten-IP>:18080` (mehrere Knoten: als Upstream-Liste oder über eine virtuelle IP).
-- **Firewall:** Erlauben Sie den Port nur Ihrem Proxy. Wer ihn direkt erreicht, könnte `X-Forwarded-For` fälschen (siehe [Reverse Proxy und TLS](installation/proxy.md#trusted-proxy-cidrs-bestimmen)).
+- **Firewall (Pflicht):** Erlauben Sie den Port nur Ihrem Proxy. Wer ihn direkt erreicht, kann `X-Forwarded-For` fälschen und damit alle Adresszähler umgehen (siehe [Reverse Proxy und TLS](installation/proxy.md#trusted-proxy-cidrs-bestimmen)).
 - Das Subnetz für `TRUSTED_PROXY_CIDRS` ist hier das des `ingress`-Netzes ([Reverse Proxy und TLS](installation/proxy.md#trusted-proxy-cidrs-bestimmen)):
 
 ```sh
@@ -172,6 +172,8 @@ Ausgelagert auf die Seite **[Reverse Proxy und TLS](installation/proxy.md)**: An
 ## 9. `TRUSTED_PROXY_CIDRS` bestimmen
 
 Ausgelagert auf die Seite **[Reverse Proxy und TLS](installation/proxy.md#trusted-proxy-cidrs-bestimmen)**.
+
+**Pflicht (SEC-01):** `TRUSTED_PROXY_CIDRS` setzen **und** den veröffentlichten Port per Knoten-Firewall ausschließlich dem Proxy öffnen. Beides gehört zusammen: Ohne gesetzte Liste teilen alle Clients eine Adresssperre; mit Ingress-Netz in der Liste, aber offenem Port, kann jeder Absender seine Adresse per `X-Forwarded-For` fälschen (Routing Mesh). Der Prüfschritt steht in [Betrieb](BETRIEB.md), Abschnitt 6, Schritt 4.
 
 ## 10. Passkeys und Domainregeln
 
@@ -317,8 +319,8 @@ Ausgelagert auf die Seite **[Probleme und Lösungen](installation/probleme.md)**
 - [ ] `STORAGE_SECRET_KEY` und VAPID-Schlüssel im Passwortmanager gesichert (**Verlust des Speicherschlüssels macht verschlüsselte S3-Einstellungen unwiederbringlich**).
 - [ ] DB-Benutzer nur für `timetrack.*`, Host eingeschränkt, `REQUIRE SSL`, starkes Passwort; MariaDB-Port nur aus dem Swarm erreichbar.
 - [ ] Backup-Verfahren eingerichtet, Archive verschlüsselt und extern gelagert, Restore einmal geübt.
-- [ ] Reverse Proxy: HTTPS, HSTS, HTTP→HTTPS, Upload-Limit 70m, Rate-Limit für `/api/v1/auth/`, `/oauth/`; `/health` und `/ready` nicht öffentlich.
-- [ ] `TRUSTED_PROXY_CIDRS` auf das Proxy-Netz (so eng wie möglich); Backend-Port **nicht** veröffentlicht (oder per Firewall nur dem Proxy zugänglich).
+- [ ] Reverse Proxy: HTTPS, HSTS (das Backend sendet bei https-Basisadresse selbst `Strict-Transport-Security`, `HSTS_MAX_AGE_SECONDS`), HTTP→HTTPS, Upload-Limit 70m, Rate-Limit für `/api/v1/auth/`, `/oauth/`; `/health` und `/ready` nicht öffentlich.
+- [ ] `TRUSTED_PROXY_CIDRS` **gesetzt** auf das Proxy-Netz (so eng wie möglich, ideal `/32`); Backend-Port **nicht** veröffentlicht oder per Firewall nur dem Proxy zugänglich; Prüfschritt mit gefälschtem `X-Forwarded-For` von einem fremden Rechner durchgeführt (Betrieb, Abschnitt 6). Keine Startwarnung zu `TRUSTED_PROXY_CIDRS` im Log.
 - [ ] Firewall: nur 80/443 (und SSH) öffentlich; Swarm-Ports (2377, 7946, 4789) nicht aus dem Internet erreichbar.
 - [ ] Image mit fester Version, aus vertrauenswürdiger Registry; Updates mit vorherigem Backup.
 - [ ] Admin-Konto: mindestens zwei Passkeys auf getrennten Geräten, Wiederherstellungsoption bewusst gewählt, Konto nicht für die tägliche Arbeit verwenden, Einladungen nur an bekannte Personen.

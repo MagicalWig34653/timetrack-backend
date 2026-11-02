@@ -43,8 +43,8 @@ TIMETRACK_IMAGE=ghcr.io/magicalwig34653/timetrack-backend:0.1.0
 
 Außerdem wichtig:
 
-- `PUBLISHED_PORT` (Standard `18080`) ist über das Routing-Mesh auf **jedem Knoten** erreichbar. Öffne ihn per Firewall nur für den Reverse Proxy, sonst könnten Clients `X-Forwarded-For` fälschen.
-- `TRUSTED_PROXY_CIDRS` ist das Subnetz des `ingress`-Netzes:
+- **Pflicht:** `PUBLISHED_PORT` (Standard `18080`) ist über das Routing-Mesh auf **jedem Knoten** erreichbar. Öffne ihn per Firewall nur für den Reverse Proxy. Sonst kann jeder `X-Forwarded-For` fälschen (hinter dem Mesh sieht das Backend jede Verbindung mit einer `ingress`-Adresse und glaubt dem Header), und alle Adresszähler (Anmeldung, Wiederherstellung, Links) sind wirkungslos. Prüfschritt: [Betrieb](../BETRIEB.md), Abschnitt 6, Schritt 4.
+- `TRUSTED_PROXY_CIDRS` ist **Pflicht** und das Subnetz des `ingress`-Netzes (nur zusammen mit der Firewall oben; ohne Eintrag teilen sich alle Clients eine Adresssperre):
 
   ```sh
   docker network inspect ingress --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'

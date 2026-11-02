@@ -29,8 +29,8 @@ Prüfen: `ls -a` zeigt `compose.yaml`, `init-secrets.sh` und `.env`.
 | `WEBAUTHN_RP_ID` | `timetrack.example.org`: nur der Host, ohne `https://`. Er lässt sich später nicht ändern, ohne alle Passkeys zu entwerten. |
 | `WEBAUTHN_ORIGIN` | `https://timetrack.example.org`: genau die Adresse aus der Browserzeile. |
 | `VAPID_SUBJECT` | `mailto:du@example.org`: Kontaktadresse für Push-Dienste. |
-| `BIND_ADDR` | `127.0.0.1`, wenn der Reverse Proxy auf demselben Server läuft (der Port ist dann nicht von außen erreichbar). |
-| `TRUSTED_PROXY_CIDRS` | Netz, aus dem der Proxy den Container erreicht. Siehe [Reverse Proxy und TLS](proxy.md#trusted-proxy-cidrs-bestimmen). Kann nach dem ersten Start nachgetragen werden. |
+| `BIND_ADDR` | `127.0.0.1` (Standard), wenn der Reverse Proxy auf demselben Server läuft (der Port ist dann nicht von außen erreichbar). Läuft der Proxy auf einem anderen Server: private Adresse des Servers eintragen und den Port per Firewall nur dem Proxy öffnen. |
+| `TRUSTED_PROXY_CIDRS` | **Pflicht hinter einem Proxy.** Netz, aus dem der Proxy den Container erreicht. Siehe [Reverse Proxy und TLS](proxy.md#trusted-proxy-cidrs-bestimmen). Kann nach dem ersten Start nachgetragen werden. |
 
 Dateien liegen standardmäßig in der Datenbank; das Image enthält die Web-App.
 
