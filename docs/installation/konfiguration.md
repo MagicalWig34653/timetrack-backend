@@ -53,6 +53,7 @@ Ungültige Werte verhindern den Start; der Fehler nennt die Variable (z. B. `Inv
 | --- | --- | --- |
 | `WEBAUTHN_RP_NAME` | `Timetrack` | Anzeigename im Passkey-Dialog. |
 | `SESSION_TTL_HOURS` | `720` (1 bis 8760); `336` in Compose/Swarm | Sitzungsdauer in Stunden. |
+| `SESSION_IDLE_HOURS` | `336` (1 bis 8760) | Leerlauf-Timeout in Stunden: Sitzungen ohne Nutzung enden früher als `SESSION_TTL_HOURS`. |
 | `OIDC_ISSUER`, `OIDC_CLIENT_ID` | aus | Optionales OpenID Connect; beide nur zusammen. Issuer per HTTPS. |
 | `OIDC_CLIENT_SECRET` | – | Secret des Clients; im Container `OIDC_CLIENT_SECRET_FILE`. |
 | `OIDC_NAME`, `OIDC_SCOPES` | `OpenID Connect`, `openid email profile` | Anzeigename (höchstens 80 Zeichen) und Scopes (müssen `openid` enthalten). |
