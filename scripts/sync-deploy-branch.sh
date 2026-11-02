@@ -7,6 +7,7 @@ cd "$(dirname "$0")/.."
 SRC="$(git rev-parse --verify main)"
 FILES=(
   deploy/swarm/stack.yaml deploy/swarm/create-secrets.sh deploy/swarm/update.sh
+  deploy/swarm/migrate-dir.sh deploy/swarm/override.example.yaml deploy/swarm/.env.example
   docs/DEPLOYMENT.md docs/UPDATE.md docs/BETRIEB.md docs/installation LICENSE
 )
 TMP="$(mktemp -d)"; IDX="$(mktemp -u)"; trap 'rm -rf "$TMP" "$IDX" "$IDX.lock"' EXIT

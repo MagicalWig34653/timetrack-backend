@@ -210,5 +210,31 @@ sed 's/^SCRIPT_VERSION=.*/SCRIPT_VERSION="9.9.9"/' "$SRC/update.sh" > "$D/remote
 UPDATE_SELF_CHECK=1 UPDATE_SCRIPT_URL="file://$D/remote.sh" run_case --dry-run --tag "$NEW_TAG"
 check "start hint: newer script announced, nothing replaced" "$(has 'anderes update.sh' && echo 0 || echo 1)" "$OUT"
 
+# 16. Overlay files (--stack-override / STACK_OVERRIDE_FILES) reach `docker stack deploy` when the migrate service is restored.
+sed -i.bak 's|echo "STACKDEPLOY TIMETRACK_IMAGE|echo "STACKDEPLOY ARGS=$args TIMETRACK_IMAGE|' "$ROOT/bin/docker"; rm -f "$ROOT/bin/docker.bak"
+new_case overlay 0
+echo "services: {}" > "$D/app/override.yaml"
+run_case --force --yes --tag "$NEW_TAG" --stack-override override.yaml
+check "overlay: passed after the stack file as second -c" "$(logged "stack.yaml -c override.yaml timetrack" && echo 0 || echo 1)" "$(cat "$ST/log")"
+new_case overlayenv 0
+echo "services: {}" > "$D/app/o1.yaml"; echo "services: {}" > "$D/app/o2.yaml"
+STACK_OVERRIDE_FILES="o1.yaml o2.yaml" run_case --force --yes --tag "$NEW_TAG"
+check "overlay via STACK_OVERRIDE_FILES: both files in order" "$(logged "-c o1.yaml -c o2.yaml timetrack" && echo 0 || echo 1)" "$(cat "$ST/log")"
+new_case overlaymissing 0
+run_case --force --yes --tag "$NEW_TAG" --stack-override nope.yaml
+check "overlay missing: exit 1 with message, .env untouched" "$([ "$RC" = 1 ] && has 'Overlay-Datei nicht gefunden' && [ "$(env_image "$D/app/.env")" = "$OLD_IMAGE" ] && echo 0 || echo 1)" "$OUT"
+
+# 17. migrate-dir.sh: read-only comparison of an old, edited stack file with the new one.
+new_case migrate 1
+cp "$SRC/migrate-dir.sh" "$D/app/migrate-dir.sh"
+sed 's/^      PWA_STATIC_DIR: .*/&\n      MY_LOCAL: "1"/' "$SRC/stack.yaml" > "$D/old-stack.yml"
+printf 'TIMETRACK_IMAGE=x/y:z\nDB_HOST=h\n' > "$D/old.env"
+before="$(cksum "$D/old-stack.yml" "$D/old.env" "$D/app/stack.yaml")"
+OUT="$(bash "$D/app/migrate-dir.sh" --old-stack "$D/old-stack.yml" --old-env "$D/old.env" 2>&1)"; RC=$?
+check "migrate-dir: local env key and missing required variable reported, exit 1" "$([ "$RC" = 1 ] && has 'MY_LOCAL' && has 'PUBLIC_BASE_URL' && echo 0 || echo 1)" "$OUT"
+check "migrate-dir: changes no file" "$([ "$before" = "$(cksum "$D/old-stack.yml" "$D/old.env" "$D/app/stack.yaml")" ] && echo 0 || echo 1)"
+OUT="$(bash "$D/app/migrate-dir.sh" --old-stack "$SRC/stack.yaml" --old-env "$SRC/.env.example" 2>&1)"; RC=$?
+check "migrate-dir: identical stack and complete env: exit 0" "$([ "$RC" = 0 ] && has 'keine Auffälligkeiten' && echo 0 || echo 1)" "$OUT"
+
 echo
 if [ "$FAILS" -eq 0 ]; then echo "test-update: all $N checks passed"; else echo "test-update: $FAILS of $N checks FAILED"; exit 1; fi

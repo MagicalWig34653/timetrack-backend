@@ -1,0 +1,33 @@
+# Example overlay for stack.yaml: local additions WITHOUT editing stack.yaml (so `git pull --ff-only` in the clone of the
+# `deploy` branch never conflicts). Copy to override.yaml (not tracked) and keep only what you need. Usage:
+#   set -a; . ./.env; set +a
+#   docker stack config -c stack.yaml -c override.yaml          # shows the merged result, deploys nothing
+#   docker stack deploy --with-registry-auth -c stack.yaml -c override.yaml timetrack
+# update.sh needs the same files only to recreate a missing migrate service: STACK_OVERRIDE_FILES=override.yaml
+# or --stack-override override.yaml (docs/DEPLOYMENT.md, section "Bestehendes Verzeichnis auf den deploy-Branch umstellen").
+# Merge rules (Compose): `environment` is merged by key (the overlay wins), `secrets`/`ports` lists are merged,
+# scalar values (for example `replicas`) are replaced. A key can NOT be removed by an overlay.
+# Everything the official stack.yaml already offers via .env (DB_*, PUBLISHED_PORT, TRUSTED_PROXY_CIDRS, PWA_CSP_MODE,
+# BACKEND_REPLICAS, BACKEND_PLACEMENT, ...) belongs in .env, not here.
+
+services:
+  backend:
+    environment:
+      # APNs (ADR-0030) as an overlay instead of uncommenting the block in stack.yaml. The values come from .env,
+      # the key is the Docker secret tt_apns_private_key (create-secrets.sh --add-only --apns-private-key-file FILE).
+      APNS_KEY_ID: ${APNS_KEY_ID:?set APNS_KEY_ID}
+      APNS_TEAM_ID: ${APNS_TEAM_ID:?set APNS_TEAM_ID}
+      APNS_BUNDLE_IDS: ${APNS_BUNDLE_IDS:?set APNS_BUNDLE_IDS}
+      APNS_PRIVATE_KEY_FILE: /run/secrets/tt_apns_private_key
+      # Any other variable the stack file does not pass through, for example:
+      # SOME_VARIABLE: some-value
+    secrets:
+      - tt_apns_private_key
+    # Example: a deviating resource limit (replaces the whole `limits` mapping values it names)
+    # deploy:
+    #   resources:
+    #     limits: { cpus: "2.0", memory: 1024M }
+
+secrets:
+  tt_apns_private_key:
+    external: true

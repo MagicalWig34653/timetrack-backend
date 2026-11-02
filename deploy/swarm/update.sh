@@ -8,13 +8,14 @@
 # Language: code and comments are English, all output for the operator is German.
 set -Eeuo pipefail
 
-SCRIPT_VERSION="2.0.0"
+SCRIPT_VERSION="2.1.0"
 SCRIPT_PATH="${BASH_SOURCE[0]}"
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 
 STACK=timetrack
 ENV_FILE=""
 STACK_FILE=""
+OVERRIDES=()           # extra Compose files merged after the stack file (--stack-override, STACK_OVERRIDE_FILES)
 TAG=""
 MODE=update            # update | status | rollback | self-update | version
 DRY=0
@@ -44,6 +45,7 @@ Modi (Standard: Update auf das neueste Image):
 Optionen:
   --env-file FILE   Stack-Variablen (Standard: ./.env, sonst die Datei neben dem Skript)
   --stack-file FILE Stack-Datei zum Wiederherstellen eines fehlenden Dienstes (Standard: stack.yaml neben dem Skript)
+  --stack-override FILE  zusätzliche Compose-Datei (Overlay) hinter der Stack-Datei, wiederholbar (auch STACK_OVERRIDE_FILES, durch Leerzeichen getrennt)
   --tag TAG         diesen Tag verwenden (z. B. sha-6c074f7 oder 0.1.0) statt des neuesten sha-Tags
   --stack NAME      Stack-Name (Standard: timetrack)
   --dry-run         nur anzeigen, was passieren würde (keine Änderung; nur lesende docker-Aufrufe)
@@ -62,6 +64,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --env-file) ENV_FILE="${2:?Wert für --env-file fehlt}"; shift 2 ;;
     --stack-file) STACK_FILE="${2:?Wert für --stack-file fehlt}"; shift 2 ;;
+    --stack-override) OVERRIDES+=("${2:?Wert für --stack-override fehlt}"); shift 2 ;;
     --tag) TAG="${2:?Wert für --tag fehlt}"; shift 2 ;;
     --stack) STACK="${2:?Wert für --stack fehlt}"; shift 2 ;;
     --script-url) SCRIPT_URL="${2:?Wert für --script-url fehlt}"; shift 2 ;;
@@ -173,6 +176,16 @@ env_get() { sed -n "s/^$2=//p" "$1" | tail -n 1 | tr -d "\"'" || true; }
 if [ -z "$STACK_FILE" ]; then
   if [ -f "$SCRIPT_DIR/stack.yaml" ]; then STACK_FILE="$SCRIPT_DIR/stack.yaml"; elif [ -f ./stack.yaml ]; then STACK_FILE=./stack.yaml; fi
 fi
+# Overlay files: --stack-override (repeatable) plus STACK_OVERRIDE_FILES (space separated); all must exist.
+if [ -n "${STACK_OVERRIDE_FILES:-}" ]; then
+  read -r -a _env_overrides <<< "$STACK_OVERRIDE_FILES"
+  OVERRIDES+=("${_env_overrides[@]}")
+fi
+STACK_C_ARGS=()
+for _f in ${OVERRIDES[@]+"${OVERRIDES[@]}"}; do
+  [ -f "$_f" ] || die "Overlay-Datei nicht gefunden: $_f"
+  STACK_C_ARGS+=(-c "$_f")
+done
 
 CURRENT_IMAGE="$(env_get "$ENV_FILE" TIMETRACK_IMAGE)"
 [ -n "$CURRENT_IMAGE" ] || die "TIMETRACK_IMAGE ist in $ENV_FILE nicht gesetzt."
@@ -374,7 +387,7 @@ restore_migrate_service() {
   say "Der Dienst ${MIGRATE_SERVICE} fehlt. Stelle ihn aus ${STACK_FILE} wieder her (docker stack deploy; Backend bleibt bei ${replicas} Replika(s) mit ${run_image}) ..."
   # shellcheck disable=SC1090
   ( set +u; set -a; . "$ENV_FILE"; set +a; export TIMETRACK_IMAGE="$run_image" BACKEND_REPLICAS="$replicas"
-    dkl stack deploy --with-registry-auth --resolve-image never -c "$STACK_FILE" "$STACK" ) \
+    dkl stack deploy --with-registry-auth --resolve-image never -c "$STACK_FILE" ${STACK_C_ARGS[@]+"${STACK_C_ARGS[@]}"} "$STACK" ) \
     || die "docker stack deploy ist fehlgeschlagen (Ausgabe siehe oben). Häufige Ursachen: fehlende Variablen in der .env, fehlende Secrets, Zeitüberschreitung."
   while [ "$tries" -lt 20 ]; do
     if service_exists "$MIGRATE_SERVICE"; then good "Dienst ${MIGRATE_SERVICE} wiederhergestellt."; return 0; fi

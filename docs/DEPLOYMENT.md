@@ -65,9 +65,121 @@ cd timetrack-deploy && git pull --ff-only          # holt die neuesten Skripte; 
 ./update.sh --self-update --script-ref <Commit>     # einen bestimmten Commit festnageln (Commit-Pin)
 ```
 
-`OWNER` ist der GitHub-Konto-/Organisationsname aus deinem Image (`ghcr.io/OWNER/timetrack-backend`); `--self-update` leitet die Quelle (`raw.githubusercontent.com/OWNER/timetrack-backend/deploy/deploy/swarm/update.sh`) daraus ab, `--script-url` überschreibt sie. Das Skript ersetzt sich nie ungefragt: Es lädt in eine Temporärdatei, prüft Kopfzeile, Version, Endmarke und `bash -n`, zeigt Version, sha256 und `diff`, fragt (außer mit `--yes`) und sichert die alte Fassung. Beim normalen Start weist es nur mit einer Warnung darauf hin, wenn auf dem Branch eine andere Fassung liegt (abschaltbar mit `--no-self-check` oder `UPDATE_SELF_CHECK=0`). Vertrauensanker ist TLS zu GitHub; wer mehr will, pinnt mit `--script-ref` einen geprüften Commit. Nach einem `--self-update` das Skript neu starten. `stack.yaml` muss neben `update.sh` liegen (der Klon liefert sie mit); sie wird gebraucht, wenn ein Dienst wiederhergestellt werden muss.
+`OWNER` ist der GitHub-Konto-/Organisationsname aus deinem Image (`ghcr.io/OWNER/timetrack-backend`); `--self-update` leitet die Quelle (`raw.githubusercontent.com/OWNER/timetrack-backend/deploy/deploy/swarm/update.sh`) daraus ab, `--script-url` überschreibt sie. Das Skript ersetzt sich nie ungefragt: Es lädt in eine Temporärdatei, prüft Kopfzeile, Version, Endmarke und `bash -n`, zeigt Version, sha256 und `diff`, fragt (außer mit `--yes`) und sichert die alte Fassung. Beim normalen Start weist es nur mit einer Warnung darauf hin, wenn auf dem Branch eine andere Fassung liegt (abschaltbar mit `--no-self-check` oder `UPDATE_SELF_CHECK=0`). Vertrauensanker ist TLS zu GitHub; wer mehr will, pinnt mit `--script-ref` einen geprüften Commit. Nach einem `--self-update` das Skript neu starten. Im Klon liegen die Dateien unter `deploy/swarm/` (dort `./update.sh`, `./create-secrets.sh`, `.env`). `stack.yaml` muss neben `update.sh` liegen (der Klon liefert sie mit); sie wird gebraucht, wenn ein Dienst wiederhergestellt werden muss, optional mit Overlay-Dateien (`--stack-override`, `STACK_OVERRIDE_FILES`). Ein vorhandenes, von Hand gewachsenes Verzeichnis umstellen: nächster Unterabschnitt.
 
 `.env` enthält keine Passwörter, kann aber interne Adressen verraten: nicht ins öffentliche Repository, in ein privates Konfigurations-Repository ist in Ordnung.
+
+### Bestehendes Verzeichnis auf den deploy-Branch umstellen
+
+Für einen Manager, auf dem schon ein Stack läuft und das Verzeichnis von Hand gewachsen ist (zum Beispiel `create-secrets.sh`, eine umbenannte und selbst veränderte Stack-Datei wie `timetrack-stack.yml`, ein alter `update.sh`, dazu die versteckten Dateien `.env` und `.env.bak`). Ziel: Skripte und Stack-Datei kommen per `git pull --ff-only` bzw. `update.sh --self-update` aus dem Branch `deploy`, die eigenen Änderungen bleiben erhalten, der laufende Stack wird nicht unterbrochen. Der Plan ändert das alte Verzeichnis nie; der Rückweg ist jederzeit der alte `docker stack deploy`-Aufruf. Es ändert sich nichts an Datenbank, Secrets und Daten.
+
+**Was der Branch enthält und was `update.sh` erwartet.** Der Klon hat die Dateien **in Unterordnern**, nicht im Wurzelverzeichnis:
+
+| Pfad im Klon | Inhalt |
+|---|---|
+| `deploy/swarm/stack.yaml` | offizielle Stack-Datei (heißt **`stack.yaml`**, nicht `timetrack-stack.yml`) |
+| `deploy/swarm/update.sh` | Update-Skript (Version 2.x) |
+| `deploy/swarm/create-secrets.sh` | Secrets anlegen (`--add-only` für bestehende Stacks) |
+| `deploy/swarm/.env.example` | Vorlage der `.env` |
+| `deploy/swarm/override.example.yaml` | Vorlage für ein Overlay mit lokalen Ergänzungen |
+| `deploy/swarm/migrate-dir.sh` | lesender Vergleich alter Dateien mit dem Branch (ändert nichts) |
+| `docs/`, `README.md`, `LICENSE` | Betriebsdokumentation |
+
+`update.sh` sucht die Stack-Datei **nur** unter dem festen Namen `stack.yaml` (neben dem Skript, sonst im aktuellen Verzeichnis) oder über `--stack-file FILE`; sie wird nur gebraucht, wenn der Dienst `timetrack_migrate` fehlt und wiederhergestellt werden muss. Beim normalen Update liest das Skript die Stack-Datei nicht: es schreibt das neue Image in die `.env`, startet den Migrationsjob per `docker service update` und rollt das Backend per `docker service update --image` aus. **Eine veränderte Stack-Datei bleibt daher bei Updates unberührt**, wirkt aber nur, wenn man selbst `docker stack deploy` ausführt. Die `.env` sucht das Skript in `./.env` (aktuelles Verzeichnis), sonst neben dem Skript (`deploy/swarm/.env`) oder über `--env-file FILE`. Pflicht in der `.env` sind `TIMETRACK_IMAGE` (das Skript braucht daraus Registry und Repository), `DB_HOST`, `PUBLIC_BASE_URL`, `WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGIN` und `VAPID_SUBJECT` (die Stack-Datei verweigert sonst das Rendern). Die Secrets liegen als Swarm-Secrets (`tt_db_password`, `tt_storage_secret_key`, `tt_vapid_private_key`, optional `tt_smtp_password`, `tt_oidc_client_secret`, `tt_apns_private_key`) im Cluster, **nicht** im Verzeichnis (`create-secrets.sh` liest sie nur einmalig ein und zeigt sie nie wieder); im Klon muss deshalb nichts davon liegen.
+
+**Welche lokalen Änderungen schon offiziell unterstützt sind** (Spalte „ohne Stack-Änderung“ = nur `.env`):
+
+| Änderung in der eigenen Stack-Datei | Offiziell unterstützt? | Wie |
+|---|---|---|
+| APNs (`APNS_*`, Secret `tt_apns_private_key`) | ja, optionaler Block | Block in `stack.yaml` aktivieren **oder** Overlay (`override.example.yaml`); Werte in `.env`; Secret: `create-secrets.sh --add-only --apns-private-key-file FILE` |
+| SMTP (E-Mail-Wiederherstellung) | ja, optionaler Block | Block aktivieren oder Overlay; Werte in `.env`; Secret `--smtp-password-file` |
+| OIDC | ja, optionaler Block | wie SMTP; Secret `--oidc-client-secret-file` |
+| `TRUSTED_PROXY_CIDRS`, `TRUSTED_PROXY_HEADER` | ja | nur `.env` |
+| `PWA_CSP_MODE` (Notbremse) | ja | nur `.env` |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_TLS`, `DB_POOL_*`, `DB_KEEPALIVE_SECONDS` | ja | nur `.env` |
+| Veröffentlichter Port | ja | `PUBLISHED_PORT` in der `.env` |
+| Replikas | ja | `BACKEND_REPLICAS` in der `.env` |
+| Platzierung | ja | `BACKEND_PLACEMENT` in der `.env` (ein Constraint) |
+| `APPLE_APP_IDS`, `SESSION_TTL_HOURS`, `PUSH_ALLOWED_HOSTS`, `MODULES_DISABLED`, Wartungs- und Aufbewahrungswerte | ja | nur `.env` (Liste: `.env.example`) |
+| Lokales Dateispeicher-Volume | ja, auskommentierter Block | Block aktivieren **oder** Overlay, dazu `BACKEND_PLACEMENT` auf einen Knoten |
+| Eigene Netzwerke (`networks:`), zusätzliche Labels, andere Ressourcenlimits, zusätzliche Variablen | nein | Overlay |
+
+**Overlay statt Stack-Datei ändern.** Wer die Datei im Klon bearbeitet, bekommt beim `git pull --ff-only` Konflikte oder Abbrüche. Besser bleibt `stack.yaml` unverändert und alles Eigene steht in einer ungetrackten Datei `override.yaml` (Vorlage `override.example.yaml`; `.env`, `.env.bak` und `override.yaml` sind nicht im Git). Sie wird als zweite Compose-Datei angegeben: `docker stack deploy -c stack.yaml -c override.yaml timetrack`. Compose führt die Dateien zusammen: `environment` pro Schlüssel (das Overlay gewinnt), `secrets` und `ports` als Listen, einzelne Werte (zum Beispiel `replicas`) werden ersetzt; ein Eintrag der Basisdatei lässt sich per Overlay nicht entfernen. Mit `docker stack config -c stack.yaml -c override.yaml` sieht man vorher das Ergebnis. `update.sh` braucht das Overlay nur bei der Wiederherstellung eines fehlenden Migrationsdienstes: `--stack-override override.yaml` (wiederholbar) oder `STACK_OVERRIDE_FILES="override.yaml"` (durch Leerzeichen getrennt) ab Version 2.1.0.
+
+**Schritt für Schritt.** Alles auf dem Manager-Knoten; `ALT` ist das bisherige Verzeichnis (hier `~/timetrack`), `NEU` das neue Nachbarverzeichnis. `OWNER` und die Repository-URL aus dem Image-Namen übernehmen. Nichts davon ändert das alte Verzeichnis oder den laufenden Stack, bis Schritt 8.
+
+```sh
+# 1. Sichern: ganzes Verzeichnis (inkl. versteckter Dateien) und den Ist-Zustand des Clusters festhalten
+BK=~/timetrack.backup-$(date +%Y%m%d)
+cp -a ~/timetrack "$BK" && ls -la "$BK"                  # .env und .env.bak müssen dabei sein
+docker stack services timetrack > "$BK/ist-services.txt"
+docker stack ps timetrack --no-trunc > "$BK/ist-tasks.txt"
+docker service inspect timetrack_backend --pretty > "$BK/ist-backend.txt"
+docker service inspect timetrack_backend --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}'   # Image notieren (Rückweg)
+docker service inspect timetrack_backend --format '{{.Spec.Mode.Replicated.Replicas}}'            # Replikas notieren
+docker secret ls                                          # tt_db_password, tt_storage_secret_key, tt_vapid_private_key (+ optionale) müssen existieren
+# Datenbank-Backup wie in Abschnitt 14 (die Umstellung ändert kein Schema, ein frisches Backup ist trotzdem Pflicht)
+
+# 2. Branch in ein NEUES Nachbarverzeichnis klonen (nicht in das alte)
+cd ~ && git clone --branch deploy --single-branch --depth 1 https://github.com/OWNER/timetrack-backend.git timetrack-deploy
+cd ~/timetrack-deploy/deploy/swarm && ./update.sh --version       # erwartet: update.sh Version 2.x
+
+# 3. .env und lokale Dateien übernehmen (kopieren, nicht verschieben)
+cp -p ~/timetrack/.env ~/timetrack/.env.bak ~/timetrack-deploy/deploy/swarm/
+chmod 600 ~/timetrack-deploy/deploy/swarm/.env
+# Secrets: nichts zu kopieren, sie liegen als Swarm-Secrets im Cluster. Fehlt nur ein optionales (z. B. APNs):
+#   ./create-secrets.sh --add-only --apns-private-key-file /sicherer/pfad/AuthKey_XXXX.p8     (vorher mit --dry-run)
+
+# 4. Alt gegen neu vergleichen (lesend; ändert nichts)
+./migrate-dir.sh --old-stack ~/timetrack/timetrack-stack.yml --old-env ~/timetrack/.env
+diff -u ~/timetrack/timetrack-stack.yml stack.yaml | less        # vollständiger Vergleich; alt = "-", neu = "+"
+
+# 5. Eigene Änderungen einsortieren (siehe Tabelle): .env ergänzen, sonst override.yaml aus override.example.yaml anlegen
+cp override.example.yaml override.yaml                    # nur falls nötig; nicht benötigte Teile löschen
+${EDITOR:-nano} .env override.yaml
+
+# 6. Gerenderte Stack-Konfiguration prüfen (rendert nur, deployt nichts) und mit dem Ist-Zustand vergleichen
+set -a; . ./.env; set +a
+docker stack config -c stack.yaml -c override.yaml > ~/neu-gerendert.yml        # ohne Overlay: -c override.yaml weglassen
+docker stack config -c ~/timetrack/timetrack-stack.yml > ~/alt-gerendert.yml
+diff -u ~/alt-gerendert.yml ~/neu-gerendert.yml | less    # jede Zeile erklären können; nur Gewolltes darf übrig bleiben
+
+# 7. Zustand prüfen und Trockenlauf des Updates im neuen Verzeichnis
+./update.sh --status                                      # .env gegen laufendes Image; muss "ok" melden
+./update.sh --dry-run --tag sha-4b42364                   # ändert nichts; zeigt Tag, Ablauf und fehlenden Migrationsdienst
+
+# 8. Deploy mit der neuen Datei. TIMETRACK_IMAGE in .env muss das AKTUELL laufende Image bleiben (Schritt 1),
+#    damit dieser Schritt nur Konfiguration angleicht und kein Update ist.
+docker stack deploy --with-registry-auth --resolve-image never -c stack.yaml -c override.yaml timetrack
+docker stack services timetrack; ./update.sh --status
+
+# 9. Erst danach das eigentliche Update, mit festgenageltem Tag (siehe Hinweis unten)
+./update.sh --tag sha-4b42364
+```
+
+**Erwartung zu Schritt 8.** `docker stack deploy` ändert nur Dienste, deren Spezifikation sich gegenüber dem laufenden Zustand unterscheidet. Zeigt der Vergleich in Schritt 6 keinen Unterschied am Backend, bleibt es unberührt. Jede Abweichung (zum Beispiel ein anderer Standardwert, ein anderes Limit, ein neues Netzwerk) löst ein Rolling Update (`start-first`, Rollback bei Fehlschlag) des Backends aus, **ohne Ausfall bei einem gesunden Replikat**; der Migrationsjob läuft nur erneut, wenn sich sein Image oder seine Spezifikation ändert. Das Backend startet nur, wenn `/ready` 200 liefert (Schema aktuell). Datenverlust ist ausgeschlossen: Der Stack hat keine Volumes, die Daten liegen in der externen Datenbank.
+
+**Image pinnen.** Der Tag `sha-4b42364` (Stand vor dem `__Host-`-Cookie, SEC-15b) ist der letzte, den die Apple-App noch ohne Anpassung versteht; neuere Tags setzen bei HTTPS das Cookie `__Host-tt_session`, dafür muss die Apple-App angepasst sein (`docs/handoffs/SEC-15B.md`), und alle Nutzer müssen sich einmal neu anmelden. Bis die angepasste App verteilt ist: immer mit `--tag` aufrufen, **nie** ohne (ohne `--tag` nimmt `update.sh` das neueste Image). `update.sh --dry-run --tag sha-4b42364` bestätigt, dass der Tag in der Registry existiert; gibt es nur die eindeutige Form `sha-4b42364-<PWA-Commit>`, diese mit `--tag` angeben. Später ohne `--tag` aktualisieren.
+
+**Rückweg.** Das alte Verzeichnis `~/timetrack` bleibt unverändert liegen. Hat Schritt 8 etwas Unerwünschtes bewirkt: `docker service rollback timetrack_backend` (Image und Konfiguration des Backends zurück), oder den alten Stand per `docker stack deploy` wiederherstellen:
+
+```sh
+cd ~/timetrack && set -a; . ./.env; set +a              # .env.bak enthält die vorherige Fassung
+docker stack deploy --with-registry-auth --resolve-image never -c timetrack-stack.yml timetrack
+```
+
+Das Image-Tag aus Schritt 1 notiert zu haben genügt, um jederzeit auf den alten Stand zu kommen (`TIMETRACK_IMAGE` in der `.env` setzen oder `docker service update --image <notiertes Image> timetrack_backend`). Das Datenbankschema wird dabei **nicht** zurückgesetzt (Abschnitt 13). Das neue Verzeichnis kann bei Bedarf gelöscht werden, das alte nur, wenn der neue Weg einige Wochen fehlerfrei lief.
+
+**Was in der eigenen Stack-Datei zu prüfen ist** (Ergebnis von Schritt 4 und 6):
+
+1. Lokale `environment`-Einträge, die `stack.yaml` nicht kennt (APNs, SMTP, OIDC, eigene Variablen) und die zugehörigen Einträge unter `secrets:` im Dienst und auf oberster Ebene.
+2. Die `image:`-Zeilen: in `stack.yaml` kommen sie aus `TIMETRACK_IMAGE` (kein fester Tag in der Datei).
+3. `ports:` (Port, `mode: ingress` oder `host`) und `PUBLISHED_PORT`, die Firewallregel und `TRUSTED_PROXY_CIDRS` (Abschnitt 9).
+4. `deploy:` (Replikas, `placement.constraints`, Ressourcenlimits, `update_config`, `rollback_config`, `restart_policy`) und die Healthcheck-Zeilen.
+5. `networks:` und `volumes:` (die offizielle Datei hat keine eigenen Netzwerke und keine Volumes; ein Volume für lokalen Dateispeicher steht als auskommentierter Block bereit).
+6. Namen der Secrets (`tt_*`; bei einem anderen `--prefix` beim Anlegen müssen die Namen in Stack- oder Overlay-Datei dazu passen).
+7. Zeilen, die der Vergleich als „nur in der alten Datei“ meldet, ob sie noch gebraucht werden (ältere Fassungen enthielten Übergangslösungen).
+8. In der `.env`: `TIMETRACK_IMAGE`, `PUBLIC_BASE_URL`, `WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGIN`, `VAPID_SUBJECT`, `DB_HOST` und, falls die neue Datei sie liest, `PWA_CSP_MODE` (Standard `enforce`) und `TRUSTED_PROXY_CIDRS`.
 
 ## 3. Datenbank vorbereiten (vorhandene MariaDB)
 

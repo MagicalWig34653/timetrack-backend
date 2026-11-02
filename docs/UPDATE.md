@@ -62,7 +62,7 @@ deploy/swarm/update.sh --env-file ./.env             # fragt vorher nach der Dat
 deploy/swarm/update.sh --tag sha-6c074f7 --yes            # bestimmten Stand erzwingen, ohne Rückfrage
 ```
 
-Optionen: `--stack NAME` (Standard `timetrack`), `--force` (auch ohne Tag-Wechsel neu starten, idempotent), `--skip-migrate`, `--stack-file FILE`. Weitere Modi: `--status` (Zustandsbericht), `--rollback` (Backend auf `.env.bak` zurück), `--self-update` (Skript vom `deploy`-Branch holen), `--version`. Fehlt der Dienst `<stack>_migrate`, stellt das Skript ihn aus `stack.yaml` wieder her. Braucht `curl` und `docker` auf einem Swarm-Manager. Einzelheiten und Fehlersuche: [Deployment](DEPLOYMENT.md), Abschnitte 2 und 13.
+Optionen: `--stack NAME` (Standard `timetrack`), `--force` (auch ohne Tag-Wechsel neu starten, idempotent), `--skip-migrate`, `--stack-file FILE`, `--stack-override FILE` (Overlay, wiederholbar; auch `STACK_OVERRIDE_FILES`). Weitere Modi: `--status` (Zustandsbericht), `--rollback` (Backend auf `.env.bak` zurück), `--self-update` (Skript vom `deploy`-Branch holen), `--version`. Fehlt der Dienst `<stack>_migrate`, stellt das Skript ihn aus `stack.yaml` wieder her. Braucht `curl` und `docker` auf einem Swarm-Manager. Einzelheiten und Fehlersuche: [Deployment](DEPLOYMENT.md), Abschnitte 2 und 13.
 
 ## Neues Image erzwingen (Swarm)
 
