@@ -65,14 +65,14 @@ Keine ausnutzbare Lücke mit hohem Schweregrad gefunden. Kontentrennung (IDOR), 
 - Ort: `Storage/StorageRoutes.swift:19-31`, `Storage/StorageService.swift:174-205`, `Storage/StorageModels.swift:8-15`.
 - Beschreibung: Je Datei gilt ein Limit (Standard 10 MiB, hart 64 MiB), aber weder Anzahl noch Gesamtgröße je Konto sind begrenzt; Uploads sind nicht ratenbegrenzt. Bei der Standardregel „alles in die Datenbank“ kann ein Mitglied die Datenbank füllen. Jede Anfrage puffert bis zur Grenze im Speicher.
 - Empfehlung: Kontingent (Bytes und Anzahl) je Konto, konfigurierbar; Upload-Rate je Konto.
-- Status: behoben (Paket SEC-C, Commit siehe `git log --grep SEC-C`; Details `docs/handoffs/SEC-C.md`).
+- Status: behoben (Paket SEC-C, Commit 2bf44e9; Details `docs/handoffs/SEC-C.md`).
 
 ### SEC-07 Niedrig (3.1): Kontoexport ohne frische Anmeldung, Ratenbegrenzung und Speichergrenze
 
 - Ort: `Accounts/AccountRoutes.swift:29-39`, `Accounts/AccountExportService.swift`.
 - Beschreibung: `GET /me/export` erzeugt das gesamte Archiv (inklusive aller Dateien) im Speicher und verlangt nur eine normale Sitzung. Ein gestohlenes Cookie kann alle Daten in einem Schritt abziehen; wiederholte Aufrufe belasten den Speicher.
 - Empfehlung: `context.fresh()` verlangen, Aufruf-Limit (zum Beispiel 3 je Stunde), Streaming oder Größengrenze.
-- Status: behoben (Paket SEC-C, Commit siehe `git log --grep SEC-C`; Details `docs/handoffs/SEC-C.md`).
+- Status: behoben (Paket SEC-C, Commit 2bf44e9; Details `docs/handoffs/SEC-C.md`).
 
 ### SEC-08 Niedrig (3.1): Der Server versendet Bestätigungs-Mails an beliebige Adressen
 
@@ -100,14 +100,14 @@ Keine ausnutzbare Lücke mit hohem Schweregrad gefunden. Kontentrennung (IDOR), 
 - Ort: `OAuth/OAuthTokenLimiter.swift:11` (Schlüssel `client:<client_id>`, 120 je 5 Minuten, global je Client), `RecoveryService.swift`/`AuthSupport.swift:136` (Handle-Zähler 15), `Groups/GroupRoutes.swift:54,68` (`grp-miss` je IP), `TriggerLinks.swift:152-170`, `CalendarFeeds.swift:363-390`.
 - Beschreibung: (a) Wer eine `client_id` kennt, kann den Token-Endpunkt dieses Clients für andere Nutzer sperren, weil der Zähler nicht an das Client-Geheimnis oder eine Sitzung gebunden ist (Public Client). (b) Handle-Zähler sperren das Opfer für Wiederherstellung (nicht für Passkey-Login, der nach Credential-ID zählt). (c) Alle unauthentifizierten Zähler-Pfade schreiben in der serialisierten Transaktion mit der globalen Sperre `auth_lock` (`AuthSupport.swift:95-98`), sodass eine Flut von Treffern/Fehlversuchen von vielen Adressen aus die Schreibdurchsatz-Obergrenze aller Konten drückt; ohne korrekt gesetzte `TRUSTED_PROXY_CIDRS` teilen sich alle Clients einen Zähler.
 - Empfehlung: Zähler und Verwerfen offensichtlich ungültiger Eingaben vor `auth_lock` (zum Beispiel prozesslokaler Token-Bucket für anonyme Pfade); Sperren je (Client, IP) statt je Client.
-- Status: behoben (Paket SEC-C, Commit siehe `git log --grep SEC-C`; Details `docs/handoffs/SEC-C.md`).
+- Status: behoben (Paket SEC-C, Commit 2bf44e9; Details `docs/handoffs/SEC-C.md`).
 
 ### SEC-12 Niedrig (3.1): Offene Client-Registrierung (DCR) erlaubt Einwilligungs-Phishing und Tabellenwachstum
 
 - Ort: `OAuth/OAuthService.swift:65-91`, `OAuth/OAuthService.swift:162-170` (`consent`).
 - Beschreibung: Jeder anonyme Aufrufer kann Clients mit frei wählbarem Anzeigenamen registrieren (20 je 5 Minuten je IP). Die Zustimmungsseite zeigt Clientnamen und Host der Weiterleitung; ein Angreifer kann sich als bekannter Dienst benennen und per Link zur Zustimmung bewegen. Bei Zustimmung gehen Code und Token an den Host des Angreifers (Umfang laut gewählten Scopes: Zeiten, Abwesenheiten, Berichtsheft, Schreibzugriffe). Die Registrierung bleibt bis zu 30 Tage in der Tabelle, bis Aufräumen greift; unbenutzte Clients werden nur in 50er-Schritten bei neuen Registrierungen entfernt.
 - Empfehlung: Auf der Zustimmungsseite Redirect-Host hervorheben, „nicht verifizierter Client“ kennzeichnen und Datum der Registrierung zeigen; Scopes standardmäßig nur lesend vorbelegen; Aufräumen in `MaintenanceService`.
-- Status: behoben (Paket SEC-C, Commit siehe `git log --grep SEC-C`; Details `docs/handoffs/SEC-C.md`).
+- Status: behoben (Paket SEC-C, Commit 2bf44e9; Details `docs/handoffs/SEC-C.md`).
 
 ### SEC-13 Niedrig (2.0): Produktions-Compose veröffentlicht standardmäßig auf allen Schnittstellen; Secret-Dateien 0644
 
