@@ -80,7 +80,8 @@ extension AuthTests {
         let started = try await oaStart(app, context, client: client, scope: scope, state: state)
         let consent = try await oaSend(app, .GET, "/api/v1/oauth/requests/\(started.id)", headers: headers(context))
         XCTAssertEqual(consent.status, .ok, consent.body.string)
-        let decision = try await oaDecision(app, context, started.id, approve: true, scopes: scopes)
+        // Without a scope parameter only read scopes are pre-selected (0.44.0); this helper explicitly allows all scopes then.
+        let decision = try await oaDecision(app, context, started.id, approve: true, scopes: scopes ?? (scope == nil ? McpScopes.all : nil))
         XCTAssertEqual(decision.status, .ok, decision.body.string)
         let url = oaJSON(decision)["redirectUrl"] as? String ?? ""
         let query = oaQuery(url)

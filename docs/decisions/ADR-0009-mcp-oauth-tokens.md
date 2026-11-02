@@ -38,3 +38,7 @@ Ein Lesetoken kann nicht schreiben; Dokumentrechte folgen nicht aus Zeitplanrech
 ## Pakete
 
 C16 OAuth-Server + Tokens + Grants (Backend), C17 MCP-Endpunkt + Tools (Backend), L15 PWA (Consent, Tokens, Grants, Hilfe zur Einrichtung in ChatGPT/Claude), danach E2E (Wegwerf-Backend + Skript-MCP-Client + OAuth-Flow im Browser). Nicht prüfbar ohne Nutzer: Anbindung in echtem ChatGPT/Claude (erreichbare Domain `test.example.org` vorhanden; Nutzer trägt den Connector selbst ein).
+
+## Nachtrag 02.11.2026 (SCOPE-F10): Scope-Vorbelegung
+
+Nutzerentscheidung 02.11.2026: Sendet ein Client keinen `scope`, werden auf der Zustimmungsseite nur die lesenden Scopes vorbelegt (statt aller sieben). Die Anfrage speichert zusätzlich `requested_scopes` (angefragt, leer ohne Parameter) und `available_scopes` (wählbar: ohne Parameter alle, sonst die angefragten); `scopes` ist die Vorbelegung. `decide` darf nur Scopes aus `available_scopes` gewähren, ohne `scopes` im Body die Vorbelegung. Refresh-Rotation und bestehende Grants/Tokens bleiben unverändert (Migration `oauth.add_request_scope_sets`, nullbare Spalten; offene Alt-Anfragen verhalten sich wie zuvor).

@@ -4,7 +4,7 @@ import FluentMySQLDriver
 
 public enum OAuthSchema {
     public static let migrations: [any Migration] = [
-        CreateOAuthClients(), CreateOAuthRequests(), CreateOAuthGrants(), CreateOAuthCodes(), CreateOAuthTokens(), CreateApiTokens(),
+        CreateOAuthClients(), CreateOAuthRequests(), CreateOAuthGrants(), CreateOAuthCodes(), CreateOAuthTokens(), CreateApiTokens(), AddOAuthRequestScopeSets(),
     ]
 }
 
@@ -136,4 +136,18 @@ struct CreateApiTokens: AsyncMigration {
         try await index(database, "idx_api_tokens_account_id", "api_tokens", "account_id")
     }
     func revert(on database: any Database) async throws { try await database.schema("api_tokens").delete() }
+}
+
+/// 0.44.0: requested and selectable scopes of an authorization request (pending rows keep NULL = old behaviour).
+struct AddOAuthRequestScopeSets: AsyncMigration {
+    let name = "oauth.add_request_scope_sets"
+    func prepare(on database: any Database) async throws {
+        // One column per statement: SQLite cannot add several columns in one ALTER TABLE.
+        try await database.schema("oauth_requests").field("requested_scopes", .json).update()
+        try await database.schema("oauth_requests").field("available_scopes", .json).update()
+    }
+    func revert(on database: any Database) async throws {
+        try await database.schema("oauth_requests").deleteField("requested_scopes").update()
+        try await database.schema("oauth_requests").deleteField("available_scopes").update()
+    }
 }

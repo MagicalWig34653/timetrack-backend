@@ -160,6 +160,25 @@ final class PreparedEvaluation {
         return schoolDays >= schoolRule.blockWeekDays && lessonCount >= schoolRule.blockWeekLessons
     }
 
+    /// F10 (ADR-0028 addendum): a block week credits at most `blockWeekDays` school days (40 h). The school days are counted in
+    /// calendar order Monday to Sunday; only days that are not holiday, vacation, sick or otherwise marked count as school days.
+    /// Returns false when `date` is a further school day beyond the credited ones (no credit, Soll unchanged).
+    private func isCreditedBlockWeekDay(_ date: LocalDate, model: EngineWorkModel) throws -> Bool {
+        guard let schoolRule = LegalWorkProfile.profile(model.legalProfileId)?.school else { return true }
+        let monday = date.addingDays(1 - date.isoWeekday)
+        var earlier = 0
+        var day = monday
+        while day < date {
+            if let selected = try timeline.model(for: day), selected.legalProfileId == model.legalProfileId,
+               assigned[Key(model: selected.id, date: day), default: []].contains(where: { $0.kind == .school }),
+               try effective(day, explicit: snapshot.preferences[day.description] ?? DayPreferences()).0.mark == .none {
+                earlier += 1
+            }
+            day = day.addingDays(1)
+        }
+        return earlier < schoolRule.blockWeekDays
+    }
+
     private func baseEvaluation(_ date: LocalDate, now: Date) throws -> (DayEvaluationResult, EngineWorkModel) {
         let selectedModel = try timeline.model(for: date)
         let zone = snapshot.models.last(where: { $0.validFrom <= date })?.timezone ?? snapshot.models.first?.timezone ?? "Europe/Berlin"
@@ -168,7 +187,13 @@ final class PreparedEvaluation {
         var (preferences, markSource) = try effective(date, explicit: snapshot.preferences[date.description] ?? DayPreferences())
         if selectedModel != nil {
             preferences.schoolBlockWeek = try blockWeek(for: date, model: model)
-            if let rule = LegalWorkProfile.profile(model.legalProfileId)?.school, !preferences.schoolBlockWeek {
+            var extraBlockWeekDay = false
+            if preferences.schoolBlockWeek, !(try isCreditedBlockWeekDay(date, model: model)) {
+                preferences.schoolBlockWeek = false
+                preferences.schoolFullDayAllowed = false
+                extraBlockWeekDay = true
+            }
+            if !extraBlockWeekDay, let rule = LegalWorkProfile.profile(model.legalProfileId)?.school, !preferences.schoolBlockWeek {
                 let monday = date.addingDays(1 - date.isoWeekday)
                 var earlierFullDays = 0
                 var earlier = monday

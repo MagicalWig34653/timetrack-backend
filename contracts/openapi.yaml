@@ -1,8 +1,9 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.43.0
+  version: 0.44.0
   description: |
+    v0.44.0 (SCOPE-F10, additiv, Verhaltensänderungen): (1) OAuth: Sendet ein Client kein `scope`, werden auf der Zustimmungsseite nur die lesenden Scopes vorbelegt (`time:read`, `schedule:read`, `reports:read`, `documents:read`) statt aller sieben; Schreibrechte kann die Person ausdrücklich zusätzlich erlauben. `OAuthRequest` hat die neuen Pflichtfelder `requestedScopes` (vom Client angefragt, leer ohne Parameter) und `availableScopes` (insgesamt wählbar); `scopes` bleibt die Vorbelegung. Mit `scope`-Parameter ist alles unverändert (alle drei Listen gleich). `decide` ohne `scopes` gewährt die Vorbelegung. Bestehende Grants und Tokens bleiben unverändert. (2) Zeitwertung F10 (ADR-0028 Nachtrag): In einer Blockwoche mit mehr als fünf Schultagen erhalten nur die ersten fünf Schultage (Montag bis Sonntag, ohne Feiertage und markierte Abwesenheitstage) die Gutschrift von 8 h (höchstens 40 h je Woche); jeder weitere Schultag hat keine Gutschrift und sein Soll bleibt unverändert. Keine neuen Felder.
     v0.43.0 (SEC-15b, ADR-0003 Nachtrag, Verhaltensänderung ohne neue Felder): Bei einer https-`PUBLIC_BASE_URL` heißt das Sitzungscookie `__Host-tt_session` (Secure, HttpOnly, SameSite=Lax, Path=/, ohne Domain); bei http (lokale Entwicklung) weiterhin `tt_session`. Bestehende Sitzungen mit dem alten Namen werden nicht mehr akzeptiert (einmaliger Sitzungsverlust beim Update). Abmelden und Kontolöschung laufen ab beide Namen ab. Clients ermitteln den Namen aus dem Schema der Server-URL und dürfen ihn nicht fest verdrahten; der CSRF-Header `X-CSRF-Token` ist unverändert.
     v0.42.0 (PLAN-OFFDAY, ADR-0035 Vorschlag, Verhaltensänderung ohne neue Felder): Planblöcke an Feiertagen, Urlaubs-, Krank- und Freistellungstagen zählen mit ihrer eigenen Dauer als geplante Mehrzeit. `PlanWeekDay.plannedSeconds` und `TimeWeekDay.plannedSeconds` sind dort nicht mehr 0, sondern die Plandauer; `PlanWeek.totals.differenceSeconds` und `TimeWeek.summary.plannedSeconds` enthalten sie; `TimeWeekDay.planActualDifferenceSeconds` ist auch an solchen Tagen gesetzt (nicht künftig, mit Plandauer). Das Soll bleibt 0 (halber Urlaubstag: halbes Tagessoll), die Tagesmarkierung und der Urlaubsverbrauch bleiben unverändert; `blockedBy` bleibt als reine Information erhalten (der Tag ist weiterhin Urlaub usw., Planen ist erlaubt). Plan bucht weiterhin keine Ist-Zeit: Zeitkonto, Statistik und Auswertung ändern sich nicht.
     v0.39.0 (P15, additiv): Archivierte Orte. `GET /places?archived=true|all` (Standard: nur aktive; `true` nur archivierte, `all` beide) und `POST /places/{id}/restore` stellt einen archivierten Ort wieder her (200 mit dem Ort, idempotent, fremde Orte 404). Kennzahl `archived` am Ort war schon vorhanden.
@@ -1711,7 +1712,7 @@ paths:
         - { name: redirect_uri, in: query, required: true, schema: { type: string } }
         - { name: code_challenge, in: query, required: true, schema: { type: string } }
         - { name: code_challenge_method, in: query, required: true, schema: { type: string, enum: [S256] } }
-        - { name: scope, in: query, schema: { type: string } }
+        - { name: scope, in: query, schema: { type: string }, description: 'Leerzeichengetrennte Scopes. Ohne Angabe werden auf der Zustimmungsseite nur die lesenden Scopes vorbelegt (seit 0.44.0); Schreib-Scopes muss die Person ausdrücklich erlauben.' }
         - { name: state, in: query, schema: { type: string } }
         - { name: resource, in: query, required: true, schema: { type: string } }
       responses: { '302': { description: Weiterleitung } }
@@ -1731,7 +1732,7 @@ paths:
     get:
       operationId: getOAuthRequest
       summary: OAuth-Anfrage zur Zustimmung abrufen
-      description: Consent-Daten für die angemeldete Person (Client-Name, Redirect-Host, angefragte Scopes). Nur der angemeldete Konto-Browser sieht sie (an Sitzung gebunden), 10 min gültig.
+      description: Consent-Daten für die angemeldete Person (Client-Name, Redirect-Host; `scopes` = vorbelegte Scopes, `requestedScopes` = vom Client angefragt, `availableScopes` = wählbar; ohne angefragten Scope sind nur die lesenden Scopes vorbelegt und die Schreib-Scopes zusätzlich wählbar). Nur der angemeldete Konto-Browser sieht sie (an Sitzung gebunden), 10 min gültig.
       security: [ { session: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/OAuthRequest' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
@@ -1739,7 +1740,7 @@ paths:
     post:
       operationId: decideOAuthRequest
       summary: OAuth-Anfrage genehmigen oder ablehnen
-      description: Genehmigt (mit gewählter Scope-Teilmenge) oder lehnt ab; einmalig. Antwort liefert die Redirect-URL (mit code/state bzw. error).
+      description: Genehmigt (mit gewählter Scope-Teilmenge aus `availableScopes`; ohne `scopes` die Vorbelegung) oder lehnt ab; einmalig. Scopes außerhalb von `availableScopes` ergeben 400. Antwort liefert die Redirect-URL (mit code/state bzw. error).
       security: [ { session: [], csrf: [] } ]
       parameters: [ { $ref: '#/components/parameters/Id' } ]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [approve], properties: { approve: { type: boolean }, scopes: { type: array, items: { $ref: '#/components/schemas/McpScope' } } } } } } }
@@ -2289,7 +2290,7 @@ paths:
         '429': { $ref: '#/components/responses/TooMany' }
 components:
   securitySchemes:
-    session: { type: apiKey, in: cookie, name: tt_session, description: 'Bei https-PUBLIC_BASE_URL heißt das Cookie __Host-tt_session (seit 0.43.0), sonst tt_session.' }
+    session: { type: apiKey, in: cookie, name: tt_session, description: 'Bei https-PUBLIC_BASE_URL heißt das Cookie __Host-tt_session (seit 0.44.0), sonst tt_session.' }
     deviceToken: { type: http, scheme: bearer }
     bearer: { type: http, scheme: bearer, description: OAuth-Access-Token (tto_) oder persönliches Token (ttp_) nur für /mcp }
     csrf: { type: apiKey, in: header, name: X-CSRF-Token }
@@ -3594,12 +3595,14 @@ components:
       enum: [time:read, time:write, schedule:read, schedule:write, reports:read, reports:write, documents:read]
     OAuthRequest:
       type: object
-      required: [id, clientName, redirectHost, scopes, expiresAt, clientRegisteredAt, clientVerified]
+      required: [id, clientName, redirectHost, scopes, requestedScopes, availableScopes, expiresAt, clientRegisteredAt, clientVerified]
       properties:
         id: { type: string, format: uuid }
         clientName: { type: string }
         redirectHost: { type: string }
-        scopes: { type: array, items: { $ref: '#/components/schemas/McpScope' } }
+        scopes: { type: array, items: { $ref: '#/components/schemas/McpScope' }, description: 'Vorbelegung der Zustimmungsseite: die angefragten Scopes, ohne Angabe nur die lesenden (seit 0.44.0). Das gewährt `decide` ohne `scopes`.' }
+        requestedScopes: { type: array, items: { $ref: '#/components/schemas/McpScope' }, description: 'Vom Client im scope-Parameter angefragt; leer, wenn er keinen sandte (seit 0.44.0).' }
+        availableScopes: { type: array, items: { $ref: '#/components/schemas/McpScope' }, description: 'Alle Scopes, die die Person gewähren darf: bei angefragten Scopes dieselben, sonst alle sieben, damit Schreibrechte ausdrücklich zusätzlich erlaubt werden können (seit 0.44.0).' }
         expiresAt: { type: string, format: date-time }
         clientRegisteredAt: { type: string, format: date-time, description: Zeitpunkt der (anonymen) Client-Registrierung }
         clientVerified: { type: boolean, description: 'immer false: Clients registrieren sich offen (RFC 7591); die Zustimmungsseite soll sie als nicht verifiziert kennzeichnen und den Redirect-Host hervorheben' }

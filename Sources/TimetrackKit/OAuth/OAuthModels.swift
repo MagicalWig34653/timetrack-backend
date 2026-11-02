@@ -5,6 +5,8 @@ import Fluent
 enum McpScopes {
     static let all: [String] = ["time:read", "time:write", "schedule:read", "schedule:write", "reports:read", "reports:write", "documents:read"]
     static let known = Set(all)
+    /// Scopes pre-selected on the consent page when the client does not ask for any (read-only; write scopes must be allowed explicitly).
+    static let readOnly: [String] = all.filter { $0.hasSuffix(":read") }
 }
 
 /// Dynamically registered public client (RFC 7591).
@@ -25,7 +27,12 @@ final class OAuthRequestRecord: Model, @unchecked Sendable {
     @Field(key: "client_id") var clientId: UUID
     @OptionalField(key: "account_id") var accountId: UUID?
     @Field(key: "redirect_uri") var redirectURI: String
+    /// Pre-selected scopes: the requested ones, or the read-only scopes when the client sent none.
     @Field(key: "scopes") var scopes: [String]
+    /// Scopes the client asked for (`scope` parameter); empty when it sent none. NULL for rows from before 0.44.0.
+    @OptionalField(key: "requested_scopes") var requestedScopes: [String]?
+    /// Scopes the person may grant on the consent page. NULL (rows from before 0.44.0) means exactly `scopes`.
+    @OptionalField(key: "available_scopes") var availableScopes: [String]?
     @OptionalField(key: "state") var state: String?
     @Field(key: "code_challenge") var codeChallenge: String
     @Field(key: "resource") var resource: String

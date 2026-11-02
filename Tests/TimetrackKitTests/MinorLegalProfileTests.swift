@@ -79,17 +79,59 @@ final class MinorLegalProfileTests: XCTestCase {
         XCTAssertFalse(results.contains { $0.legalWarnings.contains(.init(.weeklyLimit)) })
     }
 
-    /// F10 characterization (decision pending, ADR-0028): ADR-0028 values "five school days with eight hours each" of a block week,
-    /// but the engine credits every school day of the Monday-Sunday week. With six school days the credit exceeds the 40 hours
-    /// of the statute. Which days stay uncredited (the first five, workdays first, ...) is not decided; this test only pins the
-    /// current behaviour so that the change becomes visible once the rule is decided.
-    func testBlockSchoolWeekWithSixSchoolDaysCharacterization() throws {
-        let days = ["2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16", "2026-10-17"]
-        let preferences = Dictionary(uniqueKeysWithValues: days.map { ($0, DayPreferences(schoolLessonCount: 5)) })
+    private func blockWeekCredits(_ days: [String], customDays: [CustomCalendarDay] = [], preferences extra: [String: DayPreferences] = [:]) throws -> [Int] {
+        var preferences = Dictionary(uniqueKeysWithValues: days.map { ($0, DayPreferences(schoolLessonCount: 5)) })
+        for (key, value) in extra { preferences[key] = value }
         let snapshot = TimeEvaluationSnapshot(models: [try model()],
-            segments: days.map { segment($0, "08:00", "12:00", kind: .school) }, preferences: preferences)
-        let results = try days.map { try snapshot.evaluate(date($0), now: instant("2026-10-20", "12:00")) }
-        XCTAssertEqual(results.reduce(0) { $0 + $1.creditSeconds }, 172_800, "current behaviour: 6 x 8 h = 48 h (statute: at most 40 h)")
+            segments: days.map { segment($0, "08:00", "12:00", kind: .school) }, preferences: preferences, customDays: customDays)
+        return try days.map { try snapshot.evaluate(date($0), now: instant("2026-11-20", "12:00")).creditSeconds }
+    }
+
+    /// F10 (ADR-0028 addendum): a block week credits at most the first five school days (Monday to Sunday) with 8 h each.
+    func testBlockSchoolWeekWithSixSchoolDaysCreditsFirstFiveOnly() throws {
+        let days = ["2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16", "2026-10-17"]
+        let credits = try blockWeekCredits(days)
+        XCTAssertEqual(credits, [28_800, 28_800, 28_800, 28_800, 28_800, 0])
+        XCTAssertEqual(credits.reduce(0, +), 144_000)
+        // The extra day has no credit and keeps its Soll (Saturday: 0 in this model); its school time is not a work-day replacement.
+        let snapshot = TimeEvaluationSnapshot(models: [try model()], segments: days.map { segment($0, "08:00", "12:00", kind: .school) },
+            preferences: Dictionary(uniqueKeysWithValues: days.map { ($0, DayPreferences(schoolLessonCount: 5)) }))
+        let extra = try snapshot.evaluate(date("2026-10-17"), now: instant("2026-11-20", "12:00"))
+        XCTAssertEqual(extra.creditSeconds, 0)
+    }
+
+    func testBlockSchoolWeekWithSevenSchoolDaysCreditsFortyHours() throws {
+        let days = ["2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16", "2026-10-17", "2026-10-18"]
+        XCTAssertEqual(try blockWeekCredits(days), [28_800, 28_800, 28_800, 28_800, 28_800, 0, 0])
+    }
+
+    /// An extra school day on a weekday keeps its Soll and gets no credit; the first five (calendar order) are credited.
+    func testBlockSchoolWeekExtraDayKeepsTarget() throws {
+        let days = ["2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16", "2026-10-17"]
+        // Saturday counts as a workday here, so its unchanged Soll (8 h) is visible.
+        let saturdayModel = EngineWorkModel(validFrom: try date("2026-10-01"), weeklyTargetSeconds: 172_800, workdays: [1, 2, 3, 4, 5, 6],
+                                            roundingEnabled: false, legalProfileId: LegalWorkProfile.minor.id)
+        let snapshot = TimeEvaluationSnapshot(models: [saturdayModel], segments: days.map { segment($0, "08:00", "12:00", kind: .school) },
+            preferences: Dictionary(uniqueKeysWithValues: days.map { ($0, DayPreferences(schoolLessonCount: 5)) }))
+        let saturday = try snapshot.evaluate(date("2026-10-17"), now: instant("2026-11-20", "12:00"))
+        XCTAssertEqual(saturday.creditSeconds, 0)
+        XCTAssertEqual(saturday.targetSeconds, 28_800)
+        let friday = try snapshot.evaluate(date("2026-10-16"), now: instant("2026-11-20", "12:00"))
+        XCTAssertEqual(friday.creditSeconds, 28_800)
+    }
+
+    func testBlockSchoolWeekHolidayDoesNotCountAsSchoolDay() throws {
+        let days = ["2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16", "2026-10-17"]
+        let holiday = CustomCalendarDay(startDate: try date("2026-10-12"), endDate: try date("2026-10-12"), name: "Holiday")
+        let credits = try blockWeekCredits(days, customDays: [holiday])
+        // Monday is a holiday (no school credit); the five remaining school days Tuesday to Saturday are all credited.
+        XCTAssertEqual(credits, [0, 28_800, 28_800, 28_800, 28_800, 28_800])
+    }
+
+    func testBlockSchoolWeekVacationDoesNotCountAsSchoolDay() throws {
+        let days = ["2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16", "2026-10-17"]
+        let credits = try blockWeekCredits(days, preferences: ["2026-10-13": DayPreferences(mark: .vacation, schoolLessonCount: 5)])
+        XCTAssertEqual(credits, [28_800, 0, 28_800, 28_800, 28_800, 28_800])
     }
 
     func testOnlyOneFullSchoolDayPerOrdinaryWeek() throws {

@@ -5,6 +5,8 @@ Die Einzelpakete (A1, B2, …) stehen in `docs/ARBEITSPLAN.md`.
 
 ## Unveröffentlicht
 
+- **SCOPE-F10 (Vertrag 0.44.0):** OAuth-Zustimmung ohne angefragten Scope belegt nur lesende Scopes vor (neue Felder `requestedScopes`, `availableScopes`); Blockwoche mit mehr als fünf Schultagen gutschreibt nur die ersten fünf (höchstens 40 h).
+
 - **Sicherheit SEC-15b (Vertrag 0.43.0, ADR-0003 Nachtrag):** Das Sitzungscookie heißt bei HTTPS-`PUBLIC_BASE_URL` `__Host-tt_session` (Secure, HttpOnly, SameSite=Lax, Path=/, ohne Domain); bei HTTP (lokale Entwicklung) bleibt es `tt_session`. **Betreiberhinweis: einmaliger Sitzungsverlust beim Update, alle Nutzer melden sich neu an.** Abmelden und Kontolöschung löschen beide Namen. Clients dürfen den Namen nicht fest verdrahten (Apple-App muss angepasst werden, PWA nicht). Details `docs/handoffs/SEC-15B.md`.
 
 - **Codex-Befunde CX-A (Vertrag 0.41.1):** `offset` ist bei stornierten Segmenten, Zeitkonto-Anpassungen und der Konten-Admin-Liste auf 100000 begrenzt (400 darüber; vorher konnte `Int.max` den Prozess beenden). Persönliche Tokens und OAuth-Zustimmungen prüfen die Sitzung erneut innerhalb der Transaktion (kein neues Token nach Sitzungswiderruf); MCP-Tools lösen Token/Grant und aktuelle Scopes unter dem Lock neu auf.

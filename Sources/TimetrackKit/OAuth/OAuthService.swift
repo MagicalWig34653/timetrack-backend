@@ -21,6 +21,7 @@ struct AuthorizeQuery: Decodable {
 /// dynamic registration is open, so `clientVerified` is always false.
 struct OAuthRequestDTO: Content {
     let id: UUID; let clientName: String; let redirectHost: String; let scopes: [String]; let expiresAt: Date
+    let requestedScopes: [String]; let availableScopes: [String]
     let clientRegisteredAt: Date; let clientVerified: Bool
 }
 struct TokenForm: Decodable {
@@ -126,11 +127,13 @@ struct OAuthService: Sendable {
         }
         guard query.resource == resource else { return fail("invalid_target", "resource must be the MCP resource.") }
         let requested = OAuthText.parseScopes(query.scope)
-        let scopes = requested.isEmpty ? McpScopes.all : requested
-        guard scopes.allSatisfy(McpScopes.known.contains) else { return fail("invalid_scope", "Unknown scope.") }
+        guard requested.allSatisfy(McpScopes.known.contains) else { return fail("invalid_scope", "Unknown scope.") }
+        // Without a scope parameter only the read scopes are pre-selected; the person may additionally allow write scopes.
+        let scopes = requested.isEmpty ? McpScopes.readOnly : requested
         let now = Date()
         let record = OAuthRequestRecord()
         record.clientId = clientID; record.redirectURI = redirectURI; record.scopes = scopes; record.state = query.state
+        record.requestedScopes = requested; record.availableScopes = requested.isEmpty ? McpScopes.all : requested
         record.codeChallenge = challenge; record.resource = resource; record.createdAt = now
         record.expiresAt = now.addingTimeInterval(Self.requestLifetime)
         try await record.create(on: db)
@@ -171,6 +174,7 @@ struct OAuthService: Sendable {
         let parts = URLComponents(string: record.redirectURI)
         let host = (parts?.host ?? "") + (parts?.port.map { ":\($0)" } ?? "")
         return OAuthRequestDTO(id: id, clientName: client.name, redirectHost: host, scopes: record.scopes, expiresAt: record.expiresAt,
+                               requestedScopes: record.requestedScopes ?? record.scopes, availableScopes: record.availableScopes ?? record.scopes,
                                clientRegisteredAt: client.createdAt, clientVerified: false)
     }
 
@@ -186,7 +190,7 @@ struct OAuthService: Sendable {
             var chosen: [String] = []
             if approve {
                 chosen = scopes.map { OAuthText.parseScopes($0.joined(separator: " ")) } ?? record.scopes
-                guard !chosen.isEmpty, chosen.allSatisfy({ McpScopes.known.contains($0) && record.scopes.contains($0) }) else { throw APIError.invalid }
+                guard !chosen.isEmpty, chosen.allSatisfy({ McpScopes.known.contains($0) && (record.availableScopes ?? record.scopes).contains($0) }) else { throw APIError.invalid }
             }
             let now = Date()
             let consumed = try await conditionalWrite(on: tx) {

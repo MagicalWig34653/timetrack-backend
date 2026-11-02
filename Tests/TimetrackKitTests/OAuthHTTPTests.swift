@@ -369,6 +369,26 @@ extension AuthTests {
         record.expiresAt = Date().addingTimeInterval(-1); try await record.update(on: app.db)
         try await eq(try await oaSend(app, .GET, "/api/v1/oauth/requests/\(started.id)", headers: headers(a)).status, .notFound)
         try await eq(try await oaDecision(app, a, started.id, approve: true).status, .notFound)
+        // 0.44.0: without a scope parameter only read scopes are pre-selected; the person may add write scopes explicitly.
+        started = try await oaStart(app, a, client: client)
+        let preset = oaJSON(try await oaSend(app, .GET, "/api/v1/oauth/requests/\(started.id)", headers: headers(a)))
+        let readOnly = ["time:read", "schedule:read", "reports:read", "documents:read"]
+        try await eq(preset["scopes"] as? [String], readOnly); try await eq(preset["requestedScopes"] as? [String], [])
+        try await eq(Set(preset["availableScopes"] as? [String] ?? []), Set(McpScopes.all))
+        let plain = try await oaDecision(app, a, started.id, approve: true)
+        try await eq(plain.status, .ok)
+        try await eq(try await oaExchange(app, OAuthFlow(client: client, redirect: Self.oaRedirect, verifier: started.verifier, challenge: started.challenge, requestId: started.id,
+            code: try XCTUnwrap(oaQuery(oaJSON(plain)["redirectUrl"] as? String)["code"]), state: "", location: "")).json["scope"] as? String, readOnly.joined(separator: " "))
+        started = try await oaStart(app, a, client: client)
+        let widened = try await oaDecision(app, a, started.id, approve: true, scopes: ["time:read", "time:write"])
+        try await eq(widened.status, .ok)
+        try await eq(try await oaUnwrap(OAuthGrant.query(on: app.db).filter(\.$revokedAt == nil).first()).scopes, ["time:read", "time:write"])
+        // An explicit scope parameter is unchanged: requested == pre-selected == selectable, nothing beyond it can be granted.
+        started = try await oaStart(app, a, client: client, scope: "time:read")
+        let explicit = oaJSON(try await oaSend(app, .GET, "/api/v1/oauth/requests/\(started.id)", headers: headers(a)))
+        try await eq(explicit["scopes"] as? [String], ["time:read"]); try await eq(explicit["requestedScopes"] as? [String], ["time:read"])
+        try await eq(explicit["availableScopes"] as? [String], ["time:read"])
+        try await eq(try await oaDecision(app, a, started.id, approve: true, scopes: ["time:read", "time:write"]).status, .badRequest)
         // Recovery sessions cannot authorize clients.
         let recovery = try await auth.issueSession(for: a.account, recovery: true, on: app.db)
         started = try await oaStart(app, a, client: client)
@@ -412,11 +432,13 @@ extension AuthTests {
         }
         try await eq(redirected(try await oaAuthorize(app, client: client, challenge: pkce.challenge, scope: "bogus", state: "s-9"))["state"], "s-9")
         try await eq(try await OAuthRequestRecord.query(on: app.db).count(), 0)
-        // A valid request without scope asks for all seven scopes; the response is not cached and sends no referrer.
+        // A valid request without scope pre-selects only the read scopes (0.44.0, write scopes can be allowed on the consent page);
+        // the response is not cached and sends no referrer.
         let ok = try await oaAuthorize(app, client: client, challenge: pkce.challenge, scope: nil, state: nil)
         try await eq(ok.status, .found); try await eq(ok.headers.first(name: .cacheControl), "no-store"); try await eq(ok.headers.first(name: "Referrer-Policy"), "no-referrer")
         let record = try oaUnwrap(try await OAuthRequestRecord.query(on: app.db).first())
-        try await eq(Set(record.scopes), Set(McpScopes.all)); XCTAssertNil(record.state); try await eq(record.resource, "http://localhost:18080/mcp")
+        try await eq(record.scopes, ["time:read", "schedule:read", "reports:read", "documents:read"])
+        try await eq(record.requestedScopes, []); try await eq(Set(record.availableScopes ?? []), Set(McpScopes.all)); XCTAssertNil(record.state); try await eq(record.resource, "http://localhost:18080/mcp")
         try await eq(record.codeChallenge, pkce.challenge)
         XCTAssertNil(record.bindingHash); XCTAssertNil(record.accountId)
         // POST is not an authorization endpoint.

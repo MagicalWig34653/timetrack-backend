@@ -17,7 +17,7 @@ Stand: Paket C17 (Endpunkt und Tools). Verbindliche Entscheidungen: `docs/decisi
 
 1. Voraussetzung: Backend ist unter einer öffentlich erreichbaren HTTPS-Domain erreichbar, `PUBLIC_BASE_URL` stimmt, C16 (OAuth-Server) ist aktiv.
 2. ChatGPT: Einstellungen, Apps/Connectors, eigenen Connector (MCP) hinzufügen, URL `<PUBLIC_BASE_URL>/mcp` eintragen, Authentifizierung OAuth. Claude: Einstellungen, Connectors, benutzerdefinierten Connector hinzufügen, dieselbe URL.
-3. Der Client registriert sich selbst (Dynamic Client Registration) und leitet zur Zustimmungsseite der PWA. Dort anmelden (Passkey), Zugriffsbereiche einzeln abwählen und bestätigen.
+3. Der Client registriert sich selbst (Dynamic Client Registration) und leitet zur Zustimmungsseite der PWA. Dort anmelden (Passkey), Zugriffsbereiche einzeln abwählen und bestätigen. Sendet der Client keinen `scope`-Parameter, sind nur die lesenden Scopes vorbelegt (`time:read`, `schedule:read`, `reports:read`, `documents:read`); Schreibrechte (`time:write`, `schedule:write`, `reports:write`) muss die Person auf der Zustimmungsseite ausdrücklich zusätzlich erlauben (seit Vertrag 0.44.0, Nutzerentscheidung 02.11.2026). Fragt der Client Scopes an, gilt genau diese Auswahl. Der Refresh-Token behält die Scopes des Grants; bestehende Grants und Tokens sind unverändert.
 4. Den Zugriff widerrufen: in der PWA unter den OAuth-Freigaben des Kontos; Tokens des Grants werden sofort ungültig.
 
 Die Menüpfade der Anbieter ändern sich; sie sind hier nicht verifiziert.

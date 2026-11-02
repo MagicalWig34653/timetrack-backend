@@ -14,6 +14,8 @@
 
 **CX-B (02.11.2026, Commit 52cd8e9):** Codex-Befunde F05 (Gruppen-Zähler nach Fachfehlern), F06/F08 (Migrationen g1b und c3 wiederaufnehmbar bzw. atomar), F07 (Urlaubs-Stichtagsbestände im Kontoexport als `vacation-snapshots.json`), F09 (ICS-Tagesmarkierungen nur mit Planning), F11 (halber Betriebstag in Urlaubszählern von Woche und Statistik) behoben; keine Vertragsänderung. F10 (Blockwoche mit mehr als fünf Schultagen) wartet auf eine Fachentscheidung, nur Charakterisierungstest. Details: `docs/handoffs/CX-B.md`, Review-Abschnitt „Umsetzung CX-B“.
 
+**SCOPE-F10 (02.11.2026, Vertrag 0.44.0):** OAuth ohne `scope` belegt nur lesende Scopes vor (`OAuthRequest.requestedScopes`/`availableScopes`, PWA-Zustimmungsseite muss `availableScopes` anzeigen); Blockwoche mit mehr als fünf Schultagen credited nur die ersten fünf (ADR-0028 Nachtrag). Details `docs/handoffs/SCOPE-F10.md`.
+
 **PLAN-OFFDAY (02.11.2026, Vorschlag, ADR-0035, Vertrag 0.42.0):** Planblöcke an Urlaubs-, Krank-, Freistellungs- und Feiertagen zählen mit ihrer Dauer als geplante Mehrzeit (Soll 0, Tag bleibt Urlaub); `planActualDifferenceSeconds` ist dort gesetzt. Das Backend hat das Speichern dort nie gesperrt. Offen: Sperre in PWA (WeekGrid/grid-edit.ts) und Apple (`PlanWeekDay.blockedBy`) entfernen. Details `docs/handoffs/PLAN-OFFDAY.md`.
 
 **VB1 (02.11.2026, Vorschlag, ADR-0034):** Buchungen an Urlaubstagen zählen als Überstunden. Das Backend hat sie nie gesperrt; Regressionstests belegen Saldo, Halbtag, Urlaubskonto unverändert. Keine Vertragsänderung. Offen: Sperren/Hinweise in PWA und Apple-Apps, Entscheidung zu Gutschrift an Urlaubstagen. Details `docs/handoffs/VACATION-BOOKINGS.md`.
