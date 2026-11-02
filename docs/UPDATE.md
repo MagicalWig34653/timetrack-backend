@@ -13,6 +13,8 @@ Kurzfassung: **erst sichern, dann die Migration mit dem neuen Image ausführen, 
 - Migrationen sind **additiv** (Hinzufügen, nicht Entfernen oder Umbenennen). Dadurch läuft die alte Version kurz mit dem neuen Schema weiter, etwa während eines Rolling-Updates oder nach einem Rollback.
 - Ein „Complete" beim Migrations-Job gilt nur für das Image, mit dem er lief. Bei einer neuen Version muss er **erneut** laufen.
 
+**Einmaliger Sitzungsverlust (Vertrag 0.43.0, SEC-15b):** Beim Update auf diese Version melden sich alle Nutzer neu an, weil das Sitzungscookie bei HTTPS nun `__Host-tt_session` heißt. Das ist beabsichtigt und kein Fehler; Daten bleiben erhalten.
+
 ## Compose (ein Server)
 
 ```sh

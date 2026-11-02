@@ -282,6 +282,8 @@ Abbrechen: `Strg+C` beendet nur das Skript (es zeigt dann die Hinweise); Swarm f
 
 PWA aktualisieren: Die PWA ist Teil des Images, ein Update ist ein neues Image-Tag. In GitHub baut der Docker-Workflow die PWA aus dem Repository `timetrack-pwa` (Referenz: Repository-Variable `PWA_REF`, Standard `main`); für eine neue PWA-Version den Workflow neu starten (Push auf `main`, Tag `v*` oder manuell) und das neue Tag wie ein Backend-Update ausrollen (Abschnitt oben). Browser und Service Worker holen die neue Version beim nächsten Besuch.
 
+**Hinweis zum Update auf Vertrag 0.43.0 (SEC-15b):** Das Sitzungscookie heißt bei HTTPS jetzt `__Host-tt_session`; alle Nutzer müssen sich einmalig neu anmelden (kein Datenverlust, Sitzungen unter dem alten Namen werden bewusst nicht mehr akzeptiert). Native Apps benötigen die passende App-Version. Der Reverse Proxy darf `Set-Cookie` nicht umschreiben (`Domain`/`Path`).
+
 ## 14. Backup und Restore
 
 Verbindliche Beschreibung, Archivformat, Nachweise: [BETRIEB.md](BETRIEB.md) Abschnitte 1 bis 4. Kurzfassung für diese Installation:

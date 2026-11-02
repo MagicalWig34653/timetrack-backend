@@ -34,7 +34,7 @@ struct DeviceContextKey: StorageKey { typealias Value = String }
 struct DeviceTokenMiddleware: AsyncMiddleware {
     let auth: AuthService
     func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
-        guard request.cookies["tt_session"] == nil, let token = request.headers.bearerAuthorization?.token else { throw APIError.unauthorized }
+        guard !auth.hasSessionCookie(request), let token = request.headers.bearerAuthorization?.token else { throw APIError.unauthorized }
         let allowed = try await auth.transaction(on: request.db) { tx in
             let row = try await DeviceTokenService.authenticate(token, db: tx, disabledModules: auth.configuration.disabledModules)
             let key = "device:" + (try row.requireID().uuidString)

@@ -34,7 +34,7 @@ struct ModuleGuard: AsyncMiddleware {
             // Server visibility takes precedence; bearer account rejection remains 401 in authenticators.
             try await auth.modules.require(keys, account: nil, on: req.db)
             // Public link routes have no account context: a stale or foreign session cookie must not matter there.
-            if let token = req.cookies["tt_session"]?.string, !req.url.path.hasPrefix("/api/v1/public/") {
+            if let token = auth.sessionToken(req), !req.url.path.hasPrefix("/api/v1/public/") {
                 let context = try await auth.authenticate(token, for: req)
                 try context.normal()
                 try await auth.modules.require(keys, account: context.account.requireID(), on: req.db)

@@ -70,7 +70,7 @@ extension AuthTests {
             XCTAssertTrue(service.cookie(context).isSecure)
             XCTAssertEqual(context.session.expiresAt.timeIntervalSince(context.session.createdAt), 7200, accuracy: 1)
             let recovered = try await service.issueSession(for: context.account, recovery: true, on: app.db)
-            try await app.test(.DELETE, "/api/v1/auth/session", headers: headers(recovered)) { response async throws in
+            try await app.test(.DELETE, "/api/v1/auth/session", headers: headers(recovered, cookieName: "__Host-tt_session")) { response async throws in
                 XCTAssertEqual(response.status, .noContent)
                 XCTAssertTrue(response.headers.first(name: .setCookie)?.contains("Secure") == true)
             }

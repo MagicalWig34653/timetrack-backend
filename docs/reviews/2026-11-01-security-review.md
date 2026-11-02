@@ -129,7 +129,8 @@ Keine ausnutzbare Lücke mit hohem Schweregrad gefunden. Kontentrennung (IDOR), 
 
 - Ort: `Configuration.swift:114` (Standard 720 Stunden, absolut, kein Leerlauf-Timeout), `SessionService.swift:48-50` (Cookie `tt_session`, `HttpOnly`, `SameSite=Lax`, `Secure` nur bei HTTPS-Basis-URL, kein `__Host-`-Präfix).
 - Empfehlung: Leerlauf-Timeout (zum Beispiel 14 Tage) und Präfix `__Host-` für die Produktion; Standardwert im Code an den Stack (336 Stunden) angleichen.
-- Status: teilweise behoben (Paket SEC-A): Leerlauf-Timeout `SESSION_IDLE_HOURS` (Standard 336). Das `__Host-`-Cookiepräfix ist nicht umgesetzt (Vertragsbruch für alle Clients, eigener Beschluss nötig); Code-Standard der Sitzungsdauer bleibt 720 (Stack setzt 336).
+- Status: teilweise behoben (Paket SEC-A): Leerlauf-Timeout `SESSION_IDLE_HOURS` (Standard 336). Code-Standard der Sitzungsdauer bleibt 720 (Stack setzt 336).
+- Nachtrag SEC-15b (02.11.2026, Nutzerentscheidung: einführen, einmaliger Sitzungsverlust akzeptiert): **umgesetzt**. Sitzungscookie `__Host-tt_session` bei HTTPS-`PUBLIC_BASE_URL` (Secure, HttpOnly, SameSite=Lax, Path=/, ohne Domain), sonst unverändert `tt_session`; alte Sitzungen werden nicht mehr akzeptiert, Abmelden löscht beide Namen; Vertrag 0.43.0. Das Bindungscookie `tt_oidc` bleibt bewusst unverändert (Pfad `/api/v1/auth/oidc` ist mit `__Host-` unvereinbar; kurzlebig, nur Login-CSRF-Bindung). Details `docs/handoffs/SEC-15B.md`, ADR-0003 Nachtrag.
 
 ### SEC-16 Info: Unbekannte Fehler werden als 500 beantwortet, aber nicht protokolliert
 

@@ -44,9 +44,9 @@ func registerOIDCRoutes(_ app: Application, auth: AuthService) {
         struct Query: Decodable { let code: String?; let state: String?; let error: String? }
         let query = (try? req.query.decode(Query.self)) ?? Query(code: nil, state: nil, error: nil)
         let outcome = await service.callback(code: query.code, state: query.state, providerError: query.error,
-                                             binding: req.cookies[OIDCService.bindingCookie]?.string, sessionToken: req.cookies["tt_session"]?.string, on: req.db)
+                                             binding: req.cookies[OIDCService.bindingCookie]?.string, sessionToken: auth.sessionToken(req), on: req.db)
         let response = redirect(outcome.location)
-        if let context = outcome.session { response.cookies["tt_session"] = auth.cookie(context) }
+        if let context = outcome.session { auth.setSessionCookie(context, on: response) }
         if outcome.clearBinding { response.cookies[OIDCService.bindingCookie] = bindingCookie(nil) }
         return response
     }
@@ -59,7 +59,7 @@ func registerOIDCRoutes(_ app: Application, auth: AuthService) {
         let context = try await service.register(pendingID: pendingID, handle: input.handle, displayName: input.displayName,
                                                  binding: req.cookies[OIDCService.bindingCookie]?.string, on: req.db)
         let response = try await context.response.encodeResponse(status: .created, for: req)
-        response.cookies["tt_session"] = auth.cookie(context)
+        auth.setSessionCookie(context, on: response)
         response.cookies[OIDCService.bindingCookie] = bindingCookie(nil)
         return response
     }

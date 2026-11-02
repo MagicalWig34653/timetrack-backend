@@ -12,7 +12,7 @@ struct ExternalIdentityDTO: Content {
     let lastUsedAt: Date?
 }
 
-/// Result of the callback. Always becomes a 302 to the PWA; `session` additionally sets tt_session.
+/// Result of the callback. Always becomes a 302 to the PWA; `session` additionally sets the session cookie.
 struct OIDCCallbackOutcome: Sendable {
     var location: String
     var session: AuthContext?

@@ -59,7 +59,7 @@ func registerRoutes(_ app: Application, service: AuthService) {
     }
     @Sendable func sessionResponse(_ context: AuthContext, request: Request, status: HTTPResponseStatus = .ok) async throws -> Response {
         let response = try await context.response.encodeResponse(status: status, for: request)
-        response.cookies["tt_session"] = service.cookie(context)
+        service.setSessionCookie(context, on: response)
         return response
     }
     api.get("invitations", ":token") { req async throws -> Response in
@@ -96,7 +96,7 @@ func registerRoutes(_ app: Application, service: AuthService) {
     api.delete("auth", "session") { req async throws -> Response in
         try await service.revokeSessions(req.authContext, others: false, on: req.db)
         let response = Response(status: .noContent)
-        response.cookies["tt_session"] = .init(string: "", expires: .distantPast, maxAge: 0, path: "/", isSecure: service.configuration.publicBaseURL.scheme == "https", isHTTPOnly: true, sameSite: .lax)
+        service.clearSessionCookies(on: response)
         return response
     }
     api.get("me", "passkeys") { req async throws -> [PasskeyDTO] in try await service.passkeys(req.authContext, on: req.db) }
@@ -106,7 +106,7 @@ func registerRoutes(_ app: Application, service: AuthService) {
         let response = try await key.encodeResponse(status: .created, for: req)
         // Deliberately re-read: a recovery session was promoted inside addPasskey (new expiry), so the cookie needs the new row.
         let current = try await service.authenticate(req.authContext.token, on: req.db)
-        response.cookies["tt_session"] = service.cookie(current)
+        service.setSessionCookie(current, on: response)
         return response
     }
     api.patch("me", "passkeys", ":id") { req async throws -> PasskeyDTO in

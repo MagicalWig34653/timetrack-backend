@@ -1,8 +1,9 @@
 openapi: 3.1.0
 info:
   title: Timetrack API
-  version: 0.42.0
+  version: 0.43.0
   description: |
+    v0.43.0 (SEC-15b, ADR-0003 Nachtrag, Verhaltensänderung ohne neue Felder): Bei einer https-`PUBLIC_BASE_URL` heißt das Sitzungscookie `__Host-tt_session` (Secure, HttpOnly, SameSite=Lax, Path=/, ohne Domain); bei http (lokale Entwicklung) weiterhin `tt_session`. Bestehende Sitzungen mit dem alten Namen werden nicht mehr akzeptiert (einmaliger Sitzungsverlust beim Update). Abmelden und Kontolöschung laufen ab beide Namen ab. Clients ermitteln den Namen aus dem Schema der Server-URL und dürfen ihn nicht fest verdrahten; der CSRF-Header `X-CSRF-Token` ist unverändert.
     v0.42.0 (PLAN-OFFDAY, ADR-0035 Vorschlag, Verhaltensänderung ohne neue Felder): Planblöcke an Feiertagen, Urlaubs-, Krank- und Freistellungstagen zählen mit ihrer eigenen Dauer als geplante Mehrzeit. `PlanWeekDay.plannedSeconds` und `TimeWeekDay.plannedSeconds` sind dort nicht mehr 0, sondern die Plandauer; `PlanWeek.totals.differenceSeconds` und `TimeWeek.summary.plannedSeconds` enthalten sie; `TimeWeekDay.planActualDifferenceSeconds` ist auch an solchen Tagen gesetzt (nicht künftig, mit Plandauer). Das Soll bleibt 0 (halber Urlaubstag: halbes Tagessoll), die Tagesmarkierung und der Urlaubsverbrauch bleiben unverändert; `blockedBy` bleibt als reine Information erhalten (der Tag ist weiterhin Urlaub usw., Planen ist erlaubt). Plan bucht weiterhin keine Ist-Zeit: Zeitkonto, Statistik und Auswertung ändern sich nicht.
     v0.39.0 (P15, additiv): Archivierte Orte. `GET /places?archived=true|all` (Standard: nur aktive; `true` nur archivierte, `all` beide) und `POST /places/{id}/restore` stellt einen archivierten Ort wieder her (200 mit dem Ort, idempotent, fremde Orte 404). Kennzahl `archived` am Ort war schon vorhanden.
     v0.38.0 (P14e, ADR-0030 Nachtrag, additiv, nur Admin): APNs-Diagnose. GET /admin/apns (Zustand ohne Geheimnisse, fehlende oder ungültige APNS_*-Variablen, Gerätezahl, Hinweise) und POST /admin/apns/check (prüft live bei Apple, ob Schlüssel, Team und Bundle-IDs akzeptiert werden, mit einem erfundenen Gerätetoken; es wird nichts zugestellt; 6 je 10 Minuten).
@@ -2288,7 +2289,7 @@ paths:
         '429': { $ref: '#/components/responses/TooMany' }
 components:
   securitySchemes:
-    session: { type: apiKey, in: cookie, name: tt_session }
+    session: { type: apiKey, in: cookie, name: tt_session, description: 'Bei https-PUBLIC_BASE_URL heißt das Cookie __Host-tt_session (seit 0.43.0), sonst tt_session.' }
     deviceToken: { type: http, scheme: bearer }
     bearer: { type: http, scheme: bearer, description: OAuth-Access-Token (tto_) oder persönliches Token (ttp_) nur für /mcp }
     csrf: { type: apiKey, in: header, name: X-CSRF-Token }

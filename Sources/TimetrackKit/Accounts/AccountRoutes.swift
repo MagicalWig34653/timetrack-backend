@@ -56,7 +56,7 @@ func registerAccountRoutes(_ app: Application, auth: AuthService) {
         let context = try req.authContext
         try await admin(req).delete(context.account.requireID(), confirm: confirmation(req), context: context, selfService: true)
         let response = Response(status: .noContent)
-        response.cookies["tt_session"] = .init(string: "", expires: .distantPast, maxAge: 0, path: "/", isSecure: auth.configuration.publicBaseURL.scheme == "https", isHTTPOnly: true, sameSite: .lax)
+        auth.clearSessionCookies(on: response)
         return response
     }
 }

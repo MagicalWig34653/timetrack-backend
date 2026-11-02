@@ -44,3 +44,13 @@ Auth-Dienste zwischen Teams teilen: verworfen, Verantwortung wäre unklar. JWT-S
 
 PWA muss Cookie + CSRF-Header verwenden; Vite-Dev-Proxy oder gleiche Origin nötig. Änderungen am
 Vertrag während Etappe 1 über den Lead, mit Hinweis in `ARBEITSPLAN.md`.
+
+## Nachtrag SEC-15b (02.11.2026): `__Host-`-Präfix
+
+Nutzerentscheidung 02.11.2026 (Sicherheitsreview SEC-15): Das Sitzungscookie heißt bei einer HTTPS-`PUBLIC_BASE_URL` `__Host-tt_session`. Browser erzwingen damit Secure, `Path=/` und kein `Domain`-Attribut; eine Schwesterdomain kann das Cookie weder setzen noch überschreiben. Bei HTTP (lokale Entwicklung, Tests) bleibt es `tt_session`, weil Browser das Präfix ohne HTTPS verwerfen. Der Name wird an einer Stelle bestimmt (`SessionCookie` in `SessionService.swift`) und hängt nur am Schema der Basis-URL, nicht an `X-Forwarded-Proto`.
+
+- Alte Sitzungen unter `tt_session` werden bewusst nicht übernommen (einmaliger Sitzungsverlust); eine Umsetzung auf den neuen Namen wäre ein Übernahmepfad für ein Cookie, das eine Schwesterdomain gesetzt haben könnte, und widerspräche dem Zweck. Antworten, die ein Sitzungscookie setzen, löschen den alten Namen; Abmelden und Kontolöschung löschen beide.
+- Bearer-only-Routen (Automatisierung, MCP) lehnen weiterhin jede Anfrage ab, die ein Sitzungscookie unter einem der beiden Namen trägt.
+- Das Bindungscookie `tt_oidc` bleibt unverändert: Sein Pfad `/api/v1/auth/oidc` ist mit `__Host-` unvereinbar; es lebt zehn Minuten und schützt nur den Login-Ablauf.
+- Der CSRF-Wert ist kein Cookie (Header `X-CSRF-Token`), er braucht kein Präfix.
+- Clients dürfen den Namen nicht fest verdrahten: Browser (PWA) sind unberührt, die Apple-App leitet ihn aus dem Schema der Server-URL ab.

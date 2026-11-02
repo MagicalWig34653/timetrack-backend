@@ -5,6 +5,8 @@ Die Einzelpakete (A1, B2, …) stehen in `docs/ARBEITSPLAN.md`.
 
 ## Unveröffentlicht
 
+- **Sicherheit SEC-15b (Vertrag 0.43.0, ADR-0003 Nachtrag):** Das Sitzungscookie heißt bei HTTPS-`PUBLIC_BASE_URL` `__Host-tt_session` (Secure, HttpOnly, SameSite=Lax, Path=/, ohne Domain); bei HTTP (lokale Entwicklung) bleibt es `tt_session`. **Betreiberhinweis: einmaliger Sitzungsverlust beim Update, alle Nutzer melden sich neu an.** Abmelden und Kontolöschung löschen beide Namen. Clients dürfen den Namen nicht fest verdrahten (Apple-App muss angepasst werden, PWA nicht). Details `docs/handoffs/SEC-15B.md`.
+
 - **Codex-Befunde CX-A (Vertrag 0.41.1):** `offset` ist bei stornierten Segmenten, Zeitkonto-Anpassungen und der Konten-Admin-Liste auf 100000 begrenzt (400 darüber; vorher konnte `Int.max` den Prozess beenden). Persönliche Tokens und OAuth-Zustimmungen prüfen die Sitzung erneut innerhalb der Transaktion (kein neues Token nach Sitzungswiderruf); MCP-Tools lösen Token/Grant und aktuelle Scopes unter dem Lock neu auf.
 
 - **Sicherheit SEC-C (Vertrag 0.41.0):** Speicherkontingent je Konto (Bytes und Anzahl, Admin-Einstellung, Fehler `storage_quota_exceeded`), Upload-Rate 30 je 5 Minuten; `GET /me/export` verlangt eine frische Sitzung (`reauth_required`) und ist auf 3 je Stunde begrenzt (`export_rate_limited`); anonyme Ratenzähler laufen ohne die globale `auth_lock`-Sperre, der Token-Endpunkt zählt je (Client, IP) statt je Client; Wartung entfernt unbenutzte OAuth-Clients (Schritt `oauth_clients`); die Zustimmungsdaten enthalten `clientRegisteredAt` und `clientVerified` (immer false). Migration `sec06.add_storage_quota`.

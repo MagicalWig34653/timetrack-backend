@@ -28,8 +28,8 @@ final class AuthTests: XCTestCase, @unchecked Sendable {
         catch let error as APIError { XCTAssertEqual(error.code, code, file: file, line: line) }
         catch { XCTFail("Unexpected error: \(type(of: error))", file: file, line: line) }
     }
-    func headers(_ context: AuthContext, csrf: Bool = true) -> HTTPHeaders {
-        var headers: HTTPHeaders = ["Cookie": "tt_session=\(context.token)"]
+    func headers(_ context: AuthContext, csrf: Bool = true, cookieName: String = "tt_session") -> HTTPHeaders {
+        var headers: HTTPHeaders = ["Cookie": "\(cookieName)=\(context.token)"]
         if csrf { headers.add(name: "X-CSRF-Token", value: Secrets.csrf(context.token)) }
         return headers
     }

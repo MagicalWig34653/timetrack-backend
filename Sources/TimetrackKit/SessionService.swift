@@ -48,7 +48,36 @@ extension AuthService {
         }
     }
     func cookie(_ context: AuthContext) -> HTTPCookies.Value {
-        .init(string: context.token, expires: context.session.expiresAt, path: "/", isSecure: configuration.publicBaseURL.scheme == "https", isHTTPOnly: true, sameSite: .lax)
+        .init(string: context.token, expires: context.session.expiresAt, path: "/", isSecure: SessionCookie.isSecure(configuration), isHTTPOnly: true, sameSite: .lax)
+    }
+    /// Sets the session cookie under the current name and expires the pre-`__Host-` name (SEC-15b).
+    func setSessionCookie(_ context: AuthContext, on response: Response) {
+        response.cookies[SessionCookie.name(configuration)] = cookie(context)
+        if SessionCookie.isSecure(configuration) { response.cookies[SessionCookie.legacyName] = SessionCookie.expired(configuration) }
+    }
+    /// Expires the session cookie under every name this server ever used.
+    func clearSessionCookies(on response: Response) {
+        response.cookies[SessionCookie.name(configuration)] = SessionCookie.expired(configuration)
+        response.cookies[SessionCookie.legacyName] = SessionCookie.expired(configuration)
+    }
+    /// The session token the browser sent under the current cookie name. A cookie under the legacy name is deliberately ignored.
+    func sessionToken(_ request: Request) -> String? { request.cookies[SessionCookie.name(configuration)]?.string }
+    /// True if any session cookie (current or legacy name) is present; bearer-only routes refuse such requests.
+    func hasSessionCookie(_ request: Request) -> Bool {
+        request.cookies[SessionCookie.name(configuration)] != nil || request.cookies[SessionCookie.legacyName] != nil
+    }
+}
+
+/// The single place that knows the session cookie name (SEC-15b). Over https the name carries the `__Host-` prefix, which makes
+/// browsers require Secure, Path=/ and no Domain attribute, so a sibling subdomain cannot plant or shadow the cookie. Over
+/// plain http (local development) the prefix would be rejected by browsers, so the legacy name stays.
+enum SessionCookie {
+    static let legacyName = "tt_session"
+    static let hostName = "__Host-tt_session"
+    static func isSecure(_ configuration: Configuration) -> Bool { configuration.publicBaseURL.scheme == "https" }
+    static func name(_ configuration: Configuration) -> String { isSecure(configuration) ? hostName : legacyName }
+    static func expired(_ configuration: Configuration) -> HTTPCookies.Value {
+        .init(string: "", expires: .distantPast, maxAge: 0, path: "/", isSecure: isSecure(configuration), isHTTPOnly: true, sameSite: .lax)
     }
 }
 
@@ -72,7 +101,7 @@ extension Request {
 struct SessionMiddleware: AsyncMiddleware {
     let service: AuthService
     func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
-        if let token = request.cookies["tt_session"]?.string {
+        if let token = service.sessionToken(request) {
             let context: AuthContext?
             do { context = try await service.authenticate(token, for: request) }
             catch let error as APIError where error.code == "unauthorized" { context = nil }
