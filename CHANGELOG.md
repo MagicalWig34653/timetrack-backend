@@ -5,6 +5,8 @@ Die Einzelpakete (A1, B2, …) stehen in `docs/ARBEITSPLAN.md`.
 
 ## Unveröffentlicht
 
+- **Codex-Befunde CX-A (Vertrag 0.41.1):** `offset` ist bei stornierten Segmenten, Zeitkonto-Anpassungen und der Konten-Admin-Liste auf 100000 begrenzt (400 darüber; vorher konnte `Int.max` den Prozess beenden). Persönliche Tokens und OAuth-Zustimmungen prüfen die Sitzung erneut innerhalb der Transaktion (kein neues Token nach Sitzungswiderruf); MCP-Tools lösen Token/Grant und aktuelle Scopes unter dem Lock neu auf.
+
 - **Sicherheit SEC-C (Vertrag 0.41.0):** Speicherkontingent je Konto (Bytes und Anzahl, Admin-Einstellung, Fehler `storage_quota_exceeded`), Upload-Rate 30 je 5 Minuten; `GET /me/export` verlangt eine frische Sitzung (`reauth_required`) und ist auf 3 je Stunde begrenzt (`export_rate_limited`); anonyme Ratenzähler laufen ohne die globale `auth_lock`-Sperre, der Token-Endpunkt zählt je (Client, IP) statt je Client; Wartung entfernt unbenutzte OAuth-Clients (Schritt `oauth_clients`); die Zustimmungsdaten enthalten `clientRegisteredAt` und `clientVerified` (immer false). Migration `sec06.add_storage_quota`.
 
 - **Archivierte Orte (P15, Vertrag 0.39.0):** `GET /places?archived=true|all` listet archivierte Orte, `POST /places/{id}/restore` stellt einen Ort wieder her. Clients (PWA, Apple) können Wiederherstellen und Archivliste jetzt anbieten.

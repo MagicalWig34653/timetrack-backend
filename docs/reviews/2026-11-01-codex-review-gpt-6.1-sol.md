@@ -22,6 +22,8 @@ Alle elf Befunde haben eine konkrete Codegrundlage. Bedingte Betriebsszenarien s
 
 ## F01 – high – Ungeprüfte Pagination kann den Backend-Prozess beenden
 
+**Status:** behoben in CX-A (7e64cb7), Details `docs/handoffs/CX-A.md`.
+
 **Datei:Zeile:** `Sources/TimetrackKit/TimeCancelled.swift:46`; weiterer gleicher Fehler: `Sources/TimetrackKit/Accounts/AccountAdminService.swift:22`.
 
 **Problem:** `listCancelled` prüft nur `offset >= 0` und bildet danach `offset + limit` mit normaler Swift-Integerarithmetik. `Int.max` ist ein zulässiger dekodierter Wert, die Addition löst jedoch einen Overflow-Trap aus. Das ist kein werfbarer Fehler und wird von den Fehler-Middlewares nicht abgefangen. Die Admin-Liste hat dasselbe Muster.
@@ -32,6 +34,8 @@ Alle elf Befunde haben eine konkrete Codegrundlage. Bedingte Betriebsszenarien s
 
 ## F02 – high – OAuth und persönliche Tokens können nach Sitzungswiderruf neue Zugangsdaten erzeugen
 
+**Status:** behoben in CX-A (7e64cb7), Details `docs/handoffs/CX-A.md`.
+
 **Datei:Zeile:** `Sources/TimetrackKit/OAuth/OAuthCredentials.swift:53`; `Sources/TimetrackKit/OAuth/OAuthService.swift:174`.
 
 **Problem:** `createToken` prüft `context.fresh()` ausschließlich vor dem Warten auf `auth_lock`. Innerhalb der Transaktion fehlt `auth.authenticate(context.token, on: tx)`. `decide` verwendet ebenfalls den zuvor geprüften Kontext und bindet den Consent an dessen alten Session-Hash, ohne die Sitzung erneut auf Widerruf/Ablauf zu prüfen. Im Unterschied dazu authentifiziert `TimeServices.session` innerhalb des Locks erneut.
@@ -41,6 +45,8 @@ Alle elf Befunde haben eine konkrete Codegrundlage. Bedingte Betriebsszenarien s
 **Empfehlung:** Im serialisierten Schreibvorgang die Sitzung erneut authentifizieren und `normal`/`fresh` auf den aktuellen Kontext anwenden. Consent-Bindung und Account-ID daraus ableiten. Deterministische Tests mit Widerruf zwischen Middleware-Prüfung und Lock-Erwerb vorsehen.
 
 ## F03 – medium – MCP schreibt mit einem inzwischen widerrufenen oder eingeschränkten Principal
+
+**Status:** behoben in CX-A (7e64cb7), Details `docs/handoffs/CX-A.md`.
 
 **Datei:Zeile:** `Sources/TimetrackKit/MCP/MCPTools.swift:14`; zugehörig `Sources/TimetrackKit/MCP/MCPRoutes.swift:176` und `Sources/TimetrackKit/OAuth/BearerPrincipal.swift:25`.
 
@@ -146,9 +152,9 @@ Abgleich durch Claude gegen `main` (Vertrag 0.41.0, nach SEC-A/C/D) und `docs/re
 
 | Befund | Schwere | Status | Beleg (Datei:Zeile) |
 | --- | --- | --- | --- |
-| F01 Überlauf bei `offset + limit` | high | NEU, offen, bestätigt (REST und MCP ohne Obergrenze für `offset`) | `Sources/TimetrackKit/TimeCancelled.swift:46`, `Sources/TimetrackKit/Accounts/AccountAdminService.swift:22`, `Sources/TimetrackKit/TimeRoutes.swift:109`, `Sources/TimetrackKit/MCP/MCPTools.swift:134` |
-| F02 Credentials nach Sitzungswiderruf | high | NEU, offen, bestätigt (keine erneute Authentifizierung in der Transaktion; `TimeServices.session` macht es richtig) | `Sources/TimetrackKit/OAuth/OAuthCredentials.swift:47,53`, `Sources/TimetrackKit/OAuth/OAuthService.swift:178-180`, Vergleich `Sources/TimetrackKit/TimeServices.swift:43-44` |
-| F03 MCP mit widerrufenem Principal | medium | NEU, offen, bestätigt (nur Konto-Aktivität wird unter dem Lock geprüft) | `Sources/TimetrackKit/MCP/MCPTools.swift:12-15` |
+| F01 Überlauf bei `offset + limit` | high | **BEHOBEN (CX-A, 7e64cb7)**: zentrale `Pagination.range` (offset 0...100000, überlaufsicher) für stornierte Segmente, Zeitkonto-Anpassungen und Konten-Admin-Liste (REST und MCP); weitere Listen haben keinen `offset`; Tests `CXAReviewTests` | `Sources/TimetrackKit/Pagination.swift` |
+| F02 Credentials nach Sitzungswiderruf | high | **BEHOBEN (CX-A, 7e64cb7)**: `createToken`, `decide`, `revokeGrant` authentifizieren in der Transaktion erneut; Tests mit widerrufener Sitzung | `Sources/TimetrackKit/OAuth/OAuthCredentials.swift`, `OAuthService.swift` |
+| F03 MCP mit widerrufenem Principal | medium | **BEHOBEN (CX-A, 7e64cb7)**: Token-Hash im Principal, `revalidate` unter dem Lock (Widerruf, Ablauf, aktuelle Scopes); Tests | `Sources/TimetrackKit/MCP/MCPTools.swift`, `OAuth/BearerPrincipal.swift` |
 | F04 Recovery-Orakel (Zähler, SMTP-Latenz) | medium | Größtenteils durch SEC-A überholt (SEC-03/SEC-04): Sperre je getipptem Handle, identisch für unbekannte Handles; Versand nach der Antwort über Outbox. Restpunkt: der Handle-Zähler in `limitRequest(.recovery)` bleibt an `accountId` gebunden, wirkt aber nur noch als Zusatz zur Sperre (geringes Restrisiko) | `Sources/TimetrackKit/RecoveryService.swift:158-160,186,191-193`, `Sources/TimetrackKit/AuthSupport.swift:131-134`, `docs/reviews/2026-11-01-security-review.md` SEC-03/04 |
 | F05 Gruppen-Schreibzugriffe umgehen Limits bei Fachfehlern | medium | NEU, offen, bestätigt (nur `edit_secret_invalid` wird nachgezählt; SEC-11 betraf die Anmelde-Zähler, nicht diesen Pfad) | `Sources/TimetrackKit/Groups/GroupRoutes.swift:66-90` |
 | F06 g1b nicht wiederaufnehmbar | medium | NEU, bestätigt, praktisch gering (Migration läuft nur einmal; betrifft Teilfehler beim ersten Lauf) | `Sources/TimetrackKit/Groups/GroupModels.swift:263-272` |
@@ -158,5 +164,5 @@ Abgleich durch Claude gegen `main` (Vertrag 0.41.0, nach SEC-A/C/D) und `docs/re
 | F10 Blockwoche über 40 Stunden | medium | NEU, offen, bestätigt (jeder Schultag der Woche erhält 8 h, keine Begrenzung auf fünf Tage; nur bei mehr als fünf Schultagen, also Randfall) | `Sources/TimetrackKit/TimeEngine/PreparedEvaluation.swift:147-160`, `Sources/TimetrackKit/TimeEngine/TimeEngine.swift:98-99`, ADR-0028 |
 | F11 Urlaubszähler Woche/Statistik ohne halben Betriebstag | low | NEU, offen, bestätigt (nur Eingabe-Halbtagsflag) | `Sources/TimetrackKit/TimeWeek.swift:207-209`, `Sources/TimetrackKit/TimeStatistics.swift:176`, Vergleich `Sources/TimetrackKit/VacationEngine/VacationEngine.swift:38` |
 
-Zusammenfassung: 11 Befunde (2 high, 8 medium, 1 low). Bestätigt und offen: 10 (F01, F02, F03, F05, F07, F09, F10, F11 sowie F06/F08 als geringes Restrisiko bereits angewendeter Migrationen). Durch SEC-A weitgehend behoben: 1 (F04). Falsch positiv: 0. Doppelt zum Sicherheitsreview: 0 (nur F04 überschneidet sich fachlich mit SEC-03/SEC-04). Keine Befunde des Sicherheitsreviews (SEC-01 bis SEC-17) wurden hier widerlegt. Die Befunde sind nicht umgesetzt; ein Fix-Paket ist nicht angelegt.
+Zusammenfassung: 11 Befunde (2 high, 8 medium, 1 low). Stand nach CX-A: F01, F02, F03 behoben (7e64cb7). Zuvor bestätigt und offen: 10 (F01, F02, F03, F05, F07, F09, F10, F11 sowie F06/F08 als geringes Restrisiko bereits angewendeter Migrationen). Durch SEC-A weitgehend behoben: 1 (F04). Falsch positiv: 0. Doppelt zum Sicherheitsreview: 0 (nur F04 überschneidet sich fachlich mit SEC-03/SEC-04). Keine Befunde des Sicherheitsreviews (SEC-01 bis SEC-17) wurden hier widerlegt. Die Befunde sind nicht umgesetzt; ein Fix-Paket ist nicht angelegt.
 
