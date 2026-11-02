@@ -52,6 +52,21 @@ chmod 600 .env
 chmod +x create-secrets.sh
 ```
 
+**Skript und Stack-Datei vom `deploy`-Branch holen.** Der Branch `deploy` enthält nur Betriebsdateien (kein Quellcode) und wird bei jeder Änderung an `deploy/swarm/` automatisch aus `main` neu erzeugt (Workflow `deploy-branch.yml`). Zwei Wege, immer die neueste Fassung von `update.sh` und `stack.yaml` zu haben:
+
+```sh
+# a) Klon des Branches (empfohlen): einmal klonen, später nur ziehen
+git clone --branch deploy --single-branch --depth 1 https://github.com/OWNER/timetrack-backend.git timetrack-deploy
+cd timetrack-deploy && git pull --ff-only          # holt die neuesten Skripte; .env liegt daneben und ist nicht im Git
+
+# b) nur das Skript, wenn es schon kopiert vorliegt: ersetzt sich selbst, zeigt vorher die Unterschiede
+./update.sh --self-update                           # fragt nach, behält die alte Fassung als update.sh.prev
+./update.sh --self-update --dry-run                 # nur anzeigen
+./update.sh --self-update --script-ref <Commit>     # einen bestimmten Commit festnageln (Commit-Pin)
+```
+
+`OWNER` ist der GitHub-Konto-/Organisationsname aus deinem Image (`ghcr.io/OWNER/timetrack-backend`); `--self-update` leitet die Quelle (`raw.githubusercontent.com/OWNER/timetrack-backend/deploy/deploy/swarm/update.sh`) daraus ab, `--script-url` überschreibt sie. Das Skript ersetzt sich nie ungefragt: Es lädt in eine Temporärdatei, prüft Kopfzeile, Version, Endmarke und `bash -n`, zeigt Version, sha256 und `diff`, fragt (außer mit `--yes`) und sichert die alte Fassung. Beim normalen Start weist es nur mit einer Warnung darauf hin, wenn auf dem Branch eine andere Fassung liegt (abschaltbar mit `--no-self-check` oder `UPDATE_SELF_CHECK=0`). Vertrauensanker ist TLS zu GitHub; wer mehr will, pinnt mit `--script-ref` einen geprüften Commit. Nach einem `--self-update` das Skript neu starten. `stack.yaml` muss neben `update.sh` liegen (der Klon liefert sie mit); sie wird gebraucht, wenn ein Dienst wiederhergestellt werden muss.
+
 `.env` enthält keine Passwörter, kann aber interne Adressen verraten: nicht ins öffentliche Repository, in ein privates Konfigurations-Repository ist in Ordnung.
 
 ## 3. Datenbank vorbereiten (vorhandene MariaDB)
@@ -266,6 +281,19 @@ Oder: `TIMETRACK_IMAGE` in `.env` ändern, `docker stack deploy ...` erneut ausf
 Verhalten: Das neue Backend wird erst „healthy“, wenn `/ready` 200 liefert (Datenbank erreichbar, alle Migrationen angewendet). Ohne vorherige Migration bleibt es ungesund; `update_config` rollt automatisch zurück (`failure_action: rollback`, 60 s Beobachtung). Tritt das ein, ist der Dienst auf der alten Version geblieben.
 
 Manueller Rollback des Images: `docker service rollback timetrack_backend`. **Das Schema wird nicht zurückgerollt.** Ein Rückgang auf eine ältere Version nach einer angewendeten Migration ist nur sicher, wenn die Migration abwärtskompatibel war (nicht zugesichert); im Zweifel Restore aus dem Backup vor Schritt 1 (BETRIEB.md [Eigene MariaDB](installation/mariadb.md)). Bei Migrationen mit zerstörenden Änderungen (Release-Hinweise lesen) das Backend vorher auf 0 skalieren: `docker service scale timetrack_backend=0`.
+
+**`update.sh` im Alltag (ab Version 2).** `update.sh --status` zeigt Stand (`.env` gegen laufendes Image), Replikas, Rollout, Migrationsdienst und `/ready`/`/health` und endet mit Exit 1, wenn etwas nicht stimmt. `--dry-run` ändert nichts (nur lesende `docker`-Aufrufe) und meldet auch einen fehlenden Migrationsdienst. `--rollback` stellt das Backend auf das Image aus `.env.bak` zurück (oder `--tag`), ohne das Schema anzufassen; die vorherige `.env` wird dabei zur neuen `.env.bak`, ein zweiter `--rollback` geht also wieder vor. `UPDATE_BACKUP_CMD='<Befehl>'` führt vor der Migration einen Sicherungsbefehl aus (Fehlschlag bricht ab). Jeder Lauf hängt eine Zeile an `update-history.log` neben der `.env` an. **Das Skript endet nie still:** bei jedem Abbruch steht eine deutsche Meldung mit Schritt, Befehl, Zeile und Exit-Code da, gefolgt von Hinweisen.
+
+**Dienst `timetrack_migrate` fehlt** (zum Beispiel weil er hing und gelöscht wurde): Version 1 des Skripts beendete sich dann ohne Meldung nach Schritt 3/6 (siehe `docs/handoffs/UPDATE-V2.md`). Ab Version 2 erkennt `update.sh` den fehlenden Dienst vor dem Schreiben der `.env` und stellt ihn in Schritt 4 per `docker stack deploy -c stack.yaml` wieder her, mit Image und Replikazahl des laufenden Backends (das Backend ändert sich dadurch nicht, außer die `.env` enthält sonst Änderungen an der Stack-Konfiguration). Manuell auf dem Manager (ohne neues Skript):
+
+```sh
+cd ~/timetrack-deploy
+set -a; . ./.env; set +a
+export TIMETRACK_IMAGE="$(docker service inspect timetrack_backend --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' | sed 's/@sha256:.*//')"
+export BACKEND_REPLICAS="$(docker service inspect timetrack_backend --format '{{.Spec.Mode.Replicated.Replicas}}')"
+docker stack deploy --with-registry-auth --resolve-image never -c stack.yaml timetrack   # legt timetrack_migrate neu an
+docker service ps timetrack_migrate                                                      # Complete abwarten
+```
 
 **`update.sh` hängt oder bricht ab (Fehlersuche beim Update).** Das Skript begrenzt jeden Abschnitt (Migration 300 s, Rollout 600 s, jeder einzelne `docker`/`curl`-Aufruf 60 s bzw. 30 s; über `MIGRATE_TIMEOUT` und `ROLLOUT_TIMEOUT` in Sekunden anpassbar) und zeigt bei Fehlschlag `docker service ps --no-trunc`, die letzten Logzeilen und Rückfallbefehle. Ein zweiter Lauf wird durch eine Sperre (`$TMPDIR` oder `/tmp`, `timetrack-update-<Stack>.lock`) verhindert, weil jeder Lauf den Migrationsjob **neu startet** (`service update --force`): Der Dienst `timetrack_migrate` erscheint im Log also nach jedem Skriptlauf erneut, auch wenn „No new migrations.“ gemeldet wird; Swarm startet einen fertigen Job nicht von selbst neu (`replicated-job`, `restart_policy: none`). Diagnose auf dem Manager:
 

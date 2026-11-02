@@ -70,9 +70,9 @@ PY
 
 shell_syntax() {
   local f rc=0
-  for f in scripts/*.sh scripts/lib/*.sh; do bash -n "$f" || rc=1; done
+  for f in scripts/*.sh scripts/lib/*.sh deploy/swarm/*.sh; do bash -n "$f" || rc=1; done
   if command -v shellcheck >/dev/null 2>&1; then
-    shellcheck -x -P SCRIPTDIR -S warning scripts/*.sh scripts/lib/*.sh || rc=1
+    shellcheck -x -P SCRIPTDIR -S warning scripts/*.sh scripts/lib/*.sh deploy/swarm/*.sh || rc=1
   else
     echo "shellcheck not installed: only bash -n was run"
   fi
@@ -106,6 +106,7 @@ if command -v python3 >/dev/null 2>&1; then
 else skip_step "contract and YAML parse" "python3 not installed"; fi
 
 run_step "shell syntax (bash -n) and shellcheck" shell_syntax
+run_step "update.sh offline tests (stub docker)" scripts/test-update.sh
 
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   run_step "docker compose config (dev compose, all profiles)" compose_config
