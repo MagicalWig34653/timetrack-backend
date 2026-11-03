@@ -19,7 +19,8 @@ Zu Beginn jeder Sitzung zuerst `docs/STATUS.md`, `docs/ARBEITSPLAN.md` und
 
 ## Entwicklung mit Agents
 
-Claude Code koordiniert Agents. **Nutzerentscheidung 19.10.2026: Es wird kein Codex mehr verwendet, nur noch Claude-Agents** (die frühere Vorgabe von ca. 50 % Codex-Anteil entfällt; die bisherigen Codex-Beiträge bleiben in `docs/ARBEITSPLAN.md` dokumentiert).
+Claude Code koordiniert Agents. **Nutzerentscheidung 03.11.2026: Codex (`gpt-6.1-sol`, Aufwand mid/high) wird wieder verwendet, mindestens 60 % der Arbeit** (ersetzt die Entscheidung vom 19.10.2026 „kein Codex mehr“; Codex-Beiträge in `docs/ARBEITSPLAN.md` führen). Codex arbeitet in einem Klon unter `/private/tmp`, Ergebnisse kommen per `git fetch` und ff-only-Merge ins Hauptrepo.
+**Agent-Regeln (Nutzerentscheidung 03.11.2026):** Agents treffen keine eigenen Entscheidungen: keine neuen Abhängigkeiten (Server-Skripte nur Bash, `jq` erlaubt), keine neuen Flags oder Verhaltensänderungen, kein Scope-Ausbau; bei Unklarheit stoppen und unter „Rückfragen“ melden, Abweichungen im Bericht unter „Abweichungen vom Auftrag“. **Aufräumen:** Jeder Agent legt Temp-/Build-Dateien in genau einem Ordner unter `/private/tmp` an und löscht ihn am Ende; nach dem Merge prüft die Hauptsession, dass Klone, Worktrees, Bundles und Caches weg sind. Nur eigene Dateien löschen, nie fremde Sitzungsordner.
 Gewichtete Arbeitspakete und tatsächliche Beiträge in `docs/ARBEITSPLAN.md` fortlaufend führen.
 Worktrees oder getrennte Dateibereiche, ein Schreibverantwortlicher pro Paket und gegenseitige Reviews.
 Plugin-Fähigkeiten anhand der installierten Version prüfen; keine Befehle erfinden oder Modellwahl erzwingen.
