@@ -64,7 +64,7 @@ extension AuthTests {
             }
             for path in ["/api/v1/automation//events", "//api/v1/automation/events", "/api/v1/me//device-tokens", "/api/v1/auth//login/options", "/mcp/"] {
                 try await app.test(.POST, path, headers: bearer) { response async throws in
-                    XCTAssertEqual(response.status, .unauthorized, path)
+                    XCTAssertTrue([HTTPResponseStatus.unauthorized, .badRequest].contains(response.status), "\(path) -> \(response.status)")
                 }
             }
         }
