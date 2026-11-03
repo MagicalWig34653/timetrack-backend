@@ -1,5 +1,9 @@
 # Arbeitsplan und Agent-Übergabe
 
+## UPDATE-DRIFT (03.11.2026)
+
+Codex, alleiniger Schreiber auf Branch `update-drift`, isolierter temporärer Klon (Worktree durch Sandbox gesperrt). Umfang: `deploy/swarm/update.sh`, Offline-Tests, kleine BSD-sed-/pipefail-Korrektur im bestehenden `migrate-dir.sh` für dessen Regressionstest, Betriebsdokumentation. API unverändert. Abnahme: Drift/status/fehlende Secrets ohne Werteausgabe, expliziter Stack-Abgleich mit laufendem Digest und Replikazahl; keine echten Swarm-Aufrufe. Umsetzung fertig, Integration auf main offen; Prüfstand und Grenzen: [UPDATE-DRIFT](handoffs/UPDATE-DRIFT.md). Keine Migrationen, keine laufenden Dienste. Nächster Schritt: Commit übernehmen und kontrolliert auf einem Test-Swarm prüfen.
+
 ## 30.10.–01.11.2026 – Gruppenlink, APNs-Diagnose, Orte-Archiv, AUD3, Einstellungen (Claude-Agents, alles integriert)
 
 G1b (Link wieder abrufbar, Vertrag 0.37.1), P14e (APNs-Diagnose, 0.38.0), P15 (archivierte Orte, 0.39.0), U9/U10 und P15-pwa (PWA), AUD3-A (Einstellungen: Auslöse-Links, Profil, Konto & Sicherheit), AUD3-B (archivierte Orte, halber Betriebstag, Urlaubsantrag), SET-A (Einstellungsstruktur wie PWA), Deploy-Branch und Image-Tags. Agents arbeiteten in Worktrees `timetrack-apple-wt/{aud3-a,aud3-b,set-a}`; Lead-Prüfung: Diffs gelesen, Kerntests und iOS/Mac-Builds selbst gelaufen. Übergabe: `docs/handoffs/SESSION-2026-11-01.md`.

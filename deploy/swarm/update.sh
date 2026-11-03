@@ -8,7 +8,7 @@
 # Language: code and comments are English, all output for the operator is German.
 set -Eeuo pipefail
 
-SCRIPT_VERSION="2.2.0"
+SCRIPT_VERSION="2.3.0"
 SCRIPT_PATH="${BASH_SOURCE[0]}"
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 
@@ -20,6 +20,10 @@ TAG=""
 MODE=update            # update | status | rollback | self-update | version
 DRY=0
 FORCE=0
+APPLY_DRIFT=0
+DRIFT=0
+MISSING_SECRETS=0
+DRIFT_DIR=""
 YES=0
 MIGRATE=1
 SELF_CHECK="${UPDATE_SELF_CHECK:-1}"
@@ -44,11 +48,12 @@ Modi (Standard: Update auf das neueste Image):
   --version         Skriptversion anzeigen
 Optionen:
   --env-file FILE   Stack-Variablen (Standard: ./.env, sonst die Datei neben dem Skript)
-  --stack-file FILE Stack-Datei zum Wiederherstellen eines fehlenden Dienstes (Standard: stack.yaml neben dem Skript)
+  --stack-file FILE Stack-Datei für Driftprüfung und Wiederherstellung (Standard: stack.yaml neben dem Skript)
   --stack-override FILE  zusätzliche Compose-Datei (Overlay) hinter der Stack-Datei, wiederholbar (auch STACK_OVERRIDE_FILES, durch Leerzeichen getrennt)
   --tag TAG         diesen Tag verwenden (z. B. sha-6c074f7 oder 0.1.0) statt des neuesten sha-Tags
   --stack NAME      Stack-Name (Standard: timetrack)
   --dry-run         nur anzeigen, was passieren würde (keine Änderung; nur lesende docker-Aufrufe)
+  --apply-stack-drift  erkannte Konfigurationsabweichungen per Stack-Deploy übernehmen (alle Dienste betroffen)
   --force           auch ohne Tag-Wechsel neu starten (idempotent: .env.bak bleibt erhalten)
   --yes, -y         keine Rückfragen
   --skip-migrate    nur das Backend aktualisieren (nicht empfohlen)
@@ -74,6 +79,7 @@ while [ $# -gt 0 ]; do
     --self-update) MODE=self-update; shift ;;
     --version) MODE=version; shift ;;
     --dry-run) DRY=1; shift ;;
+    --apply-stack-drift) APPLY_DRIFT=1; shift ;;
     --force) FORCE=1; shift ;;
     --yes|-y) YES=1; shift ;;
     --skip-migrate) MIGRATE=0; shift ;;
@@ -135,6 +141,7 @@ on_exit() {
   local rc=$?
   trap - EXIT ERR INT TERM
   [ -z "$LOCK_DIR" ] || rm -rf "$LOCK_DIR"
+  [ -z "$DRIFT_DIR" ] || rm -rf "$DRIFT_DIR"
   if [ "$rc" -ne 0 ] && [ "$REPORTED" = 0 ]; then
     {
       printf '[%s] %sFehler: Das Skript wurde unerwartet beendet (Exit-Code %s).%s\n' "$(elapsed)" "$C_RED" "$rc" "$C_OFF"
@@ -374,21 +381,122 @@ write_env_image() {
   say "TIMETRACK_IMAGE wurde in ${ENV_FILE} geschrieben (Sicherung: ${ENV_FILE}.bak)."
 }
 
+# Render with exactly the same interpolation context as deployment. Never echo rendered data or Docker diagnostics:
+# both may contain credentials, including variables with innocuous names. Private files are removed by on_exit.
+check_stack_drift() {
+  need python3
+  python3 -c 'import yaml' 2>/dev/null || die "Die Driftprüfung benötigt Python 3 mit PyYAML (Paket python3-yaml)."
+  [ -n "$STACK_FILE" ] && [ -f "$STACK_FILE" ] || die "Stack-Datei für die Driftprüfung nicht gefunden; --stack-file angeben."
+  [ -z "$DRIFT_DIR" ] || rm -rf "$DRIFT_DIR"
+  DRIFT_DIR="$(umask 077; mktemp -d)"
+  # shellcheck disable=SC1090
+  ( set +u; set -a; . "$ENV_FILE"; set +a
+    dk stack config -c "$STACK_FILE" ${STACK_C_ARGS[@]+"${STACK_C_ARGS[@]}"} ) >"$DRIFT_DIR/stack" 2>/dev/null \
+    || die "docker stack config ist fehlgeschlagen (Details zum Schutz von Zugangsdaten unterdrückt). Pflichtvariablen und Overlays prüfen."
+  dk service inspect "$BACKEND" >"$DRIFT_DIR/service" 2>/dev/null || die "Backend-Konfiguration nicht lesbar."
+  dk network ls --no-trunc --format '{{.ID}} {{.Name}}' >"$DRIFT_DIR/networks" 2>/dev/null || die "Netzwerkliste nicht lesbar."
+  dk secret ls --format '{{.Name}}' >"$DRIFT_DIR/secrets" 2>/dev/null || die "Secret-Liste nicht lesbar."
+  local rc=0
+  python3 - "$DRIFT_DIR" "$STACK" <<'PYTHON' || rc=$?
+import json
+import re
+import sys
+from pathlib import Path
+import yaml
+
+# Only allow identifier-like names in diagnostics; no values or parser exception details ever escape.
+def names(items):
+    return ", ".join(x if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]*", x) else "<Name verborgen>" for x in sorted(items))
+
+try:
+    root = Path(sys.argv[1])
+    stack = yaml.safe_load((root / "stack").read_text())
+    spec = json.loads((root / "service").read_text())[0]["Spec"]
+    backend = stack["services"]["backend"]
+    container = spec["TaskTemplate"]["ContainerSpec"]
+    desired = backend.get("environment", {}) or {}
+    if isinstance(desired, list):
+        desired = dict(v.split("=", 1) if "=" in v else (v, None) for v in desired)
+    # Docker omits null (unset) entries, but preserves empty strings.
+    desired = {k: str(v) for k, v in desired.items() if v is not None}
+    actual = dict(v.split("=", 1) if "=" in v else (v, "") for v in container.get("Env", []))
+    changed = {k for k in desired.keys() | actual.keys() if desired.get(k) != actual.get(k)}
+    drift = bool(changed)
+    if changed:
+        print("Konfigurationsdrift: Umgebungsvariablen weichen ab (nur Namen): " + names(changed))
+    definitions = stack.get("secrets", {}) or {}
+    def secret_name(key):
+        definition = definitions[key]
+        external = definition.get("external")
+        return definition.get("name") or (external.get("name") if isinstance(external, dict) else None) or (key if external else sys.argv[2] + "_" + key)
+    expected_secrets = set()
+    for item in backend.get("secrets", []) or []:
+        item = {"source": item} if isinstance(item, str) else item
+        key = item["source"]
+        expected_secrets.add((secret_name(key), item.get("target", key), str(item.get("uid", "0")), str(item.get("gid", "0")), int(item.get("mode", 292))))
+    actual_secrets = {(v["SecretName"], v["File"]["Name"], v["File"]["UID"], v["File"]["GID"], v["File"]["Mode"]) for v in container.get("Secrets", []) or []}
+    if expected_secrets != actual_secrets:
+        drift = True
+        print("Konfigurationsdrift: Secret-Zuordnungen weichen ab: " + names({v[0] for v in expected_secrets ^ actual_secrets}))
+    if int(backend.get("deploy", {}).get("replicas", 1)) != spec["Mode"]["Replicated"]["Replicas"]:
+        drift = True
+        print("Konfigurationsdrift: Replikazahl weicht ab; beim Abgleich bleibt die laufende Anzahl erhalten.")
+    network_ids = dict(line.split(None, 1) for line in (root / "networks").read_text().splitlines())
+    expected_networks = set()
+    for key in backend.get("networks", {"default": {}}):
+        definition = (stack.get("networks", {}) or {}).get(key, {}) or {}
+        expected_networks.add(definition.get("name") or (key if definition.get("external") else sys.argv[2] + "_" + key))
+    actual_networks = {network_ids.get(v["Target"], v["Target"]) for v in spec["TaskTemplate"].get("Networks", [])}
+    if expected_networks != actual_networks:
+        drift = True
+        print("Konfigurationsdrift: Netzwerkzuordnungen weichen ab: " + names(expected_networks ^ actual_networks))
+    available = set((root / "secrets").read_text().splitlines())
+    missing = {secret_name(k) for k, v in definitions.items() if v.get("external") and secret_name(k) not in available}
+    if missing:
+        print("Fehlende Swarm-Secrets: " + names(missing) + ". Vor dem Deploy create-secrets.sh --add-only ausführen; bei eigenen Secret-Namen die Zuordnung prüfen.")
+    sys.exit(11 if missing else 10 if drift else 0)
+except Exception:
+    print("Fehler: Konfigurationsdrift nicht zuverlässig prüfbar (Details zum Schutz von Zugangsdaten unterdrückt).", file=sys.stderr)
+    sys.exit(12)
+PYTHON
+  DRIFT=0; MISSING_SECRETS=0
+  case "$rc" in
+    0) good "Keine Konfigurationsdrift im Backend erkannt." ;;
+    10) DRIFT=1 ;;
+    11) DRIFT=1; MISSING_SECRETS=1 ;;
+    *) die "Driftprüfung fehlgeschlagen; keine Änderungen durchgeführt." ;;
+  esac
+}
+
+# Shared by the drift reconciliation and the missing migration-service restore. Preserve the exact image digest.
+deploy_current_stack() {
+  local run_image replicas
+  [ "$MISSING_SECRETS" = 0 ] || die "Secrets fehlen: zuerst create-secrets.sh --add-only ausführen."
+  run_image="$(svc_field "$BACKEND" '{{.Spec.TaskTemplate.ContainerSpec.Image}}')"
+  replicas="$(svc_field "$BACKEND" '{{.Spec.Mode.Replicated.Replicas}}')"
+  [ -n "$run_image" ] && [[ "$replicas" =~ ^[0-9]+$ ]] || die "Laufendes Image oder Replikazahl nicht sicher lesbar."
+  # A final overlay also overrides literal image/replica settings in operator overlays.
+  python3 - "$DRIFT_DIR/preserve.json" "$run_image" "$replicas" <<'PYTHON'
+import json
+import sys
+with open(sys.argv[1], "w") as output:
+    json.dump({"services": {"backend": {"image": sys.argv[2], "deploy": {"replicas": int(sys.argv[3])}}}}, output)
+PYTHON
+  say "Gleiche den Stack ab (alle Dienste; laufendes Backend-Image und Replikazahl bleiben erhalten)."
+  # shellcheck disable=SC1090
+  ( set +u; set -a; . "$ENV_FILE"; set +a; export TIMETRACK_IMAGE="$run_image" BACKEND_REPLICAS="$replicas"
+    dkl stack deploy --with-registry-auth --resolve-image never -c "$STACK_FILE" ${STACK_C_ARGS[@]+"${STACK_C_ARGS[@]}"} -c "$DRIFT_DIR/preserve.json" "$STACK" ) >/dev/null 2>&1 \
+    || die "docker stack deploy ist fehlgeschlagen (Details zum Schutz von Zugangsdaten unterdrückt). Secrets mit create-secrets.sh --add-only prüfen; Pflichtvariablen, Overlays und Zeitüberschreitung prüfen."
+  watch_rollout
+}
+
 # Recreates the one-shot migrate service from the stack file without changing the running backend: the stack is
 # deployed with the image and replica count the backend runs with right now. (Other changed .env values would
 # roll the backend too; that is what `docker stack deploy` does for any changed service.)
 restore_migrate_service() {
-  local run_image replicas tries=0
-  [ -n "$STACK_FILE" ] && [ -f "$STACK_FILE" ] || die "Der Dienst ${MIGRATE_SERVICE} fehlt und ${STACK_FILE:-stack.yaml} wurde nicht gefunden. Die stack.yaml neben update.sh legen (Branch deploy) oder --stack-file angeben."
-  run_image="$(svc_field "$BACKEND" '{{.Spec.TaskTemplate.ContainerSpec.Image}}' | sed 's/@sha256:.*//' || true)"
-  replicas="$(svc_field "$BACKEND" '{{.Spec.Mode.Replicated.Replicas}}')"
-  [ -n "$run_image" ] || die "Das aktuelle Image von ${BACKEND} ist nicht lesbar; der fehlende Dienst ${MIGRATE_SERVICE} kann nicht sicher wiederhergestellt werden."
-  [ -n "$replicas" ] || replicas=1
-  say "Der Dienst ${MIGRATE_SERVICE} fehlt. Stelle ihn aus ${STACK_FILE} wieder her (docker stack deploy; Backend bleibt bei ${replicas} Replika(s) mit ${run_image}) ..."
-  # shellcheck disable=SC1090
-  ( set +u; set -a; . "$ENV_FILE"; set +a; export TIMETRACK_IMAGE="$run_image" BACKEND_REPLICAS="$replicas"
-    dkl stack deploy --with-registry-auth --resolve-image never -c "$STACK_FILE" ${STACK_C_ARGS[@]+"${STACK_C_ARGS[@]}"} "$STACK" ) \
-    || die "docker stack deploy ist fehlgeschlagen (Ausgabe siehe oben). Häufige Ursachen: fehlende Pflichtvariablen in der .env, fehlende Secrets (alle sechs müssen existieren, fehlende optionale legt create-secrets.sh --add-only als Platzhalter an), Zeitüberschreitung."
+  local tries=0
+  say "Der Dienst ${MIGRATE_SERVICE} fehlt; stelle ihn aus der Stack-Datei wieder her."
+  deploy_current_stack
   while [ "$tries" -lt 20 ]; do
     if service_exists "$MIGRATE_SERVICE"; then good "Dienst ${MIGRATE_SERVICE} wiederhergestellt."; return 0; fi
     tries=$((tries + 1)); sleep 2
@@ -462,6 +570,10 @@ watch_rollout() {
     if [ "$now" != "$last" ]; then say "$now"; last="$now"; fi
     case "$ustate" in
       completed) good "Rollout abgeschlossen."; break ;;
+      "")
+        case "$replicas" in
+          */*) if [ "${replicas%%/*}" = "${replicas##*/}" ]; then good "Alle Replikas laufen; kein Rollout offen."; break; fi ;;
+        esac ;;
       paused|rollback_started|rollback_completed|rollback_paused)
         dk service inspect "$BACKEND" --format '{{.UpdateStatus.Message}}' >&2 || true
         dk service ps "$BACKEND" --no-trunc --format '{{.Name}} {{.CurrentState}} {{.Error}}' | head -n 6 >&2 || true
@@ -507,6 +619,8 @@ do_status() {
   echo "Image in .bak:    ${bak_image:-<keine Sicherung>}"
   ensure_manager
   if service_exists "$BACKEND"; then
+    check_stack_drift
+    if [ "$DRIFT" = 1 ]; then problems=$((problems + 1)); fi
     running_img="$(svc_field "$BACKEND" '{{.Spec.TaskTemplate.ContainerSpec.Image}}' | sed 's/@sha256:.*//')"
     ustate="$(svc_field "$BACKEND" '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{end}}')"
     replicas="$(dk service ls --filter "name=${BACKEND}" --format '{{.Name}} {{.Replicas}}' 2>/dev/null | awk -v n="$BACKEND" '$1==n {print $2}' | head -n 1 || true)"
@@ -584,13 +698,10 @@ do_update() {
   echo "Env-Datei: ${ENV_FILE}"
   echo "Aktuell:   ${CURRENT_IMAGE}"
   echo "Neu:       ${NEW_IMAGE}"
-  if [ "$NEW_IMAGE" = "$CURRENT_IMAGE" ] && [ "$FORCE" = 0 ]; then
-    good "Bereits auf dem neuesten Stand. Nichts zu tun (--force startet trotzdem neu)."
-    return 0
-  fi
   if [ "$DRY" = 1 ]; then
     if command -v docker >/dev/null 2>&1 && dk info >/dev/null 2>&1; then
       preflight_services
+      if [ "$BACKEND_OK" = 1 ]; then check_stack_drift; fi
       if [ "$BACKEND_OK" = 1 ]; then echo "Dienst ${BACKEND}: vorhanden"; else echo "PROBLEM: Dienst ${BACKEND} fehlt (Erstinstallation: docs/DEPLOYMENT.md)"; fi
       if [ "$MIGRATE_MISSING" = 1 ]; then echo "Dienst ${MIGRATE_SERVICE}: FEHLT, würde aus ${STACK_FILE:-<stack.yaml nicht gefunden>} wiederhergestellt"; fi
     else
@@ -607,6 +718,16 @@ do_update() {
     [ -n "$STACK_FILE" ] && [ -f "$STACK_FILE" ] || die "Der Dienst ${MIGRATE_SERVICE} fehlt, aber die Stack-Datei wurde nicht gefunden. stack.yaml neben update.sh legen (Branch deploy) oder --stack-file angeben."
   fi
 
+  check_stack_drift
+  [ "$MISSING_SECRETS" = 0 ] || die "Secrets fehlen: zuerst create-secrets.sh --add-only ausführen."
+  if [ "$DRIFT" = 1 ] && [ "$APPLY_DRIFT" = 0 ]; then
+    die "Konfigurationsdrift erkannt. Stack und Overlays prüfen, dann mit --apply-stack-drift erneut starten (Stack-Deploy kann alle Dienste ändern)."
+  fi
+  if [ "$NEW_IMAGE" = "$CURRENT_IMAGE" ] && [ "$FORCE" = 0 ] && [ "$DRIFT" = 0 ]; then
+    good "Bereits auf dem neuesten Stand. Nichts zu tun (--force startet trotzdem neu)."
+    return 0
+  fi
+
   step "Bestätigen"
   acquire_lock
   confirm "Datenbank gesichert? Mit dem Update fortfahren?"
@@ -621,11 +742,13 @@ do_update() {
       say "Führe UPDATE_BACKUP_CMD vor der Migration aus ..."
       bash -c "$UPDATE_BACKUP_CMD" || die "UPDATE_BACKUP_CMD ist fehlgeschlagen; es wurde nicht migriert. Das Backend ist unverändert."
     fi
-    if [ "$MIGRATE_MISSING" = 1 ]; then restore_migrate_service; fi
+    if [ "$MIGRATE_MISSING" = 1 ]; then restore_migrate_service
+    elif [ "$DRIFT" = 1 ]; then deploy_current_stack; fi
     run_migration
   else
     step "Datenbankmigration"
     say "Übersprungen (--skip-migrate)."
+    if [ "$DRIFT" = 1 ]; then deploy_current_stack; fi
   fi
 
   step "Backend aktualisieren (Rolling Update, ein Replikat nach dem anderen)"; PHASE="rollout"

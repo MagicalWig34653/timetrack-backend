@@ -20,7 +20,27 @@ args="$*"
 exists() { [ "$(cat "$ST/migrate_exists")" = 1 ]; }
 nosvc() { echo "Error response from daemon: No such service: $1" >&2; exit 1; }
 [ "$1" = info ] && { [ -f "$ST/info_fail" ] && { echo "Cannot connect to the Docker daemon" >&2; exit 1; }; echo "active true"; exit 0; }
+if [ "$1 $2" = "stack config" ]; then
+  [ -f "$ST/config_fail" ] && { echo 'sensitive-render-error' >&2; exit 1; }
+  python3 - "$ST/rendered" "$@" <<'PYTHON'
+import os, sys, yaml
+config = yaml.safe_load(open(sys.argv[1]))
+config['services']['backend']['environment']['SMTP_HOST'] = os.environ.get('SMTP_HOST', 'smtp.example.org')
+files = [sys.argv[i + 1] for i, v in enumerate(sys.argv) if v == '-c']
+for path in files[1:]:
+    overlay = yaml.safe_load(open(path)) or {}
+    config['services']['backend']['environment'].update(overlay.get('services', {}).get('backend', {}).get('environment', {}))
+yaml.safe_dump(config, sys.stdout)
+PYTHON
+  exit 0
+fi
+if [ "$1 $2" = "secret ls" ]; then
+  [ -f "$ST/missing_secret" ] || echo tt_oidc_client_secret
+  exit 0
+fi
+if [ "$1 $2" = "network ls" ]; then echo 'network123 timetrack_default'; exit 0; fi
 if [ "$1 $2" = "service inspect" ]; then
+  if [ "$#" = 3 ]; then cat "$ST/service"; exit 0; fi
   name="${*: -1}"
   if [ "$name" = timetrack_migrate ]; then exists || nosvc "$name"; echo abc123; exit 0; fi
   case "$args" in
@@ -67,6 +87,15 @@ if [ "$1 $2" = "service logs" ]; then echo "No new migrations."; exit 0; fi
 if [ "$1 $2" = "stack deploy" ]; then
   echo "STACKDEPLOY TIMETRACK_IMAGE=${TIMETRACK_IMAGE:-} BACKEND_REPLICAS=${BACKEND_REPLICAS:-}" >> "$ST/log"
   [ -f "$ST/stack_fail" ] && { echo "failed to create service timetrack_migrate" >&2; exit 1; }
+  python3 - "${@: -2:1}" <<'PYTHON'
+import json, sys
+with open(sys.argv[1]) as source:
+    backend = json.load(source)['services']['backend']
+assert backend['image'].endswith('@sha256:0123456789abcdef')
+assert backend['deploy']['replicas'] == 2
+PYTHON
+  [ "$?" = 0 ] || exit 1
+  cp "$ST/reconciled" "$ST/service"
   echo 1 > "$ST/migrate_exists"; echo "t1|node1|Complete 2 seconds ago|" > "$ST/tasks"
   exit 0
 fi
@@ -81,6 +110,27 @@ new_case() {
   printf 'TIMETRACK_IMAGE=%s\nPUBLIC_BASE_URL=file://%s/web\nOTHER=1\n' "$OLD_IMAGE" "$D" > "$D/app/.env"
   echo "${2:-1}" > "$ST/migrate_exists"; echo "${3:-done}" > "$ST/mode"
   if [ "${2:-1}" = 1 ]; then echo "t1|node1|Complete 1 hour ago|" > "$ST/tasks"; else : > "$ST/tasks"; fi
+  cat > "$ST/rendered" <<'YAML'
+services:
+  backend:
+    environment:
+      SMTP_HOST: smtp.example.org
+      APNS_ENABLED: "true"
+      SMTP_PASSWORD: desired-sensitive-value
+    secrets:
+      - source: oidc
+        target: tt_oidc_client_secret
+    deploy:
+      replicas: 2
+secrets:
+  oidc:
+    external: true
+    name: tt_oidc_client_secret
+YAML
+  cat > "$ST/service" <<'JSON'
+[{"Spec":{"TaskTemplate":{"ContainerSpec":{"Env":["SMTP_HOST=smtp.example.org","APNS_ENABLED=true","SMTP_PASSWORD=desired-sensitive-value"],"Secrets":[{"SecretName":"tt_oidc_client_secret","File":{"Name":"tt_oidc_client_secret","UID":"0","GID":"0","Mode":292}}]},"Networks":[{"Target":"network123"}]},"Mode":{"Replicated":{"Replicas":2}}}}]
+JSON
+  cp "$ST/service" "$ST/reconciled"
   mkdir -p "$D/web"; echo ok > "$D/web/ready"; echo ok > "$D/web/health"
 }
 # run_case ARGS...: runs the sandbox copy; output in $OUT, exit code in $RC.
@@ -92,7 +142,7 @@ check() { # check DESCRIPTION CONDITION-RESULT
   N=$((N + 1))
   if [ "$2" = 0 ]; then echo "ok   $1"; else echo "FAIL $1"; FAILS=$((FAILS + 1)); [ -z "${3:-}" ] || echo "     $3"; fi
 }
-has() { printf '%s' "$OUT" | grep -qF -- "$1"; }
+has() { printf '%s' "$OUT" | grep -F -- "$1" >/dev/null; }
 logged() { grep -qF -- "$1" "$ST/log" 2>/dev/null; }
 env_image() { sed -n 's/^TIMETRACK_IMAGE=//p' "$1" | tail -n 1; }
 
@@ -101,7 +151,7 @@ new_case missing 0
 run_case --force --yes --tag "$NEW_TAG"
 check "missing migrate: exit 0" "$RC" "rc=$RC"$'\n'"$OUT"
 check "missing migrate: reported and restored" "$(has 'fehlt' && has 'wiederhergestellt' && echo 0 || echo 1)"
-check "missing migrate: stack deploy keeps the running backend image and replicas" "$(logged "STACKDEPLOY TIMETRACK_IMAGE=${OLD_IMAGE} BACKEND_REPLICAS=2" && echo 0 || echo 1)" "$(cat "$ST/log")"
+check "missing migrate: stack deploy keeps the running backend image and replicas" "$(logged "STACKDEPLOY TIMETRACK_IMAGE=${OLD_IMAGE}@sha256:0123456789abcdef BACKEND_REPLICAS=2" && echo 0 || echo 1)" "$(cat "$ST/log")"
 check "missing migrate: job started with the new image" "$(logged "service update --detach --force --with-registry-auth --image ${NEW_IMAGE} timetrack_migrate" && echo 0 || echo 1)"
 check "missing migrate: backend rolled to the new image" "$(logged "--image ${NEW_IMAGE} --force timetrack_backend" && echo 0 || echo 1)"
 check "missing migrate: .env new, .env.bak old" "$([ "$(env_image "$D/app/.env")" = "$NEW_IMAGE" ] && [ "$(env_image "$D/app/.env.bak")" = "$OLD_IMAGE" ] && echo 0 || echo 1)"
@@ -215,14 +265,58 @@ sed -i.bak 's|echo "STACKDEPLOY TIMETRACK_IMAGE|echo "STACKDEPLOY ARGS=$args TIM
 new_case overlay 0
 echo "services: {}" > "$D/app/override.yaml"
 run_case --force --yes --tag "$NEW_TAG" --stack-override override.yaml
-check "overlay: passed after the stack file as second -c" "$(logged "stack.yaml -c override.yaml timetrack" && echo 0 || echo 1)" "$(cat "$ST/log")"
+check "overlay: passed after the stack file as second -c" "$(logged "stack.yaml -c override.yaml" && echo 0 || echo 1)" "$(cat "$ST/log")"
 new_case overlayenv 0
 echo "services: {}" > "$D/app/o1.yaml"; echo "services: {}" > "$D/app/o2.yaml"
 STACK_OVERRIDE_FILES="o1.yaml o2.yaml" run_case --force --yes --tag "$NEW_TAG"
-check "overlay via STACK_OVERRIDE_FILES: both files in order" "$(logged "-c o1.yaml -c o2.yaml timetrack" && echo 0 || echo 1)" "$(cat "$ST/log")"
+check "overlay via STACK_OVERRIDE_FILES: both files in order" "$(logged "-c o1.yaml -c o2.yaml" && echo 0 || echo 1)" "$(cat "$ST/log")"
 new_case overlaymissing 0
 run_case --force --yes --tag "$NEW_TAG" --stack-override nope.yaml
 check "overlay missing: exit 1 with message, .env untouched" "$([ "$RC" = 1 ] && has 'Overlay-Datei nicht gefunden' && [ "$(env_image "$D/app/.env")" = "$OLD_IMAGE" ] && echo 0 || echo 1)" "$OUT"
+
+# Drift checks run even for the same image and never disclose values.
+new_case drift 1
+sed 's/smtp.example.org/old.example.org/g; s/desired-sensitive-value/old-sensitive-value/g' "$ST/service" > "$ST/changed"
+mv "$ST/changed" "$ST/service"
+run_case --yes --tag sha-aaaaaaa
+check "drift: same image blocks without explicit consent" "$([ "$RC" = 1 ] && has '--apply-stack-drift' && ! logged 'service update' && ! logged 'stack deploy' && echo 0 || echo 1)" "$OUT"
+check "drift: variable names only, including secret-like variable" "$(has 'SMTP_HOST' && has 'SMTP_PASSWORD' && ! has 'old-sensitive-value' && ! has 'desired-sensitive-value' && ! has 'old.example.org' && echo 0 || echo 1)" "$OUT"
+run_case --status
+check "status: drift is unhealthy and read-only" "$([ "$RC" = 1 ] && has 'Konfigurationsdrift' && ! logged 'stack deploy' && echo 0 || echo 1)" "$OUT"
+run_case --dry-run --apply-stack-drift --tag sha-aaaaaaa
+check "dry run: reports drift without mutation" "$([ "$RC" = 0 ] && has 'Konfigurationsdrift' && ! logged 'stack deploy' && echo 0 || echo 1)" "$OUT"
+run_case --yes --apply-stack-drift --tag sha-aaaaaaa
+check "drift apply: deploys with exact running digest and replicas" "$([ "$RC" = 0 ] && logged "TIMETRACK_IMAGE=${OLD_IMAGE}@sha256:0123456789abcdef BACKEND_REPLICAS=2" && echo 0 || echo 1)" "$OUT"
+run_case --status
+check "drift apply: subsequent status is clean" "$([ "$RC" = 0 ] && has 'Keine Konfigurationsdrift' && echo 0 || echo 1)" "$OUT"
+
+new_case envdrift 1
+printf 'SMTP_HOST=changed.example.org\n' >> "$D/app/.env"
+run_case --yes --tag sha-aaaaaaa
+check "drift: .env is exported during render" "$([ "$RC" = 1 ] && has 'SMTP_HOST' && ! has 'changed.example.org' && echo 0 || echo 1)" "$OUT"
+
+new_case overlaydrift 1
+printf 'services:\n  backend:\n    environment:\n      APNS_ENABLED: "false"\n' > "$D/app/override.yaml"
+run_case --status --stack-override override.yaml
+check "drift: effective overlay changes are detected" "$([ "$RC" = 1 ] && has 'APNS_ENABLED' && logged '-c override.yaml' && echo 0 || echo 1)" "$OUT"
+
+new_case structural 1
+sed 's/tt_oidc_client_secret/tt_old/g; s/network123/unknown123/g; s/Replicas":2/Replicas":3/' "$ST/service" > "$ST/changed"
+mv "$ST/changed" "$ST/service"
+run_case --status
+check "drift: secret mounts, replicas and network identities checked" "$([ "$RC" = 1 ] && has 'Secret-Zuordnungen' && has 'Replikazahl' && has 'Netzwerkzuordnungen' && echo 0 || echo 1)" "$OUT"
+
+new_case missingsecret 0
+touch "$ST/missing_secret"
+run_case --yes --apply-stack-drift --tag "$NEW_TAG"
+check "missing secret: actionable hint before any mutation" "$([ "$RC" = 1 ] && has 'tt_oidc_client_secret' && has 'create-secrets.sh --add-only' && ! logged 'stack deploy' && ! logged 'service update' && [ ! -f "$D/app/.env.bak" ] && echo 0 || echo 1)" "$OUT"
+run_case --status
+check "missing secret: status is unhealthy" "$([ "$RC" = 1 ] && has 'Fehlende Swarm-Secrets' && echo 0 || echo 1)" "$OUT"
+
+new_case renderfail 1
+touch "$ST/config_fail"
+run_case --yes --tag "$NEW_TAG"
+check "render failure: fail closed without diagnostic values" "$([ "$RC" = 1 ] && has 'docker stack config' && ! has 'sensitive-render-error' && ! logged 'service update' && echo 0 || echo 1)" "$OUT"
 
 # 17. migrate-dir.sh: read-only comparison of an old, edited stack file with the new one.
 new_case migrate 1

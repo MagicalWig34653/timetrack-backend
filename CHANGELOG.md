@@ -5,6 +5,8 @@ Die Einzelpakete (A1, B2, …) stehen in `docs/ARBEITSPLAN.md`.
 
 ## Unveröffentlicht
 
+- **UPDATE-DRIFT:** update.sh 2.3.0 prüft effektive Backend-Konfiguration auch bei gleichem Image; Status meldet Drift, Updates verlangen dafür `--apply-stack-drift`. Fehlende Secrets werden vor Änderungen mit Hinweis auf `create-secrets.sh --add-only` gemeldet. Neue Voraussetzung: Python 3 mit PyYAML.
+
 - **SCOPE-F10 (Vertrag 0.44.0):** OAuth-Zustimmung ohne angefragten Scope belegt nur lesende Scopes vor (neue Felder `requestedScopes`, `availableScopes`); Blockwoche mit mehr als fünf Schultagen gutschreibt nur die ersten fünf (höchstens 40 h).
 
 - **Sicherheit SEC-15b (Vertrag 0.43.0, ADR-0003 Nachtrag):** Das Sitzungscookie heißt bei HTTPS-`PUBLIC_BASE_URL` `__Host-tt_session` (Secure, HttpOnly, SameSite=Lax, Path=/, ohne Domain); bei HTTP (lokale Entwicklung) bleibt es `tt_session`. **Betreiberhinweis: einmaliger Sitzungsverlust beim Update, alle Nutzer melden sich neu an.** Abmelden und Kontolöschung löschen beide Namen. Clients dürfen den Namen nicht fest verdrahten (Apple-App muss angepasst werden, PWA nicht). Details `docs/handoffs/SEC-15B.md`.
