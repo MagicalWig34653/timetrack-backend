@@ -7,10 +7,11 @@ import Vapor
 struct GroupPublicMiddleware: AsyncMiddleware {
     func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         let response = try await next.respond(to: request)
-        if request.url.path.hasPrefix("/api/v1/public/") || request.url.path == "/g" || request.url.path.hasPrefix("/g/") {
+        let path = request.normalizedRoutePath
+        if path.hasPrefix("/api/v1/public/") || path == "/g" || path.hasPrefix("/g/") {
             response.headers.replaceOrAdd(name: "X-Robots-Tag", value: "noindex, nofollow")
             response.headers.replaceOrAdd(name: "Referrer-Policy", value: "no-referrer")
-            if request.url.path.hasPrefix("/api/") { response.headers.replaceOrAdd(name: .cacheControl, value: "no-store") }
+            if path.hasPrefix("/api/") { response.headers.replaceOrAdd(name: .cacheControl, value: "no-store") }
         }
         return response
     }

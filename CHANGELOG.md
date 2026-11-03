@@ -5,6 +5,8 @@ Die Einzelpakete (A1, B2, …) stehen in `docs/ARBEITSPLAN.md`.
 
 ## Unveröffentlicht
 
+- **Sicherheit SEC-PATH:** Doppelte Schrägstriche können die IP-Ratenbegrenzung der Auth-Endpunkte nicht mehr umgehen. Pfadabhängige Gruppen-/Cacheheader, PWA-Reservierungen und Public-Modulausnahme folgen ebenfalls der Router-Normalisierung. Recovery- und Gerätezugriff bleiben strikt eingeschränkt; Vertrag unverändert.
+
 - **UPDATE-DRIFT:** update.sh 2.3.0 prüft effektive Backend-Konfiguration auch bei gleichem Image; Status meldet Drift, Updates verlangen dafür `--apply-stack-drift`. Fehlende Secrets werden vor Änderungen mit Hinweis auf `create-secrets.sh --add-only` gemeldet. Neue Voraussetzung: `jq`.
 
 - **SCOPE-F10 (Vertrag 0.44.0):** OAuth-Zustimmung ohne angefragten Scope belegt nur lesende Scopes vor (neue Felder `requestedScopes`, `availableScopes`); Blockwoche mit mehr als fünf Schultagen gutschreibt nur die ersten fünf (höchstens 40 h).

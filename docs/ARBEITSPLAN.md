@@ -380,3 +380,7 @@ Codex (Modell `gpt-6-sol`, Aufwand medium, nur lesend, Codex-Auftrag Q1) hat Anm
 
 Review, nicht als Umsetzung gezählt (0 Punkte). Auf ausdrückliche Nutzeranweisung vom 01.11.2026 wurde ein adversariales Backend-Review mit Codex (Modell laut Ausgabe GPT-6.1-sol, Reasoning-Effort nicht verifiziert) durchgeführt; das ist eine Ausnahme von der Entscheidung vom 19.10.2026 „kein Codex mehr“. Ergebnis: 11 Befunde (2 high, 8 medium, 1 low), nur statisch, ohne Laufzeitversuche. Der Abgleich gegen `main` (Vertrag 0.41.0) steht in `docs/reviews/2026-11-01-codex-review-gpt-6.1-sol.md`: 10 Befunde neu und offen (davon 2 als geringes Restrisiko bereits angewendeter Migrationen), F04 durch SEC-A weitgehend überholt, kein falsch positiver Befund. Fix-Paket CX-A (02.11.2026, Claude-Agent, Vertrag 0.41.1) behebt F01, F02, F03 (`docs/handoffs/CX-A.md`); übrige Befunde offen.
 
+
+## SEC-PATH (03.11.2026)
+
+Codex, Branch `sec-path-normalize`, isolierter Clone: Pfadnormalisierung für Middleware analog Vapor-Router, kein Vertrag-/Migrationswechsel. Dateibesitz: Pfad-Middleware, Regressionstests, Status/Changelog/Handoff. Abnahme: IP-429 bei Doppelslash, Recovery-/Device-Sperren unverändert, Audit der genannten Prüfungen. Prüfstand und nächster Schritt: [SEC-PATH](handoffs/SEC-PATH.md).

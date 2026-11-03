@@ -126,10 +126,13 @@ struct SessionMiddleware: AsyncMiddleware {
 struct AuthRateLimitMiddleware: AsyncMiddleware {
     let service: AuthService
     func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
-        let path = request.url.path
-        let limited = path.hasPrefix("/api/v1/auth/register/") || path.hasPrefix("/api/v1/auth/login/") ||
-            path.hasPrefix("/api/v1/auth/recovery/") || path.hasPrefix("/api/v1/me/recovery/email") ||
-            path.hasPrefix("/api/v1/me/profile/email")
+        let path = request.normalizedRoutePath
+        let parts = request.routePathComponents
+        let limited = (["register", "login", "recovery"].contains { action in
+            parts.starts(with: ["api", "v1", "auth", Substring(action)]) && parts.count > 4
+        }) || (["recovery", "profile"].contains { section in
+            parts.starts(with: ["api", "v1", "me", Substring(section)]) && parts.dropFirst(4).first?.hasPrefix("email") == true
+        })
         if limited && [.POST, .PUT].contains(request.method) {
             // Forwarded headers count only from configured trusted proxies (ADR-0018). Charge before decoding request bodies.
             do { try await service.limited(ip: request.clientRateLimitKey, on: request.db) }
