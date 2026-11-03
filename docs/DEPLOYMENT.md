@@ -237,7 +237,7 @@ Bewertung der Alternativen: `docs/handoffs/ENV-STACK.md`.
 2. Secret anlegen: `./create-secrets.sh --apns-private-key-file /pfad/AuthKey_XXXX.p8` (bei einem bestehenden Stack **mit `--add-only`**, sonst bricht das Skript ab, weil `tt_db_password`, `tt_storage_secret_key` und `tt_vapid_private_key` schon existieren und nie überschrieben werden: `./create-secrets.sh --add-only --apns-private-key-file …`; erst `--dry-run`). Existiert `tt_apns_private_key` schon als Platzhalter, verweigert das Skript das Überschreiben und nennt `--name-suffix _2` (siehe oben). Das Skript prüft mit openssl, ohne etwas auszugeben, dass die Datei ein unverschlüsselter EC-P-256-Schlüssel im PEM-Format ist, übergibt den Inhalt per stdin und überschreibt nie ein vorhandenes Secret. Danach die Datei aus dem Arbeitsverzeichnis entfernen (Kopie im Passwortmanager).
 3. `stack.yaml` bleibt unverändert (das Secret und die Variablen sind schon durchgereicht).
 4. In `.env` `APNS_KEY_ID`, `APNS_TEAM_ID` (je 10 Zeichen) und `APNS_BUNDLE_IDS` (kommagetrennt) setzen; alle vier Werte inklusive Schlüssel sind nötig. Unvollständig: im automatischen Modus (`APNS_ENABLED` leer) bleibt APNs aus und das Log warnt mit den fehlenden Variablen; mit `APNS_ENABLED=true` startet das Backend nicht und nennt sie.
-5. Stack neu ausrollen (Variablen: Abschnitt 6). **Wichtig:** `deploy/swarm/update.sh` genügt dafür nicht, es tauscht nur das Image aus; Änderungen an `stack.yaml` und `.env` kommen nur mit `docker stack deploy` an. Prüfen: der Administrator sieht unter „Push (Apple)“ (`/admin/apns`) die Einstellungen und kann die Verbindung zu Apple prüfen; außerdem `GET /api/v1/push/config` meldet `apnsAvailable:true` (angemeldete Sitzung). Eine echte Zustellung ist erst mit den Apple-Apps und einem Testgerät prüfbar.
+5. Stack neu ausrollen (Variablen: Abschnitt 6). **Wichtig:** `deploy/swarm/update.sh` ab 2.3.0 erkennt Konfigurationsdrift und stoppt. Nach Prüfung mit `--apply-stack-drift` erneut starten, damit die Stack-Konfiguration übernommen wird; dafür ist ein Stack-Deploy nötig. Prüfen: der Administrator sieht unter „Push (Apple)“ (`/admin/apns`) die Einstellungen und kann die Verbindung zu Apple prüfen; außerdem `GET /api/v1/push/config` meldet `apnsAvailable:true` (angemeldete Sitzung). Eine echte Zustellung ist erst mit den Apple-Apps und einem Testgerät prüfbar.
 
 **VAPID-Schlüssel**: Das Backend bringt keinen Befehl dafür mit (die CLI kennt nur `serve`, `migrate`, `bootstrap-admin`, `maintenance`).
 Das Skript erzeugt ihn mit dem dokumentierten openssl-Verfahren: `openssl ecparam -name prime256v1 -genkey -noout | openssl ec -outform DER | tail -c +8 | head -c 32 | base64 | tr '+/' '-_' | tr -d '=\n'`
@@ -516,3 +516,18 @@ Ausgelagert auf die Seite **[Probleme und Lösungen](installation/probleme.md)**
 14. [ ] Update-Ablauf einmal trocken durchgegangen (Abschnitt 13), Rollback-Befehl notiert.
 15. [ ] Überwachung/Alarm für `https://timetrack.example.org/` eingerichtet.
 16. [ ] Offene Punkte aus Abschnitt 17 gelesen und akzeptiert.
+
+### Konfigurationsdrift beim Update (ab update.sh 2.3.0)
+
+Voraussetzung zusätzlich: `jq`. Das Skript rendert `stack.yaml`, die exportierte `.env` und alle `--stack-override`-Dateien mit `docker stack config`. Es vergleicht die Backend-Umgebungsvariablen einschließlich Werten, Secret-Namen samt Dateiziel/Rechten, Replikazahl und Netzwerkzuordnungen. Es zeigt ausschließlich Namen, keine Werte, auch bei normalen Variablen. Die gerenderte Konfiguration bleibt in einem privaten temporären Verzeichnis und wird beim Beenden entfernt. Fehlerdetails von Rendering und Deploy werden unterdrückt, da sie Zugangsdaten enthalten können.
+
+```bash
+deploy/swarm/update.sh --status
+deploy/swarm/create-secrets.sh --add-only  # falls externe Secrets fehlen
+# Stack und sämtliche Overlays vorher prüfen:
+deploy/swarm/update.sh --apply-stack-drift --tag sha-6c074f7
+```
+
+Ohne `--apply-stack-drift` bricht das Update bei Drift vor Änderungen ab, auch mit `--yes` oder `--force`. Der explizite Abgleich nutzt denselben Stack-Deploy wie die Wiederherstellung des Migrationsdienstes, erhält das laufende Backend-Image inklusive Digest und die laufende Replikazahl und wartet mit der Rollout-Zeitgrenze. Danach folgt der normale Migrations-/Image-Ablauf; bei `--skip-migrate` wird nur die Migration übersprungen. Stack-Deploy betrifft auch andere Dienste sowie Ports, Mounts und sonstige Overlay-Einstellungen. Vorher sichern. Die `.env.bak` sichert das Image, kein vollständiger Konfigurations-Rollback.
+
+Eine abweichende Replikazahl wird bewusst nur gemeldet und bleibt erhalten: `.env`/Overlay nachziehen oder separat skalieren, sonst meldet `--status` weiter Drift. Netzwerk-Aliasse, Treibereinstellungen, Configs, Ports und Mounts gehören nicht zum Driftvergleich. Secret-Inhalte werden weder gelesen noch verglichen; Secrets sind unveränderlich, Rotation erfolgt über neue Namen. Benutzerdefinierte Secret-Namen müssen existieren; `--add-only` erstellt die Standardplatzhalter, keine beliebigen Namen. Nicht replizierte Backend-Dienste und unlesbare Konfigurationen führen zum Abbruch. Echt-Swarm-Prüfung bleibt offen.

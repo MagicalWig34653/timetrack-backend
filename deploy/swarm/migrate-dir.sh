@@ -81,14 +81,14 @@ propose_env() {
   while IFS= read -r line; do
     key="${line%%$'\t'*}"; raw="${line#*$'\t'}"
     case "$key" in *_FILE) continue ;; esac
-    printf '%s\n' "$newvars" | grep -qx "$key" || continue
-    printf '%s\n' "$oldvars" | grep -qx "$key" && continue
+    printf '%s\n' "$newvars" | grep -x "$key" >/dev/null || continue
+    printf '%s\n' "$oldvars" | grep -x "$key" >/dev/null && continue
     case "$raw" in *'${'*) continue ;; esac
     if is_secret_key "$key"; then printf '# %s=<geheim: als Docker-Secret mit create-secrets.sh anlegen, nicht in die .env>\n' "$key"; continue; fi
     val="$(printf '%s' "$raw" | sed -e 's/[[:space:]]\{1,\}#.*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/")"
     [ -n "$val" ] || continue
     case "$val" in *[[:space:]]*|*[\;\&\|\<\>\(\)\$\`]*) printf '%s="%s"\n' "$key" "$val" ;; *) printf '%s=%s\n' "$key" "$val" ;; esac
-  done < <(grep -v '^[[:space:]]*#' "$OLD_STACK" | sed -n 's/^[[:space:]]\{1,\}\([A-Z][A-Z0-9_]*\):[[:space:]]\{1,\}\(.*[^[:space:]].*\)$/\1\t\2/p')
+  done < <(grep -v '^[[:space:]]*#' "$OLD_STACK" | sed -n 's/^[[:space:]]\{1,\}\([A-Z][A-Z0-9_]*\):[[:space:]]\{1,\}\(.*[^[:space:]].*\)$/\1	\2/p')
 }
 
 section ".env-Vorschlag (Zeilen, die in der alten .env fehlen; ohne Geheimnisse, bitte prüfen und selbst übernehmen)"
@@ -101,7 +101,7 @@ section "Pflichtvariablen der neuen Stack-Datei, die in der alten .env fehlen"
 missing="$(comm -23 <(REQUIRED=1 var_refs "$NEW_STACK") <(env_vars "$OLD_ENV"))"
 list_or_none "$missing"
 [ -z "$missing" ] || PROBLEMS=1
-if ! env_vars "$OLD_ENV" | grep -qx 'TIMETRACK_IMAGE'; then echo "  PROBLEM: TIMETRACK_IMAGE fehlt in der alten .env."; PROBLEMS=1; fi
+if ! env_vars "$OLD_ENV" | grep -x 'TIMETRACK_IMAGE' >/dev/null; then echo "  PROBLEM: TIMETRACK_IMAGE fehlt in der alten .env."; PROBLEMS=1; fi
 
 section "Variablen der alten .env, die die neue Stack-Datei nicht liest"
 unused="$(comm -23 <(env_vars "$OLD_ENV") <(var_refs "$NEW_STACK"))"
