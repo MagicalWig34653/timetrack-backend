@@ -22,16 +22,11 @@ nosvc() { echo "Error response from daemon: No such service: $1" >&2; exit 1; }
 [ "$1" = info ] && { [ -f "$ST/info_fail" ] && { echo "Cannot connect to the Docker daemon" >&2; exit 1; }; echo "active true"; exit 0; }
 if [ "$1 $2" = "stack config" ]; then
   [ -f "$ST/config_fail" ] && { echo 'sensitive-render-error' >&2; exit 1; }
-  python3 - "$ST/rendered" "$@" <<'PYTHON'
-import os, sys, yaml
-config = yaml.safe_load(open(sys.argv[1]))
-config['services']['backend']['environment']['SMTP_HOST'] = os.environ.get('SMTP_HOST', 'smtp.example.org')
-files = [sys.argv[i + 1] for i, v in enumerate(sys.argv) if v == '-c']
-for path in files[1:]:
-    overlay = yaml.safe_load(open(path)) or {}
-    config['services']['backend']['environment'].update(overlay.get('services', {}).get('backend', {}).get('environment', {}))
-yaml.safe_dump(config, sys.stdout)
-PYTHON
+  if [ -f "$ST/real_rendered" ]; then cat "$ST/real_rendered"; exit 0; fi
+  # Only emulate the interpolation and overlay fields exercised below; the real CLI case checks YAML normalization.
+  awk -v host="${SMTP_HOST:-smtp.example.org}" '
+    /^      SMTP_HOST:/ {$0="      SMTP_HOST: " host} {print}
+  ' "$ST/rendered" | sed "s/APNS_ENABLED: \"true\"/APNS_ENABLED: \"$([ -f override.yaml ] && echo false || echo true)\"/"
   exit 0
 fi
 if [ "$1 $2" = "secret ls" ]; then
@@ -40,7 +35,7 @@ if [ "$1 $2" = "secret ls" ]; then
 fi
 if [ "$1 $2" = "network ls" ]; then echo 'network123 timetrack_default'; exit 0; fi
 if [ "$1 $2" = "service inspect" ]; then
-  if [ "$#" = 3 ]; then cat "$ST/service"; exit 0; fi
+  if [[ "$args" == *'{{json .Spec}}'* ]]; then jq '.[0].Spec' "$ST/service"; exit 0; fi
   name="${*: -1}"
   if [ "$name" = timetrack_migrate ]; then exists || nosvc "$name"; echo abc123; exit 0; fi
   case "$args" in
@@ -87,13 +82,7 @@ if [ "$1 $2" = "service logs" ]; then echo "No new migrations."; exit 0; fi
 if [ "$1 $2" = "stack deploy" ]; then
   echo "STACKDEPLOY TIMETRACK_IMAGE=${TIMETRACK_IMAGE:-} BACKEND_REPLICAS=${BACKEND_REPLICAS:-}" >> "$ST/log"
   [ -f "$ST/stack_fail" ] && { echo "failed to create service timetrack_migrate" >&2; exit 1; }
-  python3 - "${@: -2:1}" <<'PYTHON'
-import json, sys
-with open(sys.argv[1]) as source:
-    backend = json.load(source)['services']['backend']
-assert backend['image'].endswith('@sha256:0123456789abcdef')
-assert backend['deploy']['replicas'] == 2
-PYTHON
+  jq -e '.services.backend | (.image | endswith("@sha256:0123456789abcdef")) and (.deploy.replicas == 2)' "${@: -2:1}" >/dev/null
   [ "$?" = 0 ] || exit 1
   cp "$ST/reconciled" "$ST/service"
   echo 1 > "$ST/migrate_exists"; echo "t1|node1|Complete 2 seconds ago|" > "$ST/tasks"
@@ -318,6 +307,15 @@ touch "$ST/config_fail"
 run_case --yes --tag "$NEW_TAG"
 check "render failure: fail closed without diagnostic values" "$([ "$RC" = 1 ] && has 'docker stack config' && ! has 'sensitive-render-error' && ! logged 'service update' && echo 0 || echo 1)" "$OUT"
 
+# jq must fail clearly before any configuration or service mutation.
+new_case missingjq 1
+mkdir -p "$D/nojq"
+for tool in bash env dirname date sed awk cat mkdir rm mktemp tr curl grep tail head sleep cp mv chmod wc cut; do
+  ln -s "$(command -v "$tool")" "$D/nojq/$tool"
+done
+OUT="$(cd "$D/app" && PATH="$ROOT/bin:$D/nojq" ST="$ST" TMPDIR="$D/tmp" UPDATE_SELF_CHECK=0 bash ./update.sh --yes --tag "$NEW_TAG" 2>&1)"; RC=$?
+check "missing jq: German error before mutation" "$([ "$RC" = 1 ] && has 'Die Driftprüfung benötigt jq' && ! logged 'stack deploy' && ! logged 'service update' && [ ! -f "$D/app/.env.bak" ] && echo 0 || echo 1)" "$OUT"
+
 # 17. migrate-dir.sh: read-only comparison of an old, edited stack file with the new one.
 new_case migrate 1
 cp "$SRC/migrate-dir.sh" "$D/app/migrate-dir.sh"
@@ -397,6 +395,57 @@ if command -v docker >/dev/null 2>&1 && docker stack config --help >/dev/null 2>
   check "stack.yaml: missing required variables are a clear error" "$([ "$RC" != 0 ] && has 'required variable' && echo 0 || echo 1)" "$OUT"
   OUT="$( (set -a; . "$SRC/.env.example"; set +a; SMTP_HOST=smtp.example.test SMTP_PORT=465 SMTP_TLS=implicit SECRET_APNS_KEY_NAME=tt_apns_v2 docker stack config -c "$SRC/stack.yaml" -c "$SRC/override.example.yaml") 2>&1)"; RC=$?
   check "stack.yaml: filled .env, SMTP values and renamed secret reach the rendering, override example merges" "$([ "$RC" = 0 ] && has 'SMTP_PORT: "465"' && has 'name: tt_apns_v2' && echo 0 || echo 1)" "$OUT"
+  # Feed genuine normalized YAML to the stub Swarm, including quotes, multiline values, null/empty,
+  # custom secret file metadata, external/internal network names and default replicas.
+  new_case normalized 1
+  cat > "$D/input.yaml" <<'YAML'
+version: '3.8'
+services:
+  backend:
+    image: example/backend:test
+    deploy:
+      placement:
+        constraints:
+          - node.platform.os == linux
+    environment:
+      EMPTY: ""
+      UNSET:
+      QUOTED: 'a "quote", a backslash \ and colon: yes'
+      SINGLE: "it's quoted"
+      CONTROL: "\x01\a\v\e\N\L\P"
+      TRAILING: "first\nsecond\n"
+      MULTILINE: |-
+        first
+        second
+    secrets:
+      - source: oidc
+        target: custom
+        uid: '12'
+        gid: '34'
+        mode: 0400
+    networks:
+      - external
+      - internal
+secrets:
+  oidc:
+    external: true
+    name: tt_oidc_client_secret
+networks:
+  external:
+    external: true
+    name: timetrack_default
+  internal: {}
+YAML
+  docker stack config -c "$D/input.yaml" > "$ST/real_rendered"
+  check "normalized YAML: real docker stack config succeeds" "$?"
+  jq -n '[{Spec:{TaskTemplate:{ContainerSpec:{Env:["EMPTY=", "QUOTED=a \"quote\", a backslash \\ and colon: yes", "SINGLE=it\u0027s quoted", "CONTROL=\u0001\u0007\u000b\u001b\u0085\u2028\u2029", "TRAILING=first\nsecond\n", "MULTILINE=first\nsecond"],Secrets:[{SecretName:"tt_oidc_client_secret",File:{Name:"custom",UID:"12",GID:"34",Mode:256}}]},Networks:[{Target:"timetrack_internal"},{Target:"network123"}]},Mode:{Replicated:{Replicas:1}}}}]' > "$ST/service"
+  run_case --status
+  check "normalized YAML: quoted/multiline/null/empty env, secret metadata and network names match" "$([ "$RC" = 0 ] && has 'Keine Konfigurationsdrift' && echo 0 || echo 1)" "$OUT"
+  jq '.[0].Spec.TaskTemplate.ContainerSpec.Secrets[0].File.Mode=292 | .[0].Spec.TaskTemplate.ContainerSpec.Env += ["UNSET="]' "$ST/service" > "$ST/changed"
+  mv "$ST/changed" "$ST/service"
+  run_case --status
+  check "normalized YAML: empty differs from unset and secret mode drift is detected" "$([ "$RC" = 1 ] && has 'UNSET' && has 'Secret-Zuordnungen' && echo 0 || echo 1)" "$OUT"
+
 fi
 
 echo

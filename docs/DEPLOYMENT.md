@@ -519,7 +519,7 @@ Ausgelagert auf die Seite **[Probleme und Lösungen](installation/probleme.md)**
 
 ### Konfigurationsdrift beim Update (ab update.sh 2.3.0)
 
-Voraussetzung zusätzlich: Python 3 mit PyYAML (Linux-Paket `python3-yaml`). Das Skript rendert `stack.yaml`, die exportierte `.env` und alle `--stack-override`-Dateien mit `docker stack config`. Es vergleicht die Backend-Umgebungsvariablen einschließlich Werten, Secret-Namen samt Dateiziel/Rechten, Replikazahl und Netzwerkzuordnungen. Es zeigt ausschließlich Namen, keine Werte, auch bei normalen Variablen. Die gerenderte Konfiguration bleibt in einem privaten temporären Verzeichnis und wird beim Beenden entfernt. Fehlerdetails von Rendering und Deploy werden unterdrückt, da sie Zugangsdaten enthalten können.
+Voraussetzung zusätzlich: `jq`. Das Skript rendert `stack.yaml`, die exportierte `.env` und alle `--stack-override`-Dateien mit `docker stack config`. Es vergleicht die Backend-Umgebungsvariablen einschließlich Werten, Secret-Namen samt Dateiziel/Rechten, Replikazahl und Netzwerkzuordnungen. Es zeigt ausschließlich Namen, keine Werte, auch bei normalen Variablen. Die gerenderte Konfiguration bleibt in einem privaten temporären Verzeichnis und wird beim Beenden entfernt. Fehlerdetails von Rendering und Deploy werden unterdrückt, da sie Zugangsdaten enthalten können.
 
 ```bash
 deploy/swarm/update.sh --status

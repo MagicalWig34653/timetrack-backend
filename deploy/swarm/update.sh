@@ -384,8 +384,7 @@ write_env_image() {
 # Render with exactly the same interpolation context as deployment. Never echo rendered data or Docker diagnostics:
 # both may contain credentials, including variables with innocuous names. Private files are removed by on_exit.
 check_stack_drift() {
-  need python3
-  python3 -c 'import yaml' 2>/dev/null || die "Die Driftprüfung benötigt Python 3 mit PyYAML (Paket python3-yaml)."
+  command -v jq >/dev/null 2>&1 || die "Die Driftprüfung benötigt jq. Bitte jq auf dem Swarm-Manager installieren."
   [ -n "$STACK_FILE" ] && [ -f "$STACK_FILE" ] || die "Stack-Datei für die Driftprüfung nicht gefunden; --stack-file angeben."
   [ -z "$DRIFT_DIR" ] || rm -rf "$DRIFT_DIR"
   DRIFT_DIR="$(umask 077; mktemp -d)"
@@ -393,72 +392,117 @@ check_stack_drift() {
   ( set +u; set -a; . "$ENV_FILE"; set +a
     dk stack config -c "$STACK_FILE" ${STACK_C_ARGS[@]+"${STACK_C_ARGS[@]}"} ) >"$DRIFT_DIR/stack" 2>/dev/null \
     || die "docker stack config ist fehlgeschlagen (Details zum Schutz von Zugangsdaten unterdrückt). Pflichtvariablen und Overlays prüfen."
-  dk service inspect "$BACKEND" >"$DRIFT_DIR/service" 2>/dev/null || die "Backend-Konfiguration nicht lesbar."
+  dk service inspect --format '{{json .Spec}}' "$BACKEND" >"$DRIFT_DIR/service" 2>/dev/null || die "Backend-Konfiguration nicht lesbar."
   dk network ls --no-trunc --format '{{.ID}} {{.Name}}' >"$DRIFT_DIR/networks" 2>/dev/null || die "Netzwerkliste nicht lesbar."
   dk secret ls --format '{{.Name}}' >"$DRIFT_DIR/secrets" 2>/dev/null || die "Secret-Liste nicht lesbar."
   local rc=0
-  python3 - "$DRIFT_DIR" "$STACK" <<'PYTHON' || rc=$?
-import json
-import re
-import sys
-from pathlib import Path
-import yaml
-
-# Only allow identifier-like names in diagnostics; no values or parser exception details ever escape.
-def names(items):
-    return ", ".join(x if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]*", x) else "<Name verborgen>" for x in sorted(items))
-
-try:
-    root = Path(sys.argv[1])
-    stack = yaml.safe_load((root / "stack").read_text())
-    spec = json.loads((root / "service").read_text())[0]["Spec"]
-    backend = stack["services"]["backend"]
-    container = spec["TaskTemplate"]["ContainerSpec"]
-    desired = backend.get("environment", {}) or {}
-    if isinstance(desired, list):
-        desired = dict(v.split("=", 1) if "=" in v else (v, None) for v in desired)
-    # Docker omits null (unset) entries, but preserves empty strings.
-    desired = {k: str(v) for k, v in desired.items() if v is not None}
-    actual = dict(v.split("=", 1) if "=" in v else (v, "") for v in container.get("Env", []))
-    changed = {k for k in desired.keys() | actual.keys() if desired.get(k) != actual.get(k)}
-    drift = bool(changed)
-    if changed:
-        print("Konfigurationsdrift: Umgebungsvariablen weichen ab (nur Namen): " + names(changed))
-    definitions = stack.get("secrets", {}) or {}
-    def secret_name(key):
-        definition = definitions[key]
-        external = definition.get("external")
-        return definition.get("name") or (external.get("name") if isinstance(external, dict) else None) or (key if external else sys.argv[2] + "_" + key)
-    expected_secrets = set()
-    for item in backend.get("secrets", []) or []:
-        item = {"source": item} if isinstance(item, str) else item
-        key = item["source"]
-        expected_secrets.add((secret_name(key), item.get("target", key), str(item.get("uid", "0")), str(item.get("gid", "0")), int(item.get("mode", 292))))
-    actual_secrets = {(v["SecretName"], v["File"]["Name"], v["File"]["UID"], v["File"]["GID"], v["File"]["Mode"]) for v in container.get("Secrets", []) or []}
-    if expected_secrets != actual_secrets:
-        drift = True
-        print("Konfigurationsdrift: Secret-Zuordnungen weichen ab: " + names({v[0] for v in expected_secrets ^ actual_secrets}))
-    if int(backend.get("deploy", {}).get("replicas", 1)) != spec["Mode"]["Replicated"]["Replicas"]:
-        drift = True
-        print("Konfigurationsdrift: Replikazahl weicht ab; beim Abgleich bleibt die laufende Anzahl erhalten.")
-    network_ids = dict(line.split(None, 1) for line in (root / "networks").read_text().splitlines())
-    expected_networks = set()
-    for key in backend.get("networks", {"default": {}}):
-        definition = (stack.get("networks", {}) or {}).get(key, {}) or {}
-        expected_networks.add(definition.get("name") or (key if definition.get("external") else sys.argv[2] + "_" + key))
-    actual_networks = {network_ids.get(v["Target"], v["Target"]) for v in spec["TaskTemplate"].get("Networks", [])}
-    if expected_networks != actual_networks:
-        drift = True
-        print("Konfigurationsdrift: Netzwerkzuordnungen weichen ab: " + names(expected_networks ^ actual_networks))
-    available = set((root / "secrets").read_text().splitlines())
-    missing = {secret_name(k) for k, v in definitions.items() if v.get("external") and secret_name(k) not in available}
-    if missing:
-        print("Fehlende Swarm-Secrets: " + names(missing) + ". Vor dem Deploy create-secrets.sh --add-only ausführen; bei eigenen Secret-Namen die Zuordnung prüfen.")
-    sys.exit(11 if missing else 10 if drift else 0)
-except Exception:
-    print("Fehler: Konfigurationsdrift nicht zuverlässig prüfbar (Details zum Schutz von Zugangsdaten unterdrückt).", file=sys.stderr)
-    sys.exit(12)
-PYTHON
+  # Docker emits normalized YAML, not JSON. Read only the compared sections, using its two-space indentation.
+  # Scalar text stays private; jq decodes quoted strings after awk has recorded paths and sequence indices.
+  if ! awk '
+    function quote(s) {
+      gsub(/\\/, "\\\\", s); gsub(/"/, "\\\"", s); gsub(/\t/, "\\t", s); gsub(/\r/, "\\r", s)
+      gsub(/\n/, "\\n", s); return "\"" s "\""
+    }
+    function emit(value, literal, i, path) {
+      path=""
+      for (i=0; i<=depth; i++) path=path (i ? "," : "") (numeric[i] ? keys[i] : quote(keys[i]))
+      print "{\"path\":[" path "],\"value\":" quote(value) ",\"literal\":" (literal ? "true" : "false") "}"
+    }
+    function flush() {
+      if (block) {
+        if (chomp != "-") text=text "\n"
+        emit(text, 1); block=0
+      }
+    }
+    {
+      match($0, /[^ ]/); indent=RSTART-1
+      if (block && (RSTART==0 || indent>blockindent)) {
+        line=substr($0, blockindent+3)
+        text=text (lines++ ? "\n" : "") line; next
+      }
+      flush()
+      if (RSTART==0) next
+      line=substr($0, indent+1)
+      if (indent==0) root=line
+      if (indent==2 && root=="services:") service=line
+      if (indent==4 && root=="services:" && service=="backend:") section=line
+      wanted=((root=="secrets:" || root=="networks:") && (indent<=2 || (indent==4 && line ~ /^(name|external):/)))
+      if (root=="services:" && service=="backend:") {
+        wanted=(section=="environment:" || section=="secrets:" ||
+          (section=="networks:" && indent<=6) || (section=="deploy:" && indent==6 && line ~ /^replicas:/))
+      }
+      # Keep ancestors so the same paths work regardless of section ordering.
+      depth=int(indent/2); numeric[depth]=0
+      if (line ~ /^- /) {
+        numeric[depth]=1; keys[depth]=count[indent]++; depth++; numeric[depth]=0
+        line=substr(line,3)
+      } else count[indent+2]=0
+      pos=index(line, ":")
+      if (!pos) { if (wanted) exit 1; next }
+      key=substr(line,1,pos-1); value=substr(line,pos+1); sub(/^ /,"",value)
+      keys[depth]=key
+      if (root=="services:" && indent==2 && key=="backend") { emit("{}",0); next }
+      if (!wanted || value=="") next
+      if (value ~ /^[|][+-]?$/) {
+        block=1; blockindent=indent; chomp=substr(value,2); text=""; lines=0; next
+      }
+      emit(value,0)
+    }
+    END { flush() }
+  ' "$DRIFT_DIR/stack" >"$DRIFT_DIR/records" 2>/dev/null; then
+    rc=12
+  else
+    jq -n --arg stack "$STACK" --slurpfile records "$DRIFT_DIR/records" \
+      --slurpfile service "$DRIFT_DIR/service" --rawfile networks "$DRIFT_DIR/networks" --rawfile available "$DRIFT_DIR/secrets" '
+      def scalar:
+        if startswith("\"") then
+          [scan("\\\\(?:x[0-9A-Fa-f]{2}|.)|[^\\\\]+") |
+            if startswith("\\x") then "\\u00"+.[2:]
+            elif . == "\\a" then "\\u0007" elif . == "\\v" then "\\u000b"
+            elif . == "\\e" then "\\u001b" elif . == "\\0" then "\\u0000"
+            elif . == "\\N" then "\\u0085" elif . == "\\_" then "\\u00a0"
+            elif . == "\\L" then "\\u2028" elif . == "\\P" then "\\u2029"
+            else . end] | join("") | fromjson
+        elif startswith("\u0027") then .[1:-1] | gsub("\u0027\u0027"; "\u0027")
+        elif . == "null" or . == "~" then null
+        elif . == "{}" then {} elif . == "[]" then []
+        else . end;
+      def names: sort | map(if test("^[A-Za-z_][A-Za-z0-9_.-]*$") then . else "<Name verborgen>" end) | join(", ");
+      def difference($a; $b): (($a - $b) + ($b - $a)) | unique;
+      (reduce $records[] as $r ({}; setpath(($r.path | map(if type == "string" then scalar else . end)); if $r.literal then $r.value else ($r.value | scalar) end))) as $config |
+      $config.services.backend as $backend | $service[0] as $spec |
+      if ($backend | type) != "object" or ($spec.Mode.Replicated.Replicas | type) != "number" then error("invalid configuration") else . end |
+      $spec.TaskTemplate.ContainerSpec as $container |
+      (($backend.environment // {}) | with_entries(select(.value != null))) as $desired |
+      (reduce ($container.Env // [])[] as $v ({}; ($v | index("=")) as $i |
+        if $i == null then .[$v]="" else .[$v[0:$i]]=$v[$i+1:] end)) as $actual |
+      [($desired + $actual | keys[]) as $k | select($desired[$k] != $actual[$k]) | $k] as $env |
+      ($config.secrets // {}) as $definitions |
+      def secret_name($key): $definitions[$key] as $d |
+        $d.name // (if ($d.external | type)=="object" then $d.external.name else null end) //
+        (if $d.external then $key else $stack+"_"+$key end);
+      [($backend.secrets // [])[] | . as $s | [secret_name($s.source), ($s.target // $s.source), ($s.uid // "0"), ($s.gid // "0"), (($s.mode // "292") | tonumber)]] | unique as $expectedSecrets |
+      [($container.Secrets // [])[] | [.SecretName,.File.Name,.File.UID,.File.GID,.File.Mode]] | unique as $actualSecrets |
+      difference($expectedSecrets; $actualSecrets) as $secrets |
+      ((($backend.deploy.replicas // "1") | tonumber) != $spec.Mode.Replicated.Replicas) as $replicas |
+      (reduce ($networks | split("\n")[] | select(length>0) | split(" ")) as $n ({}; .[$n[0]]=$n[1])) as $ids |
+      [($backend.networks // {default:{}} | keys[]) as $key | ($config.networks[$key] // {}) as $d |
+        $d.name // (if $d.external then $key else $stack+"_"+$key end)] | unique as $expectedNetworks |
+      [($spec.TaskTemplate.Networks // [])[] | $ids[.Target] // .Target] | unique as $actualNetworks |
+      difference($expectedNetworks; $actualNetworks) as $nets |
+      ([$definitions | to_entries[] | select(.value.external) | secret_name(.key)] - ($available | split("\n"))) as $missing |
+      (if ($env|length)>0 then "Konfigurationsdrift: Umgebungsvariablen weichen ab (nur Namen): " + ($env|names) else empty end),
+      (if ($secrets|length)>0 then "Konfigurationsdrift: Secret-Zuordnungen weichen ab: " + ([$secrets[][0]]|unique|names) else empty end),
+      (if $replicas then "Konfigurationsdrift: Replikazahl weicht ab; beim Abgleich bleibt die laufende Anzahl erhalten." else empty end),
+      (if ($nets|length)>0 then "Konfigurationsdrift: Netzwerkzuordnungen weichen ab: " + ($nets|names) else empty end),
+      (if ($missing|length)>0 then "Fehlende Swarm-Secrets: " + ($missing|names) + ". Vor dem Deploy create-secrets.sh --add-only ausführen; bei eigenen Secret-Namen die Zuordnung prüfen." else empty end),
+      (if ($missing|length)>0 then 11 elif ($env|length)>0 or ($secrets|length)>0 or $replicas or ($nets|length)>0 then 10 else 0 end)
+    ' >"$DRIFT_DIR/result" 2>/dev/null || rc=12
+    if [ "$rc" = 0 ]; then
+      rc="$(tail -n 1 "$DRIFT_DIR/result")"
+      sed '$d' "$DRIFT_DIR/result" | jq -r .
+    fi
+  fi
   DRIFT=0; MISSING_SECRETS=0
   case "$rc" in
     0) good "Keine Konfigurationsdrift im Backend erkannt." ;;
@@ -476,12 +520,8 @@ deploy_current_stack() {
   replicas="$(svc_field "$BACKEND" '{{.Spec.Mode.Replicated.Replicas}}')"
   [ -n "$run_image" ] && [[ "$replicas" =~ ^[0-9]+$ ]] || die "Laufendes Image oder Replikazahl nicht sicher lesbar."
   # A final overlay also overrides literal image/replica settings in operator overlays.
-  python3 - "$DRIFT_DIR/preserve.json" "$run_image" "$replicas" <<'PYTHON'
-import json
-import sys
-with open(sys.argv[1], "w") as output:
-    json.dump({"services": {"backend": {"image": sys.argv[2], "deploy": {"replicas": int(sys.argv[3])}}}}, output)
-PYTHON
+  jq -n --arg image "$run_image" --argjson replicas "$replicas" \
+    '{services:{backend:{image:$image,deploy:{replicas:$replicas}}}}' >"$DRIFT_DIR/preserve.json"
   say "Gleiche den Stack ab (alle Dienste; laufendes Backend-Image und Replikazahl bleiben erhalten)."
   # shellcheck disable=SC1090
   ( set +u; set -a; . "$ENV_FILE"; set +a; export TIMETRACK_IMAGE="$run_image" BACKEND_REPLICAS="$replicas"
