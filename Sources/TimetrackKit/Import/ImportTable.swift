@@ -26,11 +26,12 @@ enum ImportErrors {
     static let unsupported = APIError(.unsupportedMediaType, "unsupported_type")
     static let tooLarge = APIError(.payloadTooLarge, "file_too_large")
     static let tooManyRows = APIError(.badRequest, "too_many_rows")
+    static let tooManySheets = APIError(.badRequest, "too_many_sheets")
 }
 
 /// A validated upload. CSV is parsed eagerly (it is needed for validation anyway); XLSX sheets lazily.
 struct ImportWorkbook: Sendable {
-    enum Storage: Sendable { case csv([[ImportCell]]), xlsx(Data) }
+    enum Storage: Sendable { case csv([[ImportCell]]), xlsx(XLSXPackage) }
     let kind: String
     let sheetNames: [String]
     let storage: Storage
@@ -45,7 +46,7 @@ struct ImportWorkbook: Sendable {
         if ext == "xlsx" {
             guard isZip else { throw ImportErrors.unsupported }
             let package = try XLSXPackage(data: data)
-            return .init(kind: "xlsx", sheetNames: try package.sheetNames(), storage: .xlsx(data))
+            return .init(kind: "xlsx", sheetNames: try package.sheetNames(), storage: .xlsx(package))
         }
         guard ["csv", "txt", "tsv"].contains(ext), !isZip else { throw ImportErrors.unsupported }
         let rows = try CSVReader.read(data).map { $0.map { $0.isEmpty ? ImportCell.empty : .text($0) } }
@@ -55,7 +56,7 @@ struct ImportWorkbook: Sendable {
     func sheet(_ name: String) throws -> ImportSheet {
         switch storage {
         case .csv(let rows): return .init(name: ImportWorkbook.csvSheetName, rows: rows, date1904: false)
-        case .xlsx(let data): return try XLSXPackage(data: data).sheet(named: name)
+        case .xlsx(let package): return try package.sheet(named: name)
         }
     }
 }
@@ -143,10 +144,20 @@ private extension Array where Element == UInt8 {
 // MARK: XLSX
 
 /// Read-only access to an XLSX package with ZIP-bomb protection (entry count, uncompressed size, paths).
-final class XLSXPackage {
+/// The package is parsed once: workbook.xml, relationships, shared strings, styles and each worksheet are cached, so repeated
+/// `sheet(named:)` calls (for example format detection over all sheets) do not re-inflate or re-parse the archive.
+final class XLSXPackage: @unchecked Sendable {
+    private let lock = NSLock()
     private let archive: Archive
     private var entries: [String: Entry] = [:]
     private var budget = ImportLimits.maxUncompressedBytes
+    private var cachedWorkbook: Workbook?
+    private var cachedTargets: [String: String]?
+    private var cachedShared: [String]?
+    private var cachedStyles: [ImportCellStyle]?
+    private var cachedSheets: [String: ImportSheet] = [:]
+    /// Number of times each package part was inflated and parsed (diagnostics for tests).
+    private(set) var parseCounts: [String: Int] = [:]
 
     init(data: Data) throws {
         do { archive = try Archive(data: data, accessMode: .read, pathEncoding: nil) } catch { throw ImportErrors.unsupported }
@@ -205,38 +216,65 @@ final class XLSXPackage {
     private struct Workbook { var sheets: [(name: String, rid: String)] = []; var date1904 = false }
 
     private func workbook() throws -> Workbook {
+        if let cachedWorkbook { return cachedWorkbook }
         guard let data = try read("xl/workbook.xml") else { throw ImportErrors.unsupported }
         let delegate = WorkbookDelegate()
         try XMLRun.parse(data, delegate)
-        return .init(sheets: delegate.sheets, date1904: delegate.date1904)
+        guard delegate.sheets.count <= ImportLimits.maxSheets else { throw ImportErrors.tooManySheets }
+        parseCounts["xl/workbook.xml", default: 0] += 1
+        let book = Workbook(sheets: delegate.sheets, date1904: delegate.date1904)
+        cachedWorkbook = book
+        return book
     }
 
     func sheetNames() throws -> [String] {
+        lock.lock(); defer { lock.unlock() }
         let names = try workbook().sheets.map(\.name)
         guard !names.isEmpty else { throw ImportErrors.unsupported }
         return names
     }
 
     func sheet(named name: String) throws -> ImportSheet {
+        lock.lock(); defer { lock.unlock() }
+        budget = ImportLimits.maxUncompressedBytes
         let book = try workbook()
         guard let sheet = book.sheets.first(where: { $0.name == name }) else { throw APIError.invalid }
-        var targets: [String: String] = [:]
-        if let rels = try read("xl/_rels/workbook.xml.rels") {
-            let delegate = RelationshipDelegate(); try XMLRun.parse(rels, delegate); targets = delegate.targets
+        if cachedTargets == nil {
+            var targets: [String: String] = [:]
+            if let rels = try read("xl/_rels/workbook.xml.rels") {
+                let delegate = RelationshipDelegate(); try XMLRun.parse(rels, delegate); targets = delegate.targets
+            }
+            parseCounts["xl/_rels/workbook.xml.rels", default: 0] += 1
+            cachedTargets = targets
         }
-        guard let target = targets[sheet.rid], let path = Self.resolve(target), let sheetData = try read(path) else { throw ImportErrors.unsupported }
-        var shared: [String] = []
-        if let data = try read("xl/sharedStrings.xml") {
-            let delegate = SharedStringsDelegate(); try XMLRun.parse(data, delegate); shared = delegate.strings
+        guard let target = cachedTargets?[sheet.rid], let path = Self.resolve(target) else { throw ImportErrors.unsupported }
+        if let cached = cachedSheets[path] {
+            return .init(name: name, rows: cached.rows, date1904: book.date1904)
         }
-        var styles: [ImportCellStyle] = []
-        if let data = try read("xl/styles.xml") {
-            let delegate = StylesDelegate(); try XMLRun.parse(data, delegate); styles = delegate.styles
+        guard let sheetData = try read(path) else { throw ImportErrors.unsupported }
+        if cachedShared == nil {
+            var shared: [String] = []
+            if let data = try read("xl/sharedStrings.xml") {
+                let delegate = SharedStringsDelegate(); try XMLRun.parse(data, delegate); shared = delegate.strings
+            }
+            parseCounts["xl/sharedStrings.xml", default: 0] += 1
+            cachedShared = shared
         }
-        let delegate = SheetDelegate(shared: shared, styles: styles)
+        if cachedStyles == nil {
+            var styles: [ImportCellStyle] = []
+            if let data = try read("xl/styles.xml") {
+                let delegate = StylesDelegate(); try XMLRun.parse(data, delegate); styles = delegate.styles
+            }
+            parseCounts["xl/styles.xml", default: 0] += 1
+            cachedStyles = styles
+        }
+        let delegate = SheetDelegate(shared: cachedShared ?? [], styles: cachedStyles ?? [])
         try XMLRun.parse(sheetData, delegate)
         if delegate.tooManyRows { throw ImportErrors.tooManyRows }
-        return .init(name: name, rows: delegate.result(), date1904: book.date1904)
+        let rows = delegate.result()
+        cachedSheets[path] = .init(name: name, rows: rows, date1904: book.date1904)
+        parseCounts[path, default: 0] += 1
+        return .init(name: name, rows: rows, date1904: book.date1904)
     }
 
     /// Relationship targets are relative to `xl/` unless absolute; anything escaping the package is rejected.

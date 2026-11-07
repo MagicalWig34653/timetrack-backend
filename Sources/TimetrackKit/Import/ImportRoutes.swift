@@ -76,6 +76,7 @@ struct ImportErrorMiddleware: AsyncMiddleware {
         "file_too_large": "Die Datei ist zu groß (höchstens 5 MiB).",
         "unsupported_type": "Dieser Dateityp wird nicht unterstützt. Erlaubt sind CSV und XLSX.",
         "too_many_rows": "Die Datei enthält zu viele Zeilen (höchstens 20 000).",
+        "too_many_sheets": "Die Datei enthält zu viele Tabellenblätter (höchstens 256).",
         "import_not_ready": "Der Import befindet sich nicht im passenden Zustand für diese Aktion.",
         "import_has_errors": "Die Datei enthält fehlerhafte Zeilen. Bitte korrigiere sie oder ignoriere die Fehler ausdrücklich.",
         "rollback_conflict": "Einige importierte Einträge wurden inzwischen geändert und blockieren die Rücknahme.",

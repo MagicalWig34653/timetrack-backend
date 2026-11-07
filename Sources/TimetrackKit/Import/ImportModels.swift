@@ -9,6 +9,7 @@ enum ImportLimits {
     static let maxRows = 20_000
     static let maxColumns = 256
     static let maxZipEntries = 64
+    static let maxSheets = 256
     static let maxUncompressedBytes = 50 * 1024 * 1024
     static let maxOpenJobs = 20
     static let maxTemplates = 50

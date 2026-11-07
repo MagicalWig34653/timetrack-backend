@@ -5,6 +5,8 @@ Die Einzelpakete (A1, B2, …) stehen in `docs/ARBEITSPLAN.md`.
 
 ## Unveröffentlicht
 
+- **Sicherheit XLSX-SHEETS:** XLSX-Importe mit mehr als 256 Tabellenblättern werden mit `too_many_sheets` (400) abgelehnt. Arbeitsmappen-, Beziehungs-, Shared-Strings- und Stildateien sowie jedes Blatt werden je Upload nur einmal entpackt und gelesen; die Erkennung des Arbeitszeitformats skaliert nicht mehr mit der Blattanzahl (vorher konnte ein kleiner Upload die globale Schreibsperre lange belegen). Vertrag unverändert.
+
 - **Sicherheit SEC-PATH:** Doppelte Schrägstriche können die IP-Ratenbegrenzung der Auth-Endpunkte nicht mehr umgehen. Pfadabhängige Gruppen-/Cacheheader, PWA-Reservierungen und Public-Modulausnahme folgen ebenfalls der Router-Normalisierung. Recovery- und Gerätezugriff bleiben strikt eingeschränkt; Vertrag unverändert.
 
 - **UPDATE-DRIFT:** update.sh 2.3.0 prüft effektive Backend-Konfiguration auch bei gleichem Image; Status meldet Drift, Updates verlangen dafür `--apply-stack-drift`. Fehlende Secrets werden vor Änderungen mit Hinweis auf `create-secrets.sh --add-only` gemeldet. Neue Voraussetzung: `jq`.

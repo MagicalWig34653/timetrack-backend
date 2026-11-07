@@ -393,3 +393,51 @@ final class ImportEngineTests: XCTestCase {
         XCTAssertThrowsError(try mapping(zone: "Mars/Olympus").validate())
     }
 }
+
+// MARK: XLSX sheet limit
+
+final class XLSXSheetLimitTests: XCTestCase {
+    /// Builds a workbook with `count` `<sheet>` elements that all point at one worksheet part (stays below the ZIP entry limit).
+    func workbook(sheetCount count: Int) throws -> Data {
+        let archive = try Archive(data: Data(), accessMode: .create)
+        try TestXLSX.add(archive, "[Content_Types].xml", Data("<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"/>".utf8))
+        var book = "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets>"
+        var rels = "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+        for i in 1...count {
+            book += "<sheet name=\"S\(i)\" sheetId=\"\(i)\" r:id=\"rId\(i)\"/>"
+            rels += "<Relationship Id=\"rId\(i)\" Type=\"worksheet\" Target=\"worksheets/sheet1.xml\"/>"
+        }
+        try TestXLSX.add(archive, "xl/workbook.xml", Data((book + "</sheets></workbook>").utf8))
+        try TestXLSX.add(archive, "xl/_rels/workbook.xml.rels", Data((rels + "</Relationships>").utf8))
+        try TestXLSX.add(archive, "xl/worksheets/sheet1.xml", Data("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c r=\"A1\" t=\"inlineStr\"><is><t>x</t></is></c></row></sheetData></worksheet>".utf8))
+        return archive.data ?? Data()
+    }
+
+    func testMoreThanMaximumSheetsIsRejected() throws {
+        let data = try workbook(sheetCount: ImportLimits.maxSheets + 1)
+        XCTAssertThrowsError(try ImportWorkbook.open(data: data, filename: "many.xlsx")) {
+            XCTAssertEqual(($0 as? APIError)?.code, "too_many_sheets")
+        }
+        XCTAssertNotNil(ImportErrorMiddleware.messages["too_many_sheets"])
+    }
+
+    func testMaximumSheetsStillImportsAndDetectionDoesNotReparse() throws {
+        let data = try workbook(sheetCount: ImportLimits.maxSheets)
+        let opened = try ImportWorkbook.open(data: data, filename: "ok.xlsx")
+        XCTAssertEqual(opened.sheetNames.count, ImportLimits.maxSheets)
+        XCTAssertFalse(try WorktimeWorkbook.detects(opened))
+        guard case .xlsx(let package) = opened.storage else { return XCTFail("expected xlsx storage") }
+        // Every shared part is inflated and parsed at most once, however many sheets exist.
+        for (part, count) in package.parseCounts { XCTAssertEqual(count, 1, part) }
+        XCTAssertEqual(package.parseCounts["xl/workbook.xml"], 1)
+        XCTAssertEqual(try opened.sheet("S7").rows, [[.text("x")]])
+    }
+
+    func testSeveralSheetsStillImport() throws {
+        let data = try TestXLSX.build(sheets: [("A", [[.inline("a")]]), ("B", [[.inline("b")]]), ("C", [[.inline("c")]])])
+        let opened = try ImportWorkbook.open(data: data, filename: "three.xlsx")
+        XCTAssertEqual(opened.sheetNames, ["A", "B", "C"])
+        XCTAssertEqual(try opened.sheet("B").rows, [[.text("b")]])
+        XCTAssertFalse(try WorktimeWorkbook.detects(opened))
+    }
+}
