@@ -28,9 +28,9 @@ jobs:
     timeout-minutes: 60
     container: swift:6.3-noble
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Cache SwiftPM build directory
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .build
           key: swift-6.3-${{ runner.os }}-${{ hashFiles('Package.resolved', 'Package.swift') }}-${{ github.sha }}
@@ -67,9 +67,9 @@ jobs:
       MARIADB_TEST_PASSWORD: ci-only-root-password
       MARIADB_TEST_DB: timetrack_test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Cache SwiftPM build directory
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .build
           key: swift-6.3-${{ runner.os }}-${{ hashFiles('Package.resolved', 'Package.swift') }}-${{ github.sha }}
@@ -83,7 +83,7 @@ jobs:
     name: Contract checks
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install PyYAML
         run: python3 -m pip install --user --break-system-packages pyyaml
       - name: Parse YAML files (OpenAPI 3.x marker, version, operationIds)
@@ -119,7 +119,7 @@ jobs:
     name: Shell checks and compose/stack config
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install PyYAML (used by check-all.sh)
         run: python3 -m pip install --user --break-system-packages pyyaml
       - name: shellcheck and bash -n
