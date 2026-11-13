@@ -51,12 +51,16 @@ services:
     deploy:
       mode: replicated-job
       replicas: 1
+      placement:
+        constraints:
+          # EXCLUDE_LABEL (e.g. reserved) keeps the job off nodes labelled <label>=true; empty = inert (see backend).
+          - node.labels.${EXCLUDE_LABEL:-__exclude_unset__}!=true
       restart_policy:
         condition: none
       resources:
         limits: { cpus: "1.0", memory: 512M }
 
-  backend:
+  backend: &backend
     image: ${TIMETRACK_IMAGE:?set TIMETRACK_IMAGE}
     # Default command of the image: serve --env production --hostname 0.0.0.0 --port 8080
     environment:
@@ -171,9 +175,54 @@ services:
     deploy:
       replicas: ${BACKEND_REPLICAS:-1}
       placement:
+        # Everything is optional and controlled through .env (Compose cannot split lists, so extra constraints use slots).
+        # Unset slots fall back to always-true expressions, so the default behaviour is unchanged.
         constraints:
-          # No node pinning needed: the image contains the PWA and files live in the database. Optional narrowing.
           - ${BACKEND_PLACEMENT:-node.platform.os == linux}
+          - ${PLACEMENT_CONSTRAINT_1:-node.platform.os == linux}      # e.g. node.role==worker
+          - ${PLACEMENT_CONSTRAINT_2:-node.platform.os == linux}      # e.g. node.labels.disk==ssd
+          - ${PLACEMENT_CONSTRAINT_3:-node.platform.os == linux}
+          # Opt-in nodes: EXCLUDE_LABEL=reserved adds node.labels.reserved!=true (a node gets containers only when it is
+          # NOT labelled reserved=true). Convention, no hard protection (hard: `docker node update --availability drain`).
+          # Unset: node.labels.__exclude_unset__!=true, which is true on every node.
+          - node.labels.${EXCLUDE_LABEL:-__exclude_unset__}!=true
+        preferences:
+          # Soft preference, no guarantee. Unset: spread by OS (a single bucket on a Linux-only cluster = no effect).
+          - spread: ${PLACEMENT_SPREAD:-node.platform.os}              # e.g. node.labels.zone
+      resources:
+        limits: { cpus: "1.0", memory: 768M }
+        reservations: { cpus: "0.1", memory: 128M }
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 5
+        window: 120s
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        failure_action: rollback
+        monitor: 60s
+        max_failure_ratio: 0
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+        order: start-first
+        failure_action: pause
+        monitor: 30s
+
+  # Guarantees at least one container on a given node (Swarm cannot express that inside one service). Inactive (0 replicas)
+  # until PINNED_NODE and PINNED_REPLICAS are both set. Inherits image, environment, secrets and healthcheck from the backend;
+  # it publishes NO port by default (the routing-mesh port belongs to `backend`; add a separate port through override.yaml).
+  # It is exempt from EXCLUDE_LABEL: pinning a node is an explicit request.
+  backend-pinned:
+    <<: *backend
+    ports: []
+    deploy:
+      replicas: ${PINNED_REPLICAS:-0}
+      placement:
+        constraints:
+          - node.hostname==${PINNED_NODE:-__pinning_disabled__}
       resources:
         limits: { cpus: "1.0", memory: 768M }
         reservations: { cpus: "0.1", memory: 128M }

@@ -131,6 +131,10 @@ Ohne `SMTP_HOST` ist E-Mail nicht verfügbar (Schalter `SMTP_ENABLED`, siehe Mat
 | --- | --- | --- |
 | `BACKEND_REPLICAS` | `1` | Beim ersten Ausrollen `0`, nach der Migration hochskalieren ([Docker Swarm](swarm.md)). |
 | `BACKEND_PLACEMENT` | `"node.platform.os == linux"` | Optionale Platzierungsbedingung, z. B. `"node.labels.timetrack == true"`. |
+| `PLACEMENT_CONSTRAINT_1`, `_2`, `_3` | leer | Zusätzliche harte Constraints für das Backend (drei Plätze, da Compose keine Listen aufteilt), z. B. `node.role==worker`. Leer = ohne Wirkung. |
+| `PLACEMENT_SPREAD` | leer | Weiche Präferenz (Verteilung nach Knoten-Label), z. B. `node.labels.zone`; keine Platzierungsgarantie. |
+| `PINNED_NODE`, `PINNED_REPLICAS` | leer, `0` | Zweiter Dienst `backend-pinned`: mindestens ein Container auf diesem Hostnamen. Nur aktiv, wenn beide gesetzt sind. Veröffentlicht keinen Port (bei Bedarf per Overlay). |
+| `EXCLUDE_LABEL` | leer | Label-Schlüssel, z. B. `reserved`: ergänzt `node.labels.reserved!=true` bei Backend und Migration; ein so markierter Knoten bekommt nur auf ausdrücklichen Wunsch (`PINNED_NODE`) Container. Konvention, kein harter Schutz (hart: `docker node update --availability drain`). |
 | `SECRET_DB_PASSWORD_NAME`, `SECRET_STORAGE_KEY_NAME`, `SECRET_VAPID_KEY_NAME`, `SECRET_SMTP_PASSWORD_NAME`, `SECRET_OIDC_CLIENT_SECRET_NAME`, `SECRET_APNS_KEY_NAME` | `tt_db_password`, `tt_storage_secret_key`, `tt_vapid_private_key`, `tt_smtp_password`, `tt_oidc_client_secret`, `tt_apns_private_key` | Namen der Docker-Secrets im Cluster. Nur zum Austauschen eines (unveränderlichen) Secrets, etwa Platzhalter durch echten Wert (`create-secrets.sh --name-suffix`). |
 
 ## Nicht per Variable
