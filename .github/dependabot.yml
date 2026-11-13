@@ -10,10 +10,20 @@ updates:
     directory: /site
     schedule: { interval: weekly }
     groups:
-      site: { patterns: ["*"] }
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
   - package-ecosystem: docker
     directory: /
     schedule: { interval: weekly }
+    groups:
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
   - package-ecosystem: swift
     directory: /
     schedule: { interval: weekly }
+    groups:
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
