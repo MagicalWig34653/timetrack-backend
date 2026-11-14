@@ -2,13 +2,13 @@
 # Update a running Swarm stack to the newest published image (or roll it back), and keep this script current.
 #
 # Update flow: find the newest `sha-<commit>` tag on GHCR, write it into .env (TIMETRACK_IMAGE, backup .env.bak), run
-# the migration job with the new image, then roll the backend and check /ready. A missing `<stack>_migrate` service
+# the migration job with the new image, then roll the backend (and an active `<stack>_backend-pinned`) and check /ready. A missing `<stack>_migrate` service
 # (for example removed by hand) is recreated from the stack file instead of aborting. Every abort is reported loudly
 # (step, line, command, exit code); the script never ends silently. Details: docs/DEPLOYMENT.md, docs/UPDATE.md.
 # Language: code and comments are English, all output for the operator is German.
 set -Eeuo pipefail
 
-SCRIPT_VERSION="2.3.0"
+SCRIPT_VERSION="2.4.0"
 SCRIPT_PATH="${BASH_SOURCE[0]}"
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 
@@ -205,6 +205,7 @@ IMAGE_BASE="${CURRENT_IMAGE%:*}"
 case "$IMAGE_BASE" in */*) ;; *) die "Image-Name nicht lesbar: $CURRENT_IMAGE" ;; esac
 REPO="${IMAGE_BASE#*/}"
 BACKEND="${STACK}_backend"
+PINNED="${STACK}_backend-pinned"   # optional second service with the same image (PINNED_NODE/PINNED_REPLICAS)
 MIGRATE_SERVICE="${STACK}_migrate"
 BASE_URL="$(env_get "$ENV_FILE" PUBLIC_BASE_URL)"
 
@@ -222,6 +223,15 @@ service_exists() {
 svc_field() { dk service inspect --format "$2" "$1" 2>/dev/null | head -n 1 || true; }
 # Task ids of a service, one per line; never fails (a missing service gives an empty list).
 task_ids() { dk service ps "$1" -q --no-trunc 2>/dev/null || true; }
+# Replica count of the pinned service when it exists and is active (> 0), else empty.
+pinned_active() {
+  local n
+  service_exists "$PINNED" || return 0
+  n="$(svc_field "$PINNED" '{{.Spec.Mode.Replicated.Replicas}}')"
+  if [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -gt 0 ]; then printf '%s' "$n"; fi
+}
+# Replica state ("2/2") of exactly this service; `service ls --filter name=` matches by prefix (backend -> backend-pinned).
+svc_replicas() { dk service ls --filter "name=$1" --format '{{.Name}} {{.Replicas}}' 2>/dev/null | awk -v n="$1" '$1==n {print $2}' | head -n 1 || true; }
 ensure_manager() {
   local out
   out="$(dk info --format '{{.Swarm.LocalNodeState}} {{.Swarm.ControlAvailable}}' 2>&1)" || die "docker info ist fehlgeschlagen: ${out:-keine Ausgabe}. Läuft der Docker-Dienst, und darfst du ihn benutzen?"
@@ -598,14 +608,15 @@ EOF
   dk service logs --tail 15 "$MIGRATE_SERVICE" 2>&1 | sed 's/^/    /' || true
 }
 
+# watch_rollout [SERVICE]: waits for the rolling update of SERVICE (default: the backend).
 watch_rollout() {
-  local phase_start waited ustate replicas running now last=""
+  local svc="${1:-$BACKEND}" phase_start waited ustate replicas running now last=""
   phase_start=$SECONDS
   while :; do
     waited=$((SECONDS - phase_start))
-    ustate="$(dk service inspect "$BACKEND" --format '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{end}}' 2>/dev/null || true)"
-    replicas="$(dk service ls --filter "name=${BACKEND}" --format '{{.Replicas}}' 2>/dev/null | head -n 1 || true)"
-    running="$(dk service ps "$BACKEND" --filter desired-state=running --format '{{.CurrentState}}' 2>/dev/null | sed 's/ .*//' | sort | uniq -c | awk '{printf "%s %s, ", $1, $2}' | sed 's/, $//' || true)"
+    ustate="$(dk service inspect "$svc" --format '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{end}}' 2>/dev/null || true)"
+    replicas="$(svc_replicas "$svc")"
+    running="$(dk service ps "$svc" --filter desired-state=running --format '{{.CurrentState}}' 2>/dev/null | sed 's/ .*//' | sort | uniq -c | awk '{printf "%s %s, ", $1, $2}' | sed 's/, $//' || true)"
     now="Update=${ustate:-keins} Replikas=${replicas} Tasks: ${running}"
     if [ "$now" != "$last" ]; then say "$now"; last="$now"; fi
     case "$ustate" in
@@ -615,20 +626,38 @@ watch_rollout() {
           */*) if [ "${replicas%%/*}" = "${replicas##*/}" ]; then good "Alle Replikas laufen; kein Rollout offen."; break; fi ;;
         esac ;;
       paused|rollback_started|rollback_completed|rollback_paused)
-        dk service inspect "$BACKEND" --format '{{.UpdateStatus.Message}}' >&2 || true
-        dk service ps "$BACKEND" --no-trunc --format '{{.Name}} {{.CurrentState}} {{.Error}}' | head -n 6 >&2 || true
+        dk service inspect "$svc" --format '{{.UpdateStatus.Message}}' >&2 || true
+        dk service ps "$svc" --no-trunc --format '{{.Name}} {{.CurrentState}} {{.Error}}' | head -n 6 >&2 || true
         die "Das Rollout war nicht erfolgreich (${ustate}); Swarm setzt automatisch zurück, siehe docs/UPDATE.md." ;;
     esac
     if [ "$waited" -ge "$ROLLOUT_SECONDS" ]; then
-      echo "Task-Liste des Backends:" >&2
-      dk service ps "$BACKEND" --no-trunc >&2 || true
+      echo "Task-Liste von ${svc}:" >&2
+      dk service ps "$svc" --no-trunc >&2 || true
       echo "Letzte Logzeilen:" >&2
-      dk service logs --tail 40 "$BACKEND" >&2 || true
+      dk service logs --tail 40 "$svc" >&2 || true
       die "Das Rollout wurde in ${ROLLOUT_SECONDS} s nicht fertig (Update=${ustate:-keins}). Neue Tasks bleiben ungesund, solange /ready fehlschlägt (Datenbank nicht erreichbar, Pool-Zeitüberschreitungen, Schema nicht aktuell). Swarm aktualisiert weiter oder setzt selbst zurück."
     fi
     sleep 3
   done
-  dk service ps "$BACKEND" --filter desired-state=running --format 'table {{.Name}}\t{{.Node}}\t{{.Image}}\t{{.CurrentState}}'
+  dk service ps "$svc" --filter desired-state=running --format 'table {{.Name}}\t{{.Node}}\t{{.Image}}\t{{.CurrentState}}'
+}
+
+# update_pinned IMAGE [--force]: after the backend, roll an active pinned service to the same image, else old and new
+# versions would answer side by side behind the proxy. Absent or 0 replicas: nothing to do.
+update_pinned() {
+  local n
+  n="$(pinned_active)"
+  [ -n "$n" ] || return 0
+  say "Aktualisiere auch ${PINNED} (${n} Replika(s)) auf ${1} ..."
+  # shellcheck disable=SC2086
+  dk service update --detach --with-registry-auth --image "$1" ${2:-} "$PINNED" >/dev/null
+  watch_rollout "$PINNED"
+}
+# One line for --dry-run when the pinned service would follow.
+pinned_plan() {
+  local n
+  n="$(pinned_active)"
+  [ -z "$n" ] || echo "Dienst ${PINNED}: aktiv (${n} Replika(s)), würde nach ${BACKEND} ebenfalls auf ${1} umgestellt"
 }
 
 check_result() {
@@ -649,7 +678,7 @@ preflight_services() {
 
 # ---- mode: status ------------------------------------------------------------------------------------------------------
 do_status() {
-  local problems=0 bak_image mig_line mig_state mig_err ustate replicas running_img path
+  local problems=0 bak_image mig_line mig_state mig_err ustate replicas running_img pinned_img path
   say "update.sh Version ${SCRIPT_VERSION}"
   echo "Stack:            ${STACK}"
   echo "Env-Datei:        ${ENV_FILE}"
@@ -663,12 +692,17 @@ do_status() {
     if [ "$DRIFT" = 1 ]; then problems=$((problems + 1)); fi
     running_img="$(svc_field "$BACKEND" '{{.Spec.TaskTemplate.ContainerSpec.Image}}' | sed 's/@sha256:.*//')"
     ustate="$(svc_field "$BACKEND" '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{end}}')"
-    replicas="$(dk service ls --filter "name=${BACKEND}" --format '{{.Name}} {{.Replicas}}' 2>/dev/null | awk -v n="$BACKEND" '$1==n {print $2}' | head -n 1 || true)"
+    replicas="$(svc_replicas "$BACKEND")"
     echo "Backend-Image:    ${running_img:-?}"
     echo "Backend-Replikas: ${replicas:-?}   Update-Zustand: ${ustate:-keiner}"
     if [ "$running_img" != "$CURRENT_IMAGE" ]; then echo "PROBLEM: das laufende Backend-Image weicht von der .env ab (Update unvollständig oder nicht per Skript?)"; problems=$((problems + 1)); fi
     case "$ustate" in ""|completed) ;; *) echo "PROBLEM: Rollout-Zustand '${ustate}'"; problems=$((problems + 1)) ;; esac
     case "$replicas" in */*) if [ "${replicas%%/*}" != "${replicas##*/}" ]; then echo "PROBLEM: nicht alle Replikas laufen (${replicas})"; problems=$((problems + 1)); fi ;; esac
+    if [ -n "$(pinned_active)" ]; then
+      pinned_img="$(svc_field "$PINNED" '{{.Spec.TaskTemplate.ContainerSpec.Image}}' | sed 's/@sha256:.*//')"
+      echo "Pinned-Image:    ${pinned_img:-?}   Replikas: $(svc_replicas "$PINNED")"
+      if [ "$pinned_img" != "$running_img" ]; then echo "PROBLEM: ${PINNED} läuft mit einem anderen Image als ${BACKEND} (alte und neue Version antworten nebeneinander); erneut update.sh --force ausführen"; problems=$((problems + 1)); fi
+    fi
   else
     echo "PROBLEM: der Dienst ${BACKEND} existiert nicht."; problems=$((problems + 1))
   fi
@@ -706,7 +740,10 @@ do_rollback() {
   echo "Aktuell:   ${CURRENT_IMAGE}"
   echo "Zurück zu: ${prev}"
   [ "$prev" != "$CURRENT_IMAGE" ] || die "Das Zielimage entspricht dem aktuellen Stand; nichts zu tun."
-  if [ "$DRY" = 1 ]; then echo "Trockenlauf: würde TIMETRACK_IMAGE zurücksetzen und ${BACKEND} per Rolling Update auf ${prev} stellen (Migrationsdienst und Schema bleiben unberührt)."; return 0; fi
+  if [ "$DRY" = 1 ]; then
+    if dk info >/dev/null 2>&1; then pinned_plan "$prev"; fi
+    echo "Trockenlauf: würde TIMETRACK_IMAGE zurücksetzen und ${BACKEND} per Rolling Update auf ${prev} stellen (Migrationsdienst und Schema bleiben unberührt)."; return 0
+  fi
   ensure_manager
   service_exists "$BACKEND" || die "Der Dienst ${BACKEND} existiert nicht."
   step "Bestätigen"
@@ -720,6 +757,7 @@ do_rollback() {
   dk service update --detach --with-registry-auth --image "$prev" "$BACKEND" >/dev/null
   say "Update gestartet; beobachte das Rollout ..."
   watch_rollout
+  update_pinned "$prev"
   step "Ergebnis prüfen"; PHASE="check"
   check_result
   good "Rollback fertig nach $(elapsed). Die vorherige .env steht jetzt in ${ENV_FILE}.bak (ein zweiter --rollback geht wieder vor)."
@@ -744,6 +782,7 @@ do_update() {
       if [ "$BACKEND_OK" = 1 ]; then check_stack_drift; fi
       if [ "$BACKEND_OK" = 1 ]; then echo "Dienst ${BACKEND}: vorhanden"; else echo "PROBLEM: Dienst ${BACKEND} fehlt (Erstinstallation: docs/DEPLOYMENT.md)"; fi
       if [ "$MIGRATE_MISSING" = 1 ]; then echo "Dienst ${MIGRATE_SERVICE}: FEHLT, würde aus ${STACK_FILE:-<stack.yaml nicht gefunden>} wiederhergestellt"; fi
+      if [ "$BACKEND_OK" = 1 ]; then pinned_plan "$NEW_IMAGE"; fi
     else
       echo "(docker nicht erreichbar: Dienste nicht geprüft)"
     fi
@@ -797,6 +836,7 @@ do_update() {
   dk service update --detach --with-registry-auth --image "$NEW_IMAGE" $force_flag "$BACKEND" >/dev/null
   say "Update gestartet; beobachte das Rollout ..."
   watch_rollout
+  update_pinned "$NEW_IMAGE" "$force_flag"
 
   step "Ergebnis prüfen"; PHASE="check"
   check_result

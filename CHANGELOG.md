@@ -9,6 +9,8 @@ Die Einzelpakete (A1, B2, …) stehen in `docs/ARBEITSPLAN.md`.
 
 - **Sicherheit SEC-PATH:** Doppelte Schrägstriche können die IP-Ratenbegrenzung der Auth-Endpunkte nicht mehr umgehen. Pfadabhängige Gruppen-/Cacheheader, PWA-Reservierungen und Public-Modulausnahme folgen ebenfalls der Router-Normalisierung. Recovery- und Gerätezugriff bleiben strikt eingeschränkt; Vertrag unverändert.
 
+- **UPDATE-PINNED:** update.sh 2.4.0 stellt einen aktiven Dienst `<stack>_backend-pinned` nach dem Backend auf dasselbe Image um (Update und `--rollback`) und wartet auf sein Rollout. Vorher blieb er auf dem alten Image; alte und neue Version liefen hinter dem Proxy dauerhaft nebeneinander (PWA: „Es läuft gerade ein Update“). `--status` meldet abweichende Images; die Replikaprüfung liest nur noch die exakte Dienstzeile (der Namensfilter von `docker service ls` trifft auch `backend-pinned`).
+
 - **UPDATE-DRIFT:** update.sh 2.3.0 prüft effektive Backend-Konfiguration auch bei gleichem Image; Status meldet Drift, Updates verlangen dafür `--apply-stack-drift`. Fehlende Secrets werden vor Änderungen mit Hinweis auf `create-secrets.sh --add-only` gemeldet. Neue Voraussetzung: `jq`.
 
 - **SCOPE-F10 (Vertrag 0.44.0):** OAuth-Zustimmung ohne angefragten Scope belegt nur lesende Scopes vor (neue Felder `requestedScopes`, `availableScopes`); Blockwoche mit mehr als fünf Schultagen gutschreibt nur die ersten fünf (höchstens 40 h).

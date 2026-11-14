@@ -14,9 +14,11 @@ NEW_IMAGE="ghcr.io/example/timetrack-backend:${NEW_TAG}"
 mkdir -p "$ROOT/bin"
 cat > "$ROOT/bin/docker" <<'STUB'
 #!/usr/bin/env bash
-# Fake Swarm. State lives in $ST: migrate_exists (0/1), tasks (ids), mode (done|hang|fail), ustate.
+# Fake Swarm. State lives in $ST: migrate_exists (0/1), tasks (ids), mode (done|hang|fail), ustate; optional pinned
+# (replica count of timetrack_backend-pinned; file absent = service absent), pinned_image, pinned_ustate.
 echo "docker $*" >> "$ST/log"
 args="$*"
+PINNED=timetrack_backend-pinned
 exists() { [ "$(cat "$ST/migrate_exists")" = 1 ]; }
 nosvc() { echo "Error response from daemon: No such service: $1" >&2; exit 1; }
 [ "$1" = info ] && { [ -f "$ST/info_fail" ] && { echo "Cannot connect to the Docker daemon" >&2; exit 1; }; echo "active true"; exit 0; }
@@ -36,8 +38,19 @@ fi
 if [ "$1 $2" = "network ls" ]; then echo 'network123 timetrack_default'; exit 0; fi
 if [ "$1 $2" = "service inspect" ]; then
   if [[ "$args" == *'{{json .Spec}}'* ]]; then jq '.[0].Spec' "$ST/service"; exit 0; fi
-  name="${*: -1}"
+  name="${*: -1}"; for a in "$@"; do [ "$a" != "$PINNED" ] || name="$a"; done   # watch_rollout puts the name first
   if [ "$name" = timetrack_migrate ]; then exists || nosvc "$name"; echo abc123; exit 0; fi
+  if [ "$name" = "$PINNED" ]; then
+    [ -f "$ST/pinned" ] || nosvc "$name"
+    case "$args" in
+      *ContainerSpec.Image*) cat "$ST/pinned_image" ;;
+      *Replicated.Replicas*) cat "$ST/pinned" ;;
+      *UpdateStatus.State*) cat "$ST/pinned_ustate" 2>/dev/null || echo completed ;;
+      *UpdateStatus.Message*) echo "update paused" ;;
+      *) echo pin123 ;;
+    esac
+    exit 0
+  fi
   case "$args" in
     *ContainerSpec.Image*) echo "ghcr.io/example/timetrack-backend:sha-aaaaaaa@sha256:0123456789abcdef" ;;
     *Replicated.Replicas*) echo 2 ;;
@@ -74,10 +87,23 @@ if [ "$1 $2" = "service update" ]; then
     esac
     exit 0
   fi
+  if [ "$name" = "$PINNED" ]; then
+    [ -f "$ST/pinned" ] || nosvc "$name"
+    while [ $# -gt 0 ]; do [ "$1" = --image ] && echo "$2" > "$ST/pinned_image"; shift; done
+    exit 0
+  fi
   [ -f "$ST/backend_update_fail" ] && { echo "Error: update failed" >&2; exit 1; }
   exit 0
 fi
-if [ "$1 $2" = "service ls" ]; then case "$args" in *"{{.Name}}"*) echo "timetrack_backend 2/2" ;; *) echo "2/2" ;; esac; exit 0; fi
+if [ "$1 $2" = "service ls" ]; then
+  # Like Swarm, --filter name= matches by prefix: the backend filter also lists backend-pinned (listed first here, with a
+  # replica state that never converges when pinned_ls says so, to catch head -n 1 on the wrong line).
+  lines=""
+  if [ -f "$ST/pinned" ]; then n="$(cat "$ST/pinned")"; lines="${PINNED} $(cat "$ST/pinned_ls" 2>/dev/null || echo "$n/$n")"$'\n'; fi
+  case "$args" in *"name=${PINNED}"*) ;; *) lines="${lines}timetrack_backend 2/2" ;; esac
+  case "$args" in *"{{.Name}}"*) printf '%s\n' "$lines" | sed '/^$/d' ;; *) printf '%s\n' "$lines" | sed '/^$/d' | cut -d' ' -f2 ;; esac
+  exit 0
+fi
 if [ "$1 $2" = "service logs" ]; then echo "No new migrations."; exit 0; fi
 if [ "$1 $2" = "stack deploy" ]; then
   echo "STACKDEPLOY TIMETRACK_IMAGE=${TIMETRACK_IMAGE:-} BACKEND_REPLICAS=${BACKEND_REPLICAS:-}" >> "$ST/log"
@@ -124,7 +150,7 @@ JSON
 }
 # run_case ARGS...: runs the sandbox copy; output in $OUT, exit code in $RC.
 run_case() {
-  OUT="$(cd "$D/app" && PATH="$ROOT/bin:$PATH" ST="$ST" TMPDIR="$D/tmp" UPDATE_SELF_CHECK="${UPDATE_SELF_CHECK:-0}" MIGRATE_TIMEOUT="${MIGRATE_TIMEOUT:-4}" \
+  OUT="$(cd "$D/app" && PATH="$ROOT/bin:$PATH" ST="$ST" TMPDIR="$D/tmp" UPDATE_SELF_CHECK="${UPDATE_SELF_CHECK:-0}" MIGRATE_TIMEOUT="${MIGRATE_TIMEOUT:-4}" ROLLOUT_TIMEOUT="${ROLLOUT_TIMEOUT:-20}" \
     bash ./update.sh "$@" 2>&1 </dev/null)"; RC=$?
 }
 check() { # check DESCRIPTION CONDITION-RESULT
@@ -221,6 +247,44 @@ check "rollback: backend updated to the old image, migrate untouched" "$(logged 
 new_case rollback_none 1
 run_case --rollback --yes
 check "rollback without .env.bak: exit 1, message" "$([ "$RC" = 1 ] && has 'Keine Sicherung' && echo 0 || echo 1)" "$OUT"
+
+# 13b. backend-pinned (second service with the same image): follows update and rollback, is watched, shown in status.
+line_of() { grep -nF -- "$1" "$ST/log" | tail -n 1 | cut -d: -f1; }
+new_case pinned 1
+echo 1 > "$ST/pinned"; echo "${OLD_IMAGE}@sha256:0123456789abcdef" > "$ST/pinned_image"
+run_case --dry-run --tag "$NEW_TAG"
+check "pinned dry run: mentions backend-pinned, changes nothing" "$([ "$RC" = 0 ] && has 'timetrack_backend-pinned' && ! logged 'service update' && echo 0 || echo 1)" "$OUT"
+run_case --status
+check "pinned status: shows its image, same as backend: healthy" "$([ "$RC" = 0 ] && has 'Pinned-Image:' && has "Pinned-Image:    ${OLD_IMAGE}" && has 'alles in Ordnung' && echo 0 || echo 1)" "$OUT"
+run_case --yes --tag "$NEW_TAG"
+check "pinned update: exit 0, pinned service updated to the new image" "$([ "$RC" = 0 ] && logged "--image ${NEW_IMAGE} timetrack_backend-pinned" && echo 0 || echo 1)" "$OUT"$'\n'"$(cat "$ST/log")"
+b="$(grep -n -- "--image ${NEW_IMAGE} timetrack_backend$" "$ST/log" | tail -n 1 | cut -d: -f1)"; p="$(line_of "--image ${NEW_IMAGE} timetrack_backend-pinned")"
+w="$(line_of "service inspect timetrack_backend-pinned --format {{if .UpdateStatus}}")"
+check "pinned update: after the backend rollout, then its own rollout is watched" "$([ -n "$b" ] && [ -n "$p" ] && [ -n "$w" ] && [ "$b" -lt "$p" ] && [ "$p" -lt "$w" ] && echo 0 || echo 1)" "b=$b p=$p w=$w"
+echo "$NEW_IMAGE" > "$ST/pinned_image"; : > "$ST/log"
+run_case --rollback --yes
+check "pinned rollback: pinned service back on the old image" "$([ "$RC" = 0 ] && logged "--image ${OLD_IMAGE} timetrack_backend-pinned" && echo 0 || echo 1)" "$OUT"
+echo "$NEW_IMAGE" > "$ST/pinned_image"
+run_case --status
+check "pinned status: image differs from backend: PROBLEM, exit 1" "$([ "$RC" = 1 ] && has 'PROBLEM' && has 'backend-pinned' && echo 0 || echo 1)" "$OUT"
+new_case pinned_fail 1
+echo 1 > "$ST/pinned"; echo "$OLD_IMAGE" > "$ST/pinned_image"; echo paused > "$ST/pinned_ustate"
+run_case --yes --tag "$NEW_TAG"
+check "pinned rollout failure: loud, exit 1" "$([ "$RC" = 1 ] && has 'nicht erfolgreich' && echo 0 || echo 1)" "$OUT"
+new_case pinned_off 1
+echo 0 > "$ST/pinned"; echo "$OLD_IMAGE" > "$ST/pinned_image"
+run_case --status
+check "pinned with 0 replicas: status healthy" "$([ "$RC" = 0 ] && has 'alles in Ordnung' && echo 0 || echo 1)" "$OUT"
+run_case --yes --tag "$NEW_TAG"
+check "pinned with 0 replicas: not updated" "$([ "$RC" = 0 ] && ! grep -q 'service update.*timetrack_backend-pinned' "$ST/log" && echo 0 || echo 1)" "$OUT"
+new_case nopinned 1
+run_case --yes --tag "$NEW_TAG"
+check "no pinned service: not touched" "$([ "$RC" = 0 ] && ! grep -q 'service update.*timetrack_backend-pinned' "$ST/log" && ! has 'Pinned' && echo 0 || echo 1)" "$OUT"
+# The name filter of `docker service ls` matches by prefix; the backend's replica state must come from its own line.
+new_case pinned_prefix 1
+echo 1 > "$ST/pinned"; echo "$OLD_IMAGE" > "$ST/pinned_image"; echo "0/1" > "$ST/pinned_ls"; : > "$ST/ustate"; : > "$ST/pinned_ustate"
+ROLLOUT_TIMEOUT=4 run_case --rollback --yes --tag sha-bbbbbbb
+check "prefix filter: backend replicas read from its exact line" "$(has 'Alle Replikas laufen' && grep -q 'service update.*timetrack_backend-pinned' "$ST/log" && echo 0 || echo 1)" "$OUT"
 
 # 14. Lock: a live lock blocks, a stale one is removed.
 new_case lock 1
