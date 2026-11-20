@@ -6,6 +6,8 @@ the licence notice of the source files and into the README). The `LICENSE` file 
 This is a technical draft, **not legal advice**; have it reviewed by a lawyer before adopting it. Background and
 alternatives: [docs/LIZENZEN.md](docs/LIZENZEN.md), section "Lösungswege für die OpenSSL-Altlizenz".
 
+**Update 2026-11-20:** `Package.resolved` now pins `swift-nio-ssl` 2.37.6, which vendors BoringSSL `8eb25be6` under Apache-2.0 (0 files with the OpenSSL licence header). The situation described below applied to 2.37.5 and no longer applies to the pinned version, so this proposal is currently not needed; it is kept unchanged as the historical draft.
+
 ## Why this might be needed
 
 `swift-nio-ssl` 2.37.5 (pinned in `Package.resolved`) vendors BoringSSL as `CNIOBoringSSL` and the backend binary
