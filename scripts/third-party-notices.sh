@@ -8,12 +8,16 @@
 # --dpkg     OS part: every installed dpkg package with its /usr/share/doc/<package>/copyright (run inside the image).
 # Without a part flag both parts are produced (the dpkg part is skipped with a note when dpkg-query is missing).
 #
-# Environment: RESOLVED (default Package.resolved), CHECKOUTS (default .build/checkouts; run `swift package resolve` first).
+# Environment: RESOLVED (default Package.resolved), CHECKOUTS (default .build/checkouts; run `swift package resolve` first),
+# LICENSES (default scripts/licenses next to this script: verbatim BoringSSL LICENSE files per vendored revision).
+# No network access: everything comes from Package.resolved, the checkouts and scripts/licenses. A checkout that does not
+# match its pin (stale after a version bump) or a BoringSSL revision without a licence file stops the script with an error.
 # The output is reproducible: sorted, no timestamps. This is a technical inventory, not legal advice.
 set -euo pipefail
 
 RESOLVED="${RESOLVED:-Package.resolved}"
 CHECKOUTS="${CHECKOUTS:-.build/checkouts}"
+LICENSES="${LICENSES:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/licenses}"
 want_swiftpm=0; want_dpkg=0; out=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -40,6 +44,10 @@ Notes
 - The SwiftPM part lists every pin of Package.resolved. swift-nio-ssl (CNIOBoringSSL) and swift-crypto
   (CCryptoBoringSSL, CXKCP) vendor C sources that are statically linked into the executable; their per-file licence
   headers apply in addition to the top-level LICENSE files, see docs/LIZENZEN.md in the source repository.
+- Both BoringSSL copies are listed with the revision they were taken from and the verbatim BoringSSL LICENSE of exactly
+  that revision (Apache-2.0). The NOTICE files of the two packages are reproduced unchanged; the note after each one
+  explains where it differs from the vendored revision (the swift-nio-ssl NOTICE still names the older ISC/OpenSSL
+  licence of earlier BoringSSL revisions).
 - The Swift runtime libraries shipped in the image (Apache-2.0 with Runtime Library Exception) come from the official
   swift:*-slim base image; the OS part lists the Debian/Ubuntu packages installed in the image.
 - The static PWA bundle (/srv/pwa) is built from a separate repository; its npm dependency licences are not part of
@@ -62,6 +70,13 @@ swiftpm_part() {
     /^    }/ && id != "" { print id "|" loc "|" rev "|" ver; id=""; loc=""; rev=""; ver="" }
   ' "$RESOLVED" | LC_ALL=C sort | while IFS='|' read -r id loc rev ver; do
     dir="$(basename "$loc")"; dir="${dir%.git}"
+    # The checkout must be the pinned revision; SwiftPM keeps old checkouts around after a version bump.
+    if [ -e "$CHECKOUTS/$dir/.git" ]; then
+      have="$(git -C "$CHECKOUTS/$dir" rev-parse HEAD 2>/dev/null || true)"
+      if [ -n "$have" ] && [ "$have" != "$rev" ]; then
+        echo "checkout $CHECKOUTS/$dir is at $have but Package.resolved pins $rev (run: swift package resolve)" >&2; exit 1
+      fi
+    fi
     rule
     echo "Package: $id"; echo "Version: $ver"; echo "Revision: $rev"; echo "Source: $loc"
     found=0
@@ -81,12 +96,53 @@ swiftpm_part() {
         printf '\n--- vendored sources: %s ---\n' "$v"; head -3 "$CHECKOUTS/$dir/$v"
       fi
     done
+    case "$id" in
+      swift-nio-ssl)
+        boringssl_block "$dir" Sources/CNIOBoringSSL
+        cat <<'TXT'
+
+--- note on the NOTICE above (Timetrack) ---
+The NOTICE of swift-nio-ssl is reproduced unchanged. Its BoringSSL entry ("Combination ISC and OpenSSL license")
+describes earlier BoringSSL revisions (for example 817ab07e in swift-nio-ssl 2.37.5). The revision vendored here is
+the one named above; its LICENSE is Apache-2.0 and the count above shows no source file left under the OpenSSL
+licence header.
+TXT
+        ;;
+      swift-crypto)
+        boringssl_block "$dir" Sources/CCryptoBoringSSL
+        cat <<'TXT'
+
+--- note on the NOTICE above (Timetrack) ---
+The NOTICE of swift-crypto is reproduced unchanged and has no BoringSSL entry. The BoringSSL copy statically linked
+through swift-crypto (CCryptoBoringSSL) is licensed as shown above (Apache-2.0, revision named above).
+TXT
+        ;;
+    esac
     # CXKCP/brg_endian.h (Brian Gladman): binary distributions must reproduce its copyright notice and conditions.
     gladman="$CHECKOUTS/$dir/Sources/CXKCP/FIPS202-opt64/brg_endian.h"
     if [ "$id" = "swift-crypto" ] && [ -f "$gladman" ]; then
       printf '\n--- Sources/CXKCP/FIPS202-opt64/brg_endian.h (notice) ---\n'; sed -n '1,/^\*\//p' "$gladman"
     fi
   done
+}
+
+# Prints the BoringSSL licence for the revision vendored in <checkout dir>/<subdir> (taken from its hash.txt).
+boringssl_block() {
+  local dir="$1" sub="$2" hash tree rev lic n
+  tree="$CHECKOUTS/$dir/$sub"; hash="$tree/hash.txt"
+  [ -f "$hash" ] || { echo "missing $hash" >&2; exit 1; }
+  rev="$(head -1 "$hash" | awk '{print $NF}')"
+  lic="$LICENSES/boringssl-${rev:0:8}.LICENSE"
+  [ -f "$lic" ] || { echo "no BoringSSL licence text for revision $rev ($lic); see scripts/licenses/README.md" >&2; exit 1; }
+  n="$({ grep -rl 'OpenSSL license' "$tree" || true; } | wc -l | tr -d ' ')"
+  printf '\n--- BoringSSL licence, revision %s (vendored in %s/%s) ---\n' "$rev" "$dir" "$sub"
+  echo "Verbatim BoringSSL LICENSE of this revision (https://boringssl.googlesource.com/boringssl/+/$rev/LICENSE)."
+  echo "Source files in the vendored tree whose header names the OpenSSL licence: $n"
+  if [ "$n" != 0 ]; then
+    echo "WARNING: the vendored tree still contains OpenSSL-licensed files; the Apache-2.0 text below does not cover them."
+  fi
+  echo
+  cat "$lic"
 }
 
 dpkg_part() {
