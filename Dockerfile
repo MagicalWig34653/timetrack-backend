@@ -60,6 +60,7 @@ RUN if [ "$QEMU_LIMIT" = "1" ]; then LIMIT="taskset -c 0-1"; JOBS="-j 2"; else L
 # Licence texts and NOTICE files of all SwiftPM pins (package L3); the runtime stage appends the OS packages.
 # Copied after the compile step so that script changes do not invalidate the build cache.
 COPY scripts/third-party-notices.sh ./scripts/third-party-notices.sh
+COPY scripts/licenses ./scripts/licenses
 RUN mkdir -p /notices && ./scripts/third-party-notices.sh --swiftpm -o /notices/THIRD-PARTY-NOTICES.swiftpm
 
 FROM swift:${SWIFT_VERSION}-noble-slim AS runtime
